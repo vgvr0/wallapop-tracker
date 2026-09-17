@@ -62,6 +62,27 @@ class ProfileRecord(Base):
     snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(back_populates="profile")
 
 
+class TrackedProfileRecord(Base):
+    __tablename__ = "tracked_profiles"
+    __table_args__ = (
+        UniqueConstraint("alias", name="uq_tracked_profiles_alias"),
+        UniqueConstraint("profile_url", name="uq_tracked_profiles_url"),
+        UniqueConstraint("wallapop_user_id", name="uq_tracked_profiles_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    wallapop_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    alias: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(20))
+    notes: Mapped[str | None] = mapped_column(Text)
+    profile: Mapped[ProfileRecord | None] = relationship()
+
+
 class TrackingRunRecord(Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (

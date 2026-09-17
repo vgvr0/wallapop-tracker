@@ -23,10 +23,12 @@ ProfileRepository = _implementation.ProfileRepository
 ListingRepository = _implementation.ListingRepository
 SnapshotRepository = _implementation.SnapshotRepository
 TrackingRunRepository = _implementation.TrackingRunRepository
+TrackedProfileRepository = _implementation.TrackedProfileRepository
 
 __all__ = [
     "ListingRepository",
     "ProfileRepository",
     "SnapshotRepository",
     "TrackingRunRepository",
+    "TrackedProfileRepository",
 ]

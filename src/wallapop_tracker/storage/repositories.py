@@ -18,10 +18,108 @@ from .models import (
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
+    TrackedProfileRecord,
     TrackingRunListingRecord,
     TrackingRunRecord,
     TrackingRunStatus,
 )
+
+
+class TrackedProfileRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get_by_alias(self, alias: str) -> TrackedProfileRecord | None:
+        return self.session.scalar(
+            select(TrackedProfileRecord).where(TrackedProfileRecord.alias == alias.strip().lower())
+        )
+
+    def get_by_user_id(self, user_id: str) -> TrackedProfileRecord | None:
+        return self.session.scalar(
+            select(TrackedProfileRecord).where(TrackedProfileRecord.wallapop_user_id == user_id)
+        )
+
+    def get_by_url(self, url: str) -> TrackedProfileRecord | None:
+        return self.session.scalar(
+            select(TrackedProfileRecord).where(TrackedProfileRecord.profile_url == url)
+        )
+
+    def list_all(self) -> list[TrackedProfileRecord]:
+        return list(
+            self.session.scalars(select(TrackedProfileRecord).order_by(TrackedProfileRecord.alias))
+        )
+
+    def list_enabled(self) -> list[TrackedProfileRecord]:
+        return list(
+            self.session.scalars(
+                select(TrackedProfileRecord)
+                .where(TrackedProfileRecord.enabled)
+                .order_by(TrackedProfileRecord.alias)
+            )
+        )
+
+    def create(
+        self, profile_url: str, user_id: str, alias: str, notes: str | None = None
+    ) -> TrackedProfileRecord:
+        normalized = alias.strip().lower()
+        if not normalized:
+            raise ValueError("alias is required")
+        if self.get_by_alias(normalized):
+            raise ValueError(f"Alias already exists: {normalized}")
+        if self.get_by_url(profile_url):
+            raise ValueError(f"Profile URL already exists: {profile_url}")
+        if self.get_by_user_id(user_id):
+            raise ValueError(f"Wallapop user ID already exists: {user_id}")
+        record = TrackedProfileRecord(
+            profile_url=profile_url,
+            wallapop_user_id=user_id,
+            alias=normalized,
+            notes=notes,
+            added_at=datetime.now(UTC),
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def enable(self, alias: str) -> TrackedProfileRecord:
+        return self._set_enabled(alias, True)
+
+    def disable(self, alias: str) -> TrackedProfileRecord:
+        return self._set_enabled(alias, False)
+
+    def _set_enabled(self, alias: str, enabled: bool) -> TrackedProfileRecord:
+        record = self.get_by_alias(alias)
+        if record is None:
+            raise ValueError(f"Unknown alias: {alias}")
+        record.enabled = enabled
+        self.session.flush()
+        return record
+
+    def remove(self, alias: str) -> None:
+        record = self.get_by_alias(alias)
+        if record is None:
+            raise ValueError(f"Unknown alias: {alias}")
+        self.session.delete(record)
+        self.session.flush()
+
+    def update_last_run(
+        self, alias: str, at: datetime, status: TrackingRunStatus
+    ) -> TrackedProfileRecord:
+        record = self.get_by_alias(alias)
+        if record is None:
+            raise ValueError(f"Unknown alias: {alias}")
+        record.last_run_at, record.last_run_status = at, status.value
+        self.session.flush()
+        return record
+
+    def attach_profile(self, alias: str, profile_id: int) -> TrackedProfileRecord:
+        record = self.get_by_alias(alias)
+        if record is None:
+            raise ValueError(f"Unknown alias: {alias}")
+        record.profile_id = profile_id
+        self.session.flush()
+        return record
+
 
 logger = logging.getLogger(__name__)
 
