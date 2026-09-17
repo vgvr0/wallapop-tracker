@@ -241,6 +241,94 @@ class WallapopClient:
         logger.info("fetched_all_items user_id=%s total=%s pages=%s", user_id, len(items), pages)
         return items
 
+    async def search_items(
+        self,
+        *,
+        keywords: str,
+        category_id: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
+        condition: str | None = None,
+        brand: str | None = None,
+        shipping_required: bool | None = None,
+        max_pages: int = 5,
+    ) -> list[Listing]:
+        """Search public listings through Wallapop's v3 search endpoint.
+
+        Results are limited to the first ``max_pages`` newest pages. This is
+        intentionally a recent-items alert window, not an exhaustive search.
+        Filters not consistently supported server-side are applied locally so
+        the saved-search semantics stay deterministic.
+        """
+        params: dict[str, str] = {
+            "keywords": keywords,
+            "source": "search_box",
+            "order_by": "newest",
+        }
+        if category_id is not None:
+            params["category_id"] = category_id
+        if max_pages < 1:
+            raise ValueError("max_pages must be positive")
+        result: list[Listing] = []
+        seen_ids: set[str] = set()
+        seen_cursors: set[str] = set()
+        next_page: str | None = None
+        for _ in range(max_pages):
+            request_params = dict(params)
+            if next_page is not None:
+                request_params["next_page"] = next_page
+            data = await self._request(
+                "GET", f"{self.base_url}/api/v3/search", params=request_params
+            )
+            raw_items = data.get("data", {}).get("items", []) if isinstance(data, Mapping) else []
+            for raw in raw_items:
+                if not isinstance(raw, Mapping) or not raw.get("id"):
+                    continue
+                item_id = str(raw["id"])
+                if item_id in seen_ids:
+                    continue
+                seen_ids.add(item_id)
+                price = raw.get("price")
+                if isinstance(price, Mapping):
+                    price = price.get("amount")
+                item = Listing(
+                    item_id=item_id,
+                    user_id=str(raw.get("user_id", "")),
+                    title=raw.get("title"),
+                    price=price,
+                    category_id=str(raw.get("category_id"))
+                    if raw.get("category_id") is not None
+                    else None,
+                    brand=raw.get("brand"),
+                    condition=raw.get("condition"),
+                    shipping_available=(raw.get("shipping") or {}).get("item_is_shippable")
+                    if isinstance(raw.get("shipping"), Mapping)
+                    else None,
+                    url=f"{self.web_base_url}/item/{raw.get('web_slug')}"
+                    if raw.get("web_slug")
+                    else None,
+                )
+                if min_price is not None and (item.price is None or item.price < min_price):
+                    continue
+                if max_price is not None and (item.price is None or item.price > max_price):
+                    continue
+                if condition is not None and item.condition != condition:
+                    continue
+                if brand is not None and item.brand != brand:
+                    continue
+                if shipping_required and item.shipping_available is not True:
+                    continue
+                result.append(item)
+            meta = data.get("meta", {}) if isinstance(data, Mapping) else {}
+            candidate = meta.get("next_page") if isinstance(meta, Mapping) else None
+            if not isinstance(candidate, str) or not candidate:
+                break
+            if candidate in seen_cursors:
+                break
+            seen_cursors.add(candidate)
+            next_page = candidate
+        return result
+
     async def resolve_user_id(self, profile_url: str) -> str:
         """Resolve canonical API IDs locally when the URL carries a 12-char ID.
 

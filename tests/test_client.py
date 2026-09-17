@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -14,6 +15,105 @@ from wallapop_tracker.exceptions import (
 )
 
 BASE = "https://api.wallapop.com"
+
+
+def search_page(ids: list[str], next_page: str | None = None, **overrides: object) -> dict:
+    items = []
+    for item_id in ids:
+        value = {
+            "id": item_id,
+            "user_id": "seller",
+            "title": item_id,
+            "price": {"amount": 100, "currency": "EUR"},
+            "web_slug": item_id,
+            **overrides,
+        }
+        items.append(value)
+    return {"data": {"items": items}, "meta": {"next_page": next_page}}
+
+
+async def run_search(responses: list[dict], **kwargs):
+    route = respx.get(f"{BASE}/api/v3/search").mock(
+        side_effect=[httpx.Response(200, json=response) for response in responses]
+    )
+    async with WallapopClient(min_interval=0) as client:
+        result = await client.search_items(keywords="phone", **kwargs)
+    return result, route
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_multiple_pages():
+    items, route = await run_search([search_page(["A", "B"], "cursor-1"), search_page(["C", "D"])])
+    assert [item.item_id for item in items] == ["A", "B", "C", "D"]
+    assert route.call_count == 2
+    assert route.calls[1].request.url.params["next_page"] == "cursor-1"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_pagination_stops():
+    items, route = await run_search([search_page(["A"])])
+    assert [item.item_id for item in items] == ["A"]
+    assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_repeated_cursor():
+    items, route = await run_search(
+        [search_page(["A"], "cursor-1"), search_page(["B"], "cursor-1")]
+    )
+    assert [item.item_id for item in items] == ["A", "B"]
+    assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_duplicate_items_across_pages():
+    items, _ = await run_search([search_page(["A", "B"], "cursor-1"), search_page(["B", "C"])])
+    assert [item.item_id for item in items] == ["A", "B", "C"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_max_pages_limit():
+    items, route = await run_search(
+        [search_page(["A"], "cursor-1"), search_page(["B"], "cursor-2"), search_page(["C"])],
+        max_pages=2,
+    )
+    assert [item.item_id for item in items] == ["A", "B"]
+    assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_local_filters_apply_after_pagination():
+    page_one = search_page(
+        ["wrong"],
+        "cursor-1",
+        price={"amount": 10},
+        brand="Other",
+        condition="used",
+        shipping={"item_is_shippable": False},
+    )
+    page_two = search_page(
+        ["valid"],
+        price={"amount": 100},
+        brand="Acme",
+        condition="new",
+        shipping={"item_is_shippable": True},
+    )
+    items, route = await run_search(
+        [page_one, page_two],
+        min_price=Decimal("50"),
+        max_price=Decimal("150"),
+        brand="Acme",
+        condition="new",
+        shipping_required=True,
+    )
+    assert [item.item_id for item in items] == ["valid"]
+    assert route.call_count == 2
 
 
 def load_fixture(name: str):

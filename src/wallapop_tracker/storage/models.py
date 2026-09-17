@@ -38,6 +38,45 @@ class Base(DeclarativeBase):
     """Declarative base for the storage schema."""
 
 
+class SavedSearchRecord(Base):
+    __tablename__ = "saved_searches"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    query: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_id: Mapped[str | None] = mapped_column(String(100))
+    min_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    max_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    condition: Mapped[str | None] = mapped_column(String(100))
+    brand: Mapped[str | None] = mapped_column(String(255))
+    shipping_required: Mapped[bool | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    items: Mapped[list["SavedSearchItemRecord"]] = relationship(back_populates="search")
+
+
+class SavedSearchItemRecord(Base):
+    __tablename__ = "saved_search_items"
+    __table_args__ = (
+        UniqueConstraint("saved_search_id", "wallapop_item_id", name="uq_saved_search_item"),
+    )
+    saved_search_id: Mapped[int] = mapped_column(ForeignKey("saved_searches.id"), primary_key=True)
+    wallapop_item_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    search: Mapped[SavedSearchRecord] = relationship(back_populates="items")
+
+
+class PriceWatchRecord(Base):
+    __tablename__ = "price_watches"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_notified_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+
 class ProfileRecord(Base):
     __tablename__ = "profiles"
 
