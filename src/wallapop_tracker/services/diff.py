@@ -235,6 +235,28 @@ class DiffService:
             result.append(
                 self._change(kind, current, previous, listing_id, old.reserved, new.reserved)
             )
+        if old.shipping_available != new.shipping_available:
+            result.append(
+                self._change(
+                    ChangeType.SHIPPING_AVAILABLE_CHANGED,
+                    current,
+                    previous,
+                    listing_id,
+                    old.shipping_available,
+                    new.shipping_available,
+                )
+            )
+        if old.brand != new.brand:
+            result.append(
+                self._change(
+                    ChangeType.BRAND_CHANGED,
+                    current,
+                    previous,
+                    listing_id,
+                    old.brand,
+                    new.brand,
+                )
+            )
         return result
 
     @staticmethod
@@ -268,7 +290,9 @@ class DiffService:
             ChangeType.TITLE_CHANGED: 6,
             ChangeType.RESERVED: 7,
             ChangeType.UNRESERVED: 7,
-            ChangeType.REMOVED: 8,
+            ChangeType.SHIPPING_AVAILABLE_CHANGED: 8,
+            ChangeType.BRAND_CHANGED: 9,
+            ChangeType.REMOVED: 10,
         }
         return order[change.change_type], change.listing_id or -1
 

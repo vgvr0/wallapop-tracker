@@ -21,6 +21,33 @@ def _image_url(raw: Any) -> str | None:
     return result if isinstance(result, str) else None
 
 
+def _image_values(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep useful image identity/URLs while dropping derived color metadata."""
+    result: dict[str, Any] = {}
+    image_id = raw.get("id")
+    if isinstance(image_id, str):
+        result["id"] = image_id
+    urls = raw.get("urls") or raw.get("urls_by_size")
+    if isinstance(urls, Mapping):
+        result["urls"] = {key: value for key, value in urls.items() if isinstance(value, str)}
+    for key in ("width", "height"):
+        value = raw.get(key)
+        if isinstance(value, (int, float)):
+            result[key] = value
+    return result
+
+
+def _attribute_value(raw: Any, key: str) -> str | None:
+    value = raw.get(key) if isinstance(raw, Mapping) else None
+    if not isinstance(value, Mapping):
+        return None
+    for candidate in ("value", "text"):
+        result = value.get(candidate)
+        if isinstance(result, str):
+            return result
+    return None
+
+
 def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
     item_id = first_value(dict(raw), "id", "item_id")
     if not isinstance(item_id, str) or not item_id:
@@ -40,6 +67,15 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
     if not isinstance(url, str):
         slug = raw.get("slug")
         url = f"https://www.wallapop.com/item/{slug}" if isinstance(slug, str) else None
+    type_attributes = raw.get("type_attributes")
+    attributes = dict(type_attributes) if isinstance(type_attributes, Mapping) else None
+    raw_images = raw.get("images")
+    images = (
+        [_image_values(image) for image in raw_images if isinstance(image, Mapping)]
+        if isinstance(raw_images, list)
+        else None
+    )
+    shipping = raw.get("shipping")
     return Listing(
         item_id=item_id,
         user_id=user_id,
@@ -52,8 +88,33 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
         else (str(raw["categoryId"]) if raw.get("categoryId") is not None else None),
         status=raw.get("status") if isinstance(raw.get("status"), str) else None,
         reserved=reserved_raw if isinstance(reserved_raw, bool) else None,
+        shipping_available=(
+            shipping.get("item_is_shippable")
+            if isinstance(shipping, Mapping)
+            and isinstance(shipping.get("item_is_shippable"), bool)
+            else None
+        ),
+        seller_allows_shipping=(
+            shipping.get("user_allows_shipping")
+            if isinstance(shipping, Mapping)
+            and isinstance(shipping.get("user_allows_shipping"), bool)
+            else None
+        ),
+        condition=_attribute_value(type_attributes, "condition"),
+        brand=_attribute_value(type_attributes, "brand"),
+        has_warranty=(
+            raw.get("has_warranty") if isinstance(raw.get("has_warranty"), bool) else None
+        ),
+        is_refurbished=(
+            raw.get("is_refurbished", {}).get("flag")
+            if isinstance(raw.get("is_refurbished"), Mapping)
+            and isinstance(raw.get("is_refurbished", {}).get("flag"), bool)
+            else None
+        ),
         url=url,
         image_url=_image_url(raw.get("images")),
+        images_json=images,
+        attributes_json=attributes,
         created_at=parse_timestamp(first_value(dict(raw), "created_at", "createdAt")),
         modified_at=parse_timestamp(
             first_value(dict(raw), "modified_at", "modifiedAt", "updated_at")

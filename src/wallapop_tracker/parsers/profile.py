@@ -16,18 +16,27 @@ def parse_profile(data: Mapping[str, Any]) -> Profile:
         raise WallapopParseError("Profile response has no user id")
     location_raw = first_value(raw, "location")
     location = None
+    location_city = None
+    postal_code = None
+    country_code = None
     if isinstance(location_raw, Mapping):
+        location_city = (
+            location_raw.get("city") if isinstance(location_raw.get("city"), str) else None
+        )
+        postal_code = (
+            location_raw.get("zip") if isinstance(location_raw.get("zip"), str) else None
+        )
+        country_code = (
+            location_raw.get("country_code")
+            if isinstance(location_raw.get("country_code"), str)
+            else None
+        )
         location = (
             ", ".join(str(value) for key in ("city", "zip") if (value := location_raw.get(key)))
             or None
         )
     elif isinstance(location_raw, str):
         location = location_raw
-    image_raw = first_value(raw, "image", "avatarImage", "avatar_image")
-    image_url = image_raw if isinstance(image_raw, str) else None
-    if isinstance(image_raw, Mapping):
-        urls = image_raw.get("urls_by_size") or image_raw.get("urls") or {}
-        image_url = first_value(dict(urls), "medium", "large", "original", "small")
     seller_raw = first_value(raw, "seller_type", "sellerType")
     seller_type = seller_raw.get("type") if isinstance(seller_raw, Mapping) else seller_raw
     verified = (
@@ -39,8 +48,13 @@ def parse_profile(data: Mapping[str, Any]) -> Profile:
         slug=first_value(raw, "web_slug", "webSlug", "slug"),
         url=first_value(raw, "url_share", "urlShare", "url"),
         location=location,
-        image_url=image_url,
+        location_city=location_city,
+        postal_code=postal_code,
+        country_code=country_code,
         registered_at=parse_timestamp(first_value(raw, "register_date", "registerDate")),
         seller_type=seller_type if isinstance(seller_type, str) else None,
         verified=verified if isinstance(verified, bool) else None,
+        is_top_profile=raw.get("is_top_profile")
+        if isinstance(raw.get("is_top_profile"), bool)
+        else None,
     )

@@ -16,7 +16,21 @@ def upgrade() -> None:
     from wallapop_tracker.storage.models import Base
 
     bind = op.get_bind()
-    Base.metadata.create_all(bind=bind)
+    # This migration must represent the schema that existed at revision 0001.
+    # Using the live metadata here would also create tables introduced by later
+    # revisions (tracked profiles and alerts) before their own migrations run.
+    initial_tables = [
+        Base.metadata.tables[name]
+        for name in (
+            "profiles",
+            "tracking_runs",
+            "listings",
+            "profile_snapshots",
+            "listing_snapshots",
+            "tracking_run_listings",
+        )
+    ]
+    Base.metadata.create_all(bind=bind, tables=initial_tables)
 
 
 def downgrade() -> None:

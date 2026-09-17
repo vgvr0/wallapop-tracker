@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -103,6 +104,29 @@ def test_profile_and_listing_external_ids_are_reused_and_unique(database):
         assert session.scalar(select(func.count()).select_from(ListingRecord)) == 1
 
 
+def test_profile_stable_extension_is_persisted(database):
+    observed = datetime(2026, 9, 17, tzinfo=UTC)
+    value = Profile(
+        user_id="user-1",
+        registered_at=observed,
+        location_city="Madrid",
+        postal_code="28001",
+        country_code="ES",
+        seller_type="Private",
+        verified=True,
+        is_top_profile=False,
+    )
+    with database.session() as session:
+        record = ProfileRepository(session).get_or_create_profile(value, observed_at=observed)
+        assert record.registered_at == observed
+        assert record.location_city == "Madrid"
+        assert record.postal_code == "28001"
+        assert record.country_code == "ES"
+        assert record.seller_type == "Private"
+        assert record.verified is True
+        assert record.is_top_profile is False
+
+
 def test_partial_run_cannot_create_presence(database):
     with database.session() as session:
         profile_record = ProfileRepository(session).get_or_create_profile(profile())
@@ -174,6 +198,52 @@ def test_change_based_snapshots_and_presence_are_independent(database):
             is not None
         )
         assert len(session.scalars(select(TrackingRunListingRecord)).all()) == 2
+
+
+def test_listing_snapshot_extension_is_change_based(database):
+    observed = datetime(2026, 9, 17, tzinfo=UTC)
+    value = listing().model_copy(
+        update={
+            "shipping_available": True,
+            "seller_allows_shipping": True,
+            "condition": "new",
+            "brand": "Example",
+            "has_warranty": False,
+            "is_refurbished": False,
+            "images_json": [{"id": "image-1", "urls": {"medium": "https://img/1"}}],
+            "attributes_json": {"color": {"value": "black"}, "up_to_kg": {"value": "2"}},
+        }
+    )
+    with database.session() as session:
+        profile_record = ProfileRepository(session).get_or_create_profile(profile())
+        listing_record = ListingRepository(session).get_or_create_listing(
+            value, profile_record.id, observed_at=observed
+        )
+        runs = TrackingRunRepository(session)
+        snapshots = SnapshotRepository(session)
+        run_1 = runs.start_tracking_run(profile_record.id, started_at=observed)
+        runs.mark_valid(run_1.id, items_ok=True)
+        first = snapshots.save_listing_snapshot(
+            listing_record.id, run_1.id, value, observed_at=observed
+        )
+        assert first is not None
+        assert first.shipping_available is True
+        assert first.seller_allows_shipping is True
+        assert first.condition == "new"
+        assert first.brand == "Example"
+        assert first.has_warranty is False
+        assert first.is_refurbished is False
+        assert json.loads(first.images_json) == value.images_json
+        assert json.loads(first.attributes_json) == value.attributes_json
+
+        run_2 = runs.start_tracking_run(profile_record.id, started_at=observed)
+        runs.mark_valid(run_2.id, items_ok=True)
+        assert snapshots.save_listing_snapshot(listing_record.id, run_2.id, value) is None
+
+        run_3 = runs.start_tracking_run(profile_record.id, started_at=observed)
+        runs.mark_valid(run_3.id, items_ok=True)
+        changed = value.model_copy(update={"shipping_available": False})
+        assert snapshots.save_listing_snapshot(listing_record.id, run_3.id, changed) is not None
 
 
 def test_profile_snapshot_changes_only_on_metric_change(database):

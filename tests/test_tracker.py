@@ -45,7 +45,13 @@ class FakeClient:
 
     async def get_profile_stats(self, user_id: str) -> ProfileStats:
         return ProfileStats(
-            rating=4.5, review_count=12, published_count=len(self.listings), sold_count=2
+            rating=4.5,
+            review_count=12,
+            published_count=len(self.listings),
+            purchases_count=3,
+            sales_count=4,
+            sold_count=2,
+            reports_count=1,
         )
 
     async def get_review_summary(self, user_id: str) -> ReviewSummary:
@@ -133,9 +139,13 @@ async def test_profile_snapshot_uses_review_distribution(database):
     with database.session() as session:
         snapshot = session.scalar(select(ProfileSnapshotRecord))
         assert snapshot is not None
-        assert snapshot.rating_5_count == 80
-        assert snapshot.rating_4_count == 20
+        assert snapshot.rating_5_pct == 80
+        assert snapshot.rating_4_pct == 20
         assert snapshot.review_count == 12
+        assert snapshot.purchases_count == 3
+        assert snapshot.sales_count == 4
+        assert snapshot.sold_count == 2
+        assert snapshot.reports_count == 1
 
 
 @pytest.mark.asyncio

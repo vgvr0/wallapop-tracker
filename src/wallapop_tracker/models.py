@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,10 +15,13 @@ class Profile(BaseModel):
     slug: str | None = None
     url: str | None = None
     location: str | None = None
-    image_url: str | None = None
+    location_city: str | None = None
+    postal_code: str | None = None
+    country_code: str | None = None
     registered_at: datetime | None = None
     seller_type: str | None = None
     verified: bool | None = None
+    is_top_profile: bool | None = None
 
 
 class ProfileStats(BaseModel):
@@ -26,7 +30,10 @@ class ProfileStats(BaseModel):
     rating: float | None = None
     review_count: int | None = None
     published_count: int | None = None
+    purchases_count: int | None = None
+    sales_count: int | None = None
     sold_count: int | None = None
+    reports_count: int | None = None
 
 
 class ReviewSummary(BaseModel):
@@ -50,8 +57,16 @@ class Listing(BaseModel):
     category_name: str | None = None
     status: str | None = None
     reserved: bool | None = None
+    shipping_available: bool | None = None
+    seller_allows_shipping: bool | None = None
+    condition: str | None = None
+    brand: str | None = None
+    has_warranty: bool | None = None
+    is_refurbished: bool | None = None
     url: str | None = None
     image_url: str | None = None
+    images_json: list[dict[str, Any]] | None = None
+    attributes_json: dict[str, Any] | None = None
     created_at: datetime | None = None
     modified_at: datetime | None = None
 

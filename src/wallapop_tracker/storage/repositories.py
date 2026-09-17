@@ -66,6 +66,13 @@ class ProfileRepository:
                 slug=profile.slug,
                 name=profile.name,
                 url=profile.url,
+                registered_at=profile.registered_at,
+                location_city=profile.location_city,
+                postal_code=profile.postal_code,
+                country_code=profile.country_code,
+                seller_type=profile.seller_type,
+                verified=profile.verified,
+                is_top_profile=profile.is_top_profile,
                 first_seen_at=now,
                 last_seen_at=now,
                 created_at=now,
@@ -77,6 +84,13 @@ class ProfileRepository:
         record.slug = profile.slug
         record.name = profile.name
         record.url = profile.url
+        record.registered_at = profile.registered_at
+        record.location_city = profile.location_city
+        record.postal_code = profile.postal_code
+        record.country_code = profile.country_code
+        record.seller_type = profile.seller_type
+        record.verified = profile.verified
+        record.is_top_profile = profile.is_top_profile
         if valid_observation:
             record.last_seen_at = now
         record.updated_at = now
@@ -269,11 +283,19 @@ class SnapshotRepository:
                 "category_id": listing.category_id,
                 "category_name": listing.category_name,
                 "reserved": listing.reserved,
+                "shipping_available": listing.shipping_available,
+                "seller_allows_shipping": listing.seller_allows_shipping,
+                "condition": listing.condition,
+                "brand": listing.brand,
+                "has_warranty": listing.has_warranty,
+                "is_refurbished": listing.is_refurbished,
                 "status": listing.status,
                 "url": listing.url,
                 "image_url": listing.image_url,
                 "created_at_source": listing.created_at,
                 "modified_at_source": listing.modified_at,
+                "images_json": _json_text(listing.images_json),
+                "attributes_json": _json_text(listing.attributes_json),
             }
         if (
             latest is not None
@@ -338,15 +360,15 @@ class SnapshotRepository:
             if stats.review_count is not None
             else (reviews.review_count if reviews else None),
             "published_count": stats.published_count,
-            "purchases_count": None,
-            "sales_count": None,
+            "purchases_count": stats.purchases_count,
+            "sales_count": stats.sales_count,
             "sold_count": stats.sold_count,
-            "reports_count": None,
-            "rating_1_count": distribution.get(1) if distribution else None,
-            "rating_2_count": distribution.get(2) if distribution else None,
-            "rating_3_count": distribution.get(3) if distribution else None,
-            "rating_4_count": distribution.get(4) if distribution else None,
-            "rating_5_count": distribution.get(5) if distribution else None,
+            "reports_count": stats.reports_count,
+            "rating_1_pct": distribution.get(1) if distribution else None,
+            "rating_2_pct": distribution.get(2) if distribution else None,
+            "rating_3_pct": distribution.get(3) if distribution else None,
+            "rating_4_pct": distribution.get(4) if distribution else None,
+            "rating_5_pct": distribution.get(5) if distribution else None,
         }
 
     @staticmethod
@@ -361,11 +383,19 @@ class SnapshotRepository:
         "category_id",
         "category_name",
         "reserved",
+        "shipping_available",
+        "seller_allows_shipping",
+        "condition",
+        "brand",
+        "has_warranty",
+        "is_refurbished",
         "status",
         "url",
         "image_url",
         "created_at_source",
         "modified_at_source",
+        "images_json",
+        "attributes_json",
     )
 
     def _require_valid_run(self, run_id: int) -> TrackingRunRecord:

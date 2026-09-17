@@ -162,3 +162,115 @@ def test_diff_is_idempotent(database):
         assert service.compare_runs(first.id, second.id) == service.compare_runs(
             first.id, second.id
         )
+
+
+def _listing_change(database, field, old_value, new_value):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        base = _listing().model_copy(update={field: old_value})
+        snapshots.save_listing_snapshot(listing.id, first.id, base, observed_at=first.started_at)
+        second = _run(session, profile.id, 2, (listing.id,))
+        changed = base.model_copy(update={field: new_value})
+        snapshots.save_listing_snapshot(
+            listing.id, second.id, changed, observed_at=second.started_at
+        )
+        changes = DiffService(session).compare_runs(first.id, second.id)
+        assert len(changes) == 1
+        assert changes[0].old_value == old_value
+        assert changes[0].new_value == new_value
+        return changes[0].change_type
+
+
+def test_shipping_available_changed(database):
+    assert (
+        _listing_change(database, "shipping_available", True, False)
+        == ChangeType.SHIPPING_AVAILABLE_CHANGED
+    )
+
+
+def test_shipping_available_same_no_change(database):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        value = _listing()
+        snapshots.save_listing_snapshot(listing.id, first.id, value, observed_at=first.started_at)
+        second = _run(session, profile.id, 2, (listing.id,))
+        assert (
+            snapshots.save_listing_snapshot(
+                listing.id, second.id, value, observed_at=second.started_at
+            )
+            is None
+        )
+        assert DiffService(session).compare_runs(first.id, second.id) == []
+
+
+def test_brand_changed(database):
+    assert _listing_change(database, "brand", "Apple", "Samsung") == ChangeType.BRAND_CHANGED
+
+
+def test_brand_none_to_value(database):
+    assert _listing_change(database, "brand", None, "Apple") == ChangeType.BRAND_CHANGED
+
+
+def test_brand_same_no_change(database):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        value = _listing().model_copy(update={"brand": "Apple"})
+        snapshots.save_listing_snapshot(listing.id, first.id, value, observed_at=first.started_at)
+        second = _run(session, profile.id, 2, (listing.id,))
+        assert (
+            snapshots.save_listing_snapshot(
+                listing.id, second.id, value, observed_at=second.started_at
+            )
+            is None
+        )
+        assert DiffService(session).compare_runs(first.id, second.id) == []
+
+
+def test_change_based_shipping_reconstruction(database):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        snapshots.save_listing_snapshot(
+            listing.id, first.id, _listing().model_copy(update={"shipping_available": True}),
+            observed_at=first.started_at,
+        )
+        middle = _run(session, profile.id, 2, (listing.id,))
+        third = _run(session, profile.id, 3, (listing.id,))
+        snapshots.save_listing_snapshot(
+            listing.id, third.id, _listing().model_copy(update={"shipping_available": False}),
+            observed_at=third.started_at,
+        )
+        assert DiffService(session).compare_runs(first.id, middle.id) == []
+        changes = DiffService(session).compare_runs(middle.id, third.id)
+        assert [(change.change_type, change.old_value, change.new_value) for change in changes] == [
+            (ChangeType.SHIPPING_AVAILABLE_CHANGED, True, False)
+        ]
+
+
+def test_change_based_brand_reconstruction(database):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        snapshots.save_listing_snapshot(
+            listing.id, first.id, _listing().model_copy(update={"brand": "Apple"}),
+            observed_at=first.started_at,
+        )
+        middle = _run(session, profile.id, 2, (listing.id,))
+        third = _run(session, profile.id, 3, (listing.id,))
+        snapshots.save_listing_snapshot(
+            listing.id, third.id, _listing().model_copy(update={"brand": "Samsung"}),
+            observed_at=third.started_at,
+        )
+        assert DiffService(session).compare_runs(first.id, middle.id) == []
+        changes = DiffService(session).compare_runs(middle.id, third.id)
+        assert [(change.change_type, change.old_value, change.new_value) for change in changes] == [
+            (ChangeType.BRAND_CHANGED, "Apple", "Samsung")
+        ]

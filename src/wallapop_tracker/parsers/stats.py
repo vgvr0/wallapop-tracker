@@ -31,6 +31,9 @@ def parse_profile_stats(data: Mapping[str, Any]) -> ProfileStats:
         rating=rating,
         review_count=counters.get("reviews", ratings.get("reviews")),
         published_count=counters.get("publish"),
+        purchases_count=counters.get("buys"),
+        sales_count=counters.get("sells"),
         # ``sold`` is an explicit counter in the current API; do not derive it.
         sold_count=counters.get("sold"),
+        reports_count=counters.get("reports_received"),
     )
