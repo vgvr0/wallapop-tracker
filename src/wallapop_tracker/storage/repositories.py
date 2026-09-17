@@ -128,6 +128,10 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _json_text(value: Any) -> str | None:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True) if value is not None else None
+
+
 def _run_is_valid(session: Session, run_id: int) -> bool:
     run = session.get(TrackingRunRecord, run_id)
     if run is None:
