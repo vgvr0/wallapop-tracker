@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wallapop-profile-tracker"
+version = "0.1.0"
+description = "Read-only client and parsers for authorized Wallapop public profile data"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.13",
+  "httpx>=0.27",
+  "pydantic>=2",
+  "sqlalchemy>=2.0",
+  "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "respx>=0.21",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "alembic>=1.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wallapop_tracker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: explicitly authorized live Wallapop integration test"]
+addopts = "-m 'not live'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

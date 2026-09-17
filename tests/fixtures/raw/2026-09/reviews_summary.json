@@ -1,0 +1,21 @@
+{
+  "total_reviews": 294,
+  "average": 4.9,
+  "breakdown": {
+    "1": {
+      "percentage": 1
+    },
+    "2": {
+      "percentage": 0
+    },
+    "3": {
+      "percentage": 1
+    },
+    "4": {
+      "percentage": 3
+    },
+    "5": {
+      "percentage": 95
+    }
+  }
+}

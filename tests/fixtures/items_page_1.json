@@ -1,0 +1,1 @@
+{"data":[{"id":"item-1","title":"Cámara","description":"Descripción","category_id":24200,"slug":"camara-1","images":[{"urls":{"medium":"https://img/1.jpg"}}],"price":{"amount":22,"currency":"EUR"},"shipping":{"item_is_shippable":true},"reserved":{"flag":false}}],"meta":{"next":"cursor-1"}}

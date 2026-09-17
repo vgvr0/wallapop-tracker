@@ -1,0 +1,83 @@
+{
+  "captured_at": "2026-09-17T20:00:01.781529+00:00",
+  "wallapop_api": "unofficial/public frontend API",
+  "authorization": "captured under user-provided Wallapop authorization",
+  "endpoints": [
+    "/api/v3/users/{user_id}",
+    "/api/v3/users/{user_id}/stats",
+    "/api/v3/users/{user_id}/reviews/summary",
+    "/api/v3/users/{user_id}/items"
+  ],
+  "profiles": [
+    {
+      "label": "example",
+      "url": "https://es.wallapop.com/user/joseantoniol-64102686",
+      "user_id": "v4z4nyeyq8jy",
+      "stats": {
+        "rating": 4.9,
+        "review_count": 294,
+        "published_count": 77,
+        "sold_count": 415
+      },
+      "reviews": {
+        "rating": 4.9,
+        "review_count": 294,
+        "rating_distribution": {
+          "1": 1,
+          "2": 0,
+          "3": 1,
+          "4": 3,
+          "5": 95
+        }
+      }
+    },
+    {
+      "label": "reviewer_a",
+      "url": "https://es.wallapop.com/user/martag-16085078",
+      "user_id": "qnzx5d9g9p62",
+      "stats": {
+        "rating": 4.9,
+        "review_count": 119,
+        "published_count": 28,
+        "sold_count": 123
+      },
+      "reviews": {
+        "rating": 4.9,
+        "review_count": 119,
+        "rating_distribution": {
+          "1": 1,
+          "2": 0,
+          "3": 1,
+          "4": 4,
+          "5": 94
+        }
+      }
+    },
+    {
+      "label": "reviewer_b",
+      "url": "https://es.wallapop.com/user/pablos-457067972",
+      "user_id": "e65y995po0jo",
+      "stats": {
+        "rating": 5.0,
+        "review_count": 2,
+        "published_count": 0,
+        "sold_count": 1
+      },
+      "reviews": {
+        "rating": 5.0,
+        "review_count": 2,
+        "rating_distribution": {
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 100
+        }
+      }
+    }
+  ],
+  "sanitization": [
+    "No cookies, tokens, authorization headers, or session identifiers were captured.",
+    "The responses contain only public API response bodies."
+  ]
+}
