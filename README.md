@@ -53,5 +53,15 @@ ruff check .
 mypy src
 ```
 
-SQLite, snapshots históricos, diff engine, tracker, scheduler y CLI quedan fuera de esta fase.
+Validación E2E manual (no se ejecuta si faltan las dos variables):
 
+```bash
+set WALLAPOP_E2E_PROFILE_URL_1=https://es.wallapop.com/user/...
+set WALLAPOP_E2E_PROFILE_URL_2=https://es.wallapop.com/user/...
+python scripts/run_e2e_validation.py
+```
+
+La validación usa `data/e2e_validation.db`, separada de la base normal y
+excluida de Git. Las URLs se mantienen fuera del repositorio.
+
+SQLite, snapshots históricos, diff engine, tracker, scheduler y CLI quedan fuera de esta fase.
