@@ -18,4 +18,3 @@ RUN pip install .
 
 USER app
 
-ENTRYPOINT ["wallapop-track"]
