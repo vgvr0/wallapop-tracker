@@ -200,3 +200,8 @@ La siguiente fase podrá implementar modelos SQLAlchemy 2, SQLite, esquema/migra
 - scheduler;
 - CLI de tracking;
 - integración automática con `WallapopClient`.
+Las búsquedas pasan por un provider normalizado:
+
+```text
+SearchTracker -> SearchProvider -> WallapopSearchProvider -> WallapopClient
+```

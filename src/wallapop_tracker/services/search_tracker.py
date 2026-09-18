@@ -11,10 +11,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from wallapop_tracker.client import WallapopClient
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
 from wallapop_tracker.models import Listing
+from wallapop_tracker.providers.search import SearchProvider, SearchRequest
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
@@ -52,10 +52,10 @@ class SearchTracker:
 
     def __init__(
         self,
-        client: WallapopClient,
+        provider: SearchProvider,
         session_factory: sessionmaker[Session] | Database,
     ) -> None:
-        self.client = client
+        self.provider = provider
         self.session_factory = (
             session_factory.session_factory
             if isinstance(session_factory, Database)
@@ -73,7 +73,7 @@ class SearchTracker:
             config = self._config(search)
 
         try:
-            listings = await self.client.search_items(
+            request = SearchRequest(
                 query=search.query,
                 min_price=search.min_price,
                 max_price=search.max_price,
@@ -90,6 +90,7 @@ class SearchTracker:
                 distance=self._optional_float(config.get("distance")),
                 max_pages=int(config.get("max_pages", 5)),
             )
+            listings = await self.provider.search(request)
             filtered = filters_from_config(
                 {
                     **config,

@@ -52,9 +52,9 @@ las entidades de evento/deduplicación que faltaban.
 ## Flujo de datos
 
 ```text
-TrackedSearch -> WallapopClient.search_items
+TrackedSearch -> SearchTracker -> SearchProvider
+              -> WallapopSearchProvider -> WallapopClient.search_items
               -> FilterEngine
-              -> SearchTracker
               -> search runs + global listings/snapshots
               -> DiffService / event idempotency
               -> persisted alerts and reporting

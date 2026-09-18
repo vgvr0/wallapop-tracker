@@ -424,12 +424,14 @@ class ListingRepository:
             self.session.add(record)
             self.session.flush()
             return record
-        if record.profile_id != profile_id:
+        if record.profile_id not in {None, profile_id}:
             raise WallapopError(
                 f"Listing {listing.item_id} changed profile from "
                 f"{record.profile_id} to {profile_id}"
             )
         if valid_observation:
+            if record.profile_id is None:
+                record.profile_id = profile_id
             record.last_seen_at = now
             record.updated_at = now
         self.session.flush()

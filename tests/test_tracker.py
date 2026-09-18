@@ -4,9 +4,12 @@ import pytest
 from sqlalchemy import func, select
 
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
+from wallapop_tracker.providers.search import SearchRequest
+from wallapop_tracker.services.search_tracker import SearchTracker
 from wallapop_tracker.services.tracker import ProfileTracker
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
+    ListingRecord,
     ListingSnapshotRecord,
     PresenceState,
     ProfileRecord,
@@ -14,6 +17,7 @@ from wallapop_tracker.storage.models import (
     TrackingRunListingRecord,
     TrackingRunRecord,
 )
+from wallapop_tracker.storage.repositories import TrackedSearchRepository
 
 
 @pytest.fixture
@@ -64,6 +68,14 @@ class FakeClient:
         return self.listings
 
 
+class FakeSearchProvider:
+    def __init__(self, listings: list[Listing]):
+        self.listings = listings
+
+    async def search(self, request: SearchRequest) -> list[Listing]:
+        return self.listings
+
+
 def item(item_id: str, price: str) -> Listing:
     return Listing(
         item_id=item_id,
@@ -91,6 +103,28 @@ async def test_valid_capture_and_identical_second_capture(database):
         assert run is not None
         assert run.profile_id == session.scalar(select(ProfileRecord.id))
         assert run.tracked_search_id is None
+
+
+@pytest.mark.asyncio
+async def test_profile_tracking_enriches_listing_discovered_by_search(database):
+    search_listing = item("shared", "120")
+    with database.transaction() as session:
+        search_id = TrackedSearchRepository(session).create("shared").id
+
+    await SearchTracker(FakeSearchProvider([search_listing]), database).track_search(search_id)
+    with database.session() as session:
+        before = session.scalar(select(ListingSnapshotRecord.listing_id))
+        assert before is not None
+        assert session.get(TrackingRunRecord, 1).profile_id is None
+
+    tracker = ProfileTracker(FakeClient([item("shared", "120")]), database)
+    await tracker.track_profile("https://wallapop.test/user/ana")
+
+    with database.session() as session:
+        listings = session.scalars(select(ListingRecord)).all()
+        assert len(listings) == 1
+        assert listings[0].wallapop_item_id == "shared"
+        assert listings[0].profile_id is not None
 
 
 @pytest.mark.asyncio

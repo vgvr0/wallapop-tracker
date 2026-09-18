@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..client import WallapopClient
+from ..providers.search import SearchProvider, WallapopSearchProvider
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
 from ..storage.repositories import TrackedProfileRepository, TrackedSearchRepository
@@ -87,7 +88,8 @@ class ProfileTrackingRunner:
                 repository.attach_profile(alias, profile_id)
 
 
-type SearchTrackerFactory = Callable[[WallapopClient, Database], SearchTracker]
+type SearchProviderFactory = Callable[[WallapopClient], SearchProvider]
+type SearchTrackerFactory = Callable[[SearchProvider, Database], SearchTracker]
 
 
 class SearchTrackingRunner:
@@ -99,10 +101,12 @@ class SearchTrackingRunner:
         *,
         client_factory: ClientFactory = WallapopClient,
         tracker_factory: SearchTrackerFactory = SearchTracker,
+        provider_factory: SearchProviderFactory = WallapopSearchProvider,
     ) -> None:
         self.database = database
         self.client_factory = client_factory
         self.tracker_factory = tracker_factory
+        self.provider_factory = provider_factory
 
     async def run(self, search_id: int) -> SearchTrackingResult:
         with self.database.session() as session:
@@ -113,7 +117,8 @@ class SearchTrackingRunner:
                 return SearchTrackingResult(search_id, None, None, 0)
         try:
             async with self.client_factory() as client:
-                return await self.tracker_factory(client, self.database).track_search(search_id)
+                provider = self.provider_factory(client)
+                return await self.tracker_factory(provider, self.database).track_search(search_id)
         except Exception as exc:
             return SearchTrackingResult(
                 search_id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
