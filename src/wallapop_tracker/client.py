@@ -244,13 +244,17 @@ class WallapopClient:
     async def search_items(
         self,
         *,
-        keywords: str,
+        query: str | None = None,
+        keywords: str | None = None,
         category_id: str | None = None,
         min_price: Decimal | None = None,
         max_price: Decimal | None = None,
         condition: str | None = None,
         brand: str | None = None,
         shipping_required: bool | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        distance: float | None = None,
         max_pages: int = 5,
     ) -> list[Listing]:
         """Search public listings through Wallapop's v3 search endpoint.
@@ -260,13 +264,28 @@ class WallapopClient:
         Filters not consistently supported server-side are applied locally so
         the saved-search semantics stay deterministic.
         """
+        if query is not None and keywords is not None and query != keywords:
+            raise ValueError("query and keywords must match when both are supplied")
+        search_query = (query if query is not None else keywords or "").strip()
+        if not search_query:
+            raise ValueError("query is required")
         params: dict[str, str] = {
-            "keywords": keywords,
+            "keywords": search_query,
             "source": "search_box",
             "order_by": "newest",
         }
         if category_id is not None:
             params["category_id"] = category_id
+        if min_price is not None:
+            params["min_price"] = str(min_price)
+        if max_price is not None:
+            params["max_price"] = str(max_price)
+        if latitude is not None:
+            params["latitude"] = str(latitude)
+        if longitude is not None:
+            params["longitude"] = str(longitude)
+        if distance is not None:
+            params["distance"] = str(distance)
         if max_pages < 1:
             raise ValueError("max_pages must be positive")
         result: list[Listing] = []
@@ -278,9 +297,21 @@ class WallapopClient:
             if next_page is not None:
                 request_params["next_page"] = next_page
             data = await self._request(
-                "GET", f"{self.base_url}/api/v3/search", params=request_params
+                "GET",
+                f"{self.base_url}/api/v3/search",
+                params=request_params,
+                raw_kind="search",
+                raw_key=f"{search_query}_page-{len(result)}",
             )
-            raw_items = data.get("data", {}).get("items", []) if isinstance(data, Mapping) else []
+            payload = data.get("data") if isinstance(data, Mapping) else None
+            if isinstance(payload, Mapping):
+                raw_items = payload.get("items", [])
+            elif isinstance(payload, list):
+                raw_items = payload
+            else:
+                raw_items = []
+            if not isinstance(raw_items, list):
+                raw_items = []
             for raw in raw_items:
                 if not isinstance(raw, Mapping) or not raw.get("id"):
                     continue
@@ -289,24 +320,44 @@ class WallapopClient:
                     continue
                 seen_ids.add(item_id)
                 price = raw.get("price")
+                currency = None
                 if isinstance(price, Mapping):
+                    currency = price.get("currency")
                     price = price.get("amount")
+                seller = raw.get("user_id")
+                if isinstance(seller, Mapping):
+                    seller = seller.get("id")
+                shipping = raw.get("shipping")
                 item = Listing(
                     item_id=item_id,
-                    user_id=str(raw.get("user_id", "")),
+                    user_id=str(seller or ""),
                     title=raw.get("title"),
+                    description=raw.get("description"),
                     price=price,
+                    currency=currency,
                     category_id=str(raw.get("category_id"))
                     if raw.get("category_id") is not None
                     else None,
+                    category_name=raw.get("category_name"),
                     brand=raw.get("brand"),
                     condition=raw.get("condition"),
-                    shipping_available=(raw.get("shipping") or {}).get("item_is_shippable")
-                    if isinstance(raw.get("shipping"), Mapping)
+                    status=raw.get("status"),
+                    reserved=raw.get("reserved"),
+                    shipping_available=(shipping or {}).get("item_is_shippable")
+                    if isinstance(shipping, Mapping)
                     else None,
                     url=f"{self.web_base_url}/item/{raw.get('web_slug')}"
                     if raw.get("web_slug")
                     else None,
+                    image_url=raw.get("main_image_url") or raw.get("image_url"),
+                    images_json=raw.get("images") if isinstance(raw.get("images"), list) else None,
+                    attributes_json=(
+                        raw.get("attributes")
+                        if isinstance(raw.get("attributes"), Mapping)
+                        else None
+                    ),
+                    created_at=raw.get("created_at"),
+                    modified_at=raw.get("modified_at"),
                 )
                 if min_price is not None and (item.price is None or item.price < min_price):
                     continue

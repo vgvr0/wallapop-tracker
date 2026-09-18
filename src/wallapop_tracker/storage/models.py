@@ -68,6 +68,79 @@ class SavedSearchItemRecord(Base):
     search: Mapped[SavedSearchRecord] = relationship(back_populates="items")
 
 
+class TrackedSearchRecord(Base):
+    """Persistent configuration for the integrated search tracker."""
+
+    __tablename__ = "tracked_searches"
+    __table_args__ = (
+        CheckConstraint("interval_seconds > 0", name="ck_tracked_search_interval"),
+        CheckConstraint(
+            "min_price IS NULL OR max_price IS NULL OR min_price <= max_price",
+            name="ck_tracked_search_price_range",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(255))
+    query: Mapped[str] = mapped_column(String(255), nullable=False)
+    min_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    max_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    filters_json: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(20))
+    last_run_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class SearchListingMatchRecord(Base):
+    """Global listing-to-search association and observation counters."""
+
+    __tablename__ = "search_listing_matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "tracked_search_id", "listing_id", name="uq_search_listing_match"
+        ),
+        Index("ix_search_listing_matches_listing", "listing_id"),
+    )
+
+    tracked_search_id: Mapped[int] = mapped_column(
+        ForeignKey("tracked_searches.id"), primary_key=True
+    )
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    detection_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    tracked_search: Mapped[TrackedSearchRecord] = relationship()
+    listing: Mapped["ListingRecord"] = relationship()
+
+
+class TrackingEventRecord(Base):
+    """Durable idempotency ledger for globally deduplicated tracker events."""
+
+    __tablename__ = "tracking_events"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_tracking_events_idempotency"),
+        Index("ix_tracking_events_listing_created", "listing_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
+    tracking_run_id: Mapped[int] = mapped_column(ForeignKey("tracking_runs.id"), nullable=False)
+    tracked_search_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_searches.id"))
+    old_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    new_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    alert_delivered: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    listing: Mapped["ListingRecord"] = relationship()
+    tracking_run: Mapped["TrackingRunRecord"] = relationship()
+    tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
+
+
 class PriceWatchRecord(Base):
     __tablename__ = "price_watches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -140,6 +213,9 @@ class TrackingRunRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), nullable=False)
+    # Kept as a portable association key. The initial historical migration
+    # creates this table before the tracked-search table exists.
+    tracked_search_id: Mapped[int | None] = mapped_column(Integer)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TrackingRunStatus] = mapped_column(
@@ -154,6 +230,10 @@ class TrackingRunRecord(Base):
     error_type: Mapped[str | None] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True)
+    matched_listings: Mapped[int | None] = mapped_column(Integer)
+    new_listings: Mapped[int | None] = mapped_column(Integer)
+    price_changes: Mapped[int | None] = mapped_column(Integer)
+    duplicates_suppressed: Mapped[int | None] = mapped_column(Integer)
     profile: Mapped[ProfileRecord] = relationship(back_populates="tracking_runs")
     profile_snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(
         back_populates="tracking_run"

@@ -9,8 +9,9 @@ from datetime import UTC, datetime, timedelta
 
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
-from ..storage.repositories import TrackedProfileRepository
-from .runner import ProfileTrackingResult, ProfileTrackingRunner
+from ..storage.repositories import TrackedProfileRepository, TrackedSearchRepository
+from .runner import ProfileTrackingResult, ProfileTrackingRunner, SearchTrackingRunner
+from .search_tracker import SearchTrackingResult
 
 Clock = Callable[[], datetime]
 
@@ -23,7 +24,9 @@ class SchedulerResult:
     executed: int
     succeeded: int
     failed: int
-    results: tuple[ProfileTrackingResult, ...]
+    results: tuple[ProfileTrackingResult | SearchTrackingResult, ...]
+    profile_results: tuple[ProfileTrackingResult, ...] = ()
+    search_results: tuple[SearchTrackingResult, ...] = ()
 
 
 class TrackingScheduler:
@@ -36,6 +39,7 @@ class TrackingScheduler:
         *,
         poll_seconds: float = 60.0,
         runner: ProfileTrackingRunner | None = None,
+        search_runner: SearchTrackingRunner | None = None,
         clock: Clock | None = None,
     ) -> None:
         if interval <= timedelta(0):
@@ -46,35 +50,57 @@ class TrackingScheduler:
         self.interval = interval
         self.poll_seconds = poll_seconds
         self.runner = runner or ProfileTrackingRunner(database)
+        self.search_runner = search_runner or SearchTrackingRunner(database)
         self.clock = clock or (lambda: datetime.now(UTC))
 
     async def run_once(self, *, now: datetime | None = None) -> SchedulerResult:
         current = _as_utc(now or self.clock())
         with self.database.session() as session:
             records = TrackedProfileRepository(session).list_enabled()
+            searches = TrackedSearchRepository(session).list_enabled()
         due = [record for record in records if _is_due(record.last_run_at, current, self.interval)]
-        results: list[ProfileTrackingResult] = []
+        due_searches = [
+            search
+            for search in searches
+            if _is_due(
+                search.last_run_at,
+                current,
+                timedelta(seconds=search.interval_seconds),
+            )
+        ]
+        results: list[ProfileTrackingResult | SearchTrackingResult] = []
+        profile_results: list[ProfileTrackingResult] = []
+        search_results: list[SearchTrackingResult] = []
         for record in due:
             try:
                 result = await self.runner.run(record.alias, now=current)
             except Exception as exc:
-                results.append(
-                    ProfileTrackingResult(
-                        alias=record.alias,
-                        attempted_at=current,
-                        status=TrackingRunStatus.FAILED,
-                        error=str(exc),
-                    )
+                result = ProfileTrackingResult(
+                    alias=record.alias,
+                    attempted_at=current,
+                    status=TrackingRunStatus.FAILED,
+                    error=str(exc),
                 )
-            else:
-                results.append(result)
+            results.append(result)
+            profile_results.append(result)
+        for search in due_searches:
+            try:
+                search_result = await self.search_runner.run(search.id)
+            except Exception as exc:
+                search_result = SearchTrackingResult(
+                    search.id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
+                )
+            results.append(search_result)
+            search_results.append(search_result)
         failed = sum(result.status == TrackingRunStatus.FAILED for result in results)
         return SchedulerResult(
-            evaluated=len(records),
+            evaluated=len(records) + len(searches),
             executed=len(results),
             succeeded=len(results) - failed,
             failed=failed,
             results=tuple(results),
+            profile_results=tuple(profile_results),
+            search_results=tuple(search_results),
         )
 
     async def run_forever(self) -> None:

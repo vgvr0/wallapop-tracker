@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.exceptions import WallapopError
@@ -18,11 +19,188 @@ from .models import (
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
+    SearchListingMatchRecord,
     TrackedProfileRecord,
+    TrackedSearchRecord,
+    TrackingEventRecord,
     TrackingRunListingRecord,
     TrackingRunRecord,
     TrackingRunStatus,
 )
+
+
+class TrackedSearchRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, search_id: int) -> TrackedSearchRecord | None:
+        return self.session.get(TrackedSearchRecord, search_id)
+
+    def list_all(self) -> list[TrackedSearchRecord]:
+        return list(
+            self.session.scalars(select(TrackedSearchRecord).order_by(TrackedSearchRecord.id))
+        )
+
+    def list_enabled(self) -> list[TrackedSearchRecord]:
+        return list(
+            self.session.scalars(
+                select(TrackedSearchRecord)
+                .where(TrackedSearchRecord.enabled)
+                .order_by(TrackedSearchRecord.id)
+            )
+        )
+
+    def create(
+        self,
+        query: str,
+        *,
+        name: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
+        filters: dict[str, Any] | None = None,
+        interval_seconds: int = 600,
+    ) -> TrackedSearchRecord:
+        query = query.strip()
+        if not query:
+            raise ValueError("query is required")
+        if interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        if min_price is not None and max_price is not None and min_price > max_price:
+            raise ValueError("min_price must not exceed max_price")
+        now = datetime.now(UTC)
+        record = TrackedSearchRecord(
+            name=name.strip() if name and name.strip() else None,
+            query=query,
+            min_price=min_price,
+            max_price=max_price,
+            filters_json=_json_text(filters),
+            interval_seconds=interval_seconds,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def enable(self, search_id: int) -> TrackedSearchRecord:
+        return self._set_enabled(search_id, True)
+
+    def disable(self, search_id: int) -> TrackedSearchRecord:
+        return self._set_enabled(search_id, False)
+
+    def _set_enabled(self, search_id: int, enabled: bool) -> TrackedSearchRecord:
+        record = self.get(search_id)
+        if record is None:
+            raise ValueError(f"Unknown search: {search_id}")
+        record.enabled = enabled
+        record.updated_at = datetime.now(UTC)
+        self.session.flush()
+        return record
+
+    def remove(self, search_id: int) -> None:
+        record = self.get(search_id)
+        if record is None:
+            raise ValueError(f"Unknown search: {search_id}")
+        for run in self.session.scalars(
+            select(TrackingRunRecord).where(TrackingRunRecord.tracked_search_id == search_id)
+        ):
+            run.tracked_search_id = None
+        for event in self.session.scalars(
+            select(TrackingEventRecord).where(TrackingEventRecord.tracked_search_id == search_id)
+        ):
+            event.tracked_search_id = None
+        self.session.query(SearchListingMatchRecord).filter(
+            SearchListingMatchRecord.tracked_search_id == search_id
+        ).delete(synchronize_session=False)
+        self.session.delete(record)
+        self.session.flush()
+
+    def update_last_run(
+        self,
+        search_id: int,
+        at: datetime,
+        status: str,
+        run_id: int | None = None,
+    ) -> TrackedSearchRecord:
+        record = self.get(search_id)
+        if record is None:
+            raise ValueError(f"Unknown search: {search_id}")
+        record.last_run_at = at
+        record.last_run_status = status
+        record.last_run_id = run_id
+        record.updated_at = datetime.now(UTC)
+        self.session.flush()
+        return record
+
+
+class SearchMatchRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def touch(
+        self, search_id: int, listing_id: int, observed_at: datetime
+    ) -> SearchListingMatchRecord:
+        record = self.session.get(SearchListingMatchRecord, (search_id, listing_id))
+        if record is None:
+            record = SearchListingMatchRecord(
+                tracked_search_id=search_id,
+                listing_id=listing_id,
+                first_seen_at=observed_at,
+                last_seen_at=observed_at,
+                detection_count=1,
+            )
+            self.session.add(record)
+        else:
+            record.last_seen_at = observed_at
+            record.detection_count += 1
+        self.session.flush()
+        return record
+
+
+class TrackingEventRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get_by_key(self, key: str) -> TrackingEventRecord | None:
+        return self.session.scalar(
+            select(TrackingEventRecord).where(TrackingEventRecord.idempotency_key == key)
+        )
+
+    def create_once(
+        self,
+        *,
+        event_type: str,
+        idempotency_key: str,
+        listing_id: int,
+        tracking_run_id: int,
+        tracked_search_id: int,
+        old_price: Decimal | None,
+        new_price: Decimal | None,
+        created_at: datetime,
+    ) -> tuple[TrackingEventRecord, bool]:
+        existing = self.get_by_key(idempotency_key)
+        if existing is not None:
+            return existing, False
+        try:
+            with self.session.begin_nested():
+                record = TrackingEventRecord(
+                    event_type=event_type,
+                    idempotency_key=idempotency_key,
+                    listing_id=listing_id,
+                    tracking_run_id=tracking_run_id,
+                    tracked_search_id=tracked_search_id,
+                    old_price=old_price,
+                    new_price=new_price,
+                    created_at=created_at,
+                )
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.get_by_key(idempotency_key)
+            if existing is None:
+                raise
+            return existing, False
+        return record, True
 
 
 class TrackedProfileRepository:
@@ -247,6 +425,53 @@ class ListingRepository:
         self.session.flush()
         return record
 
+    def get_or_create_global_listing(
+        self,
+        listing: Listing,
+        profile_id: int,
+        *,
+        observed_at: datetime | None = None,
+        tracking_run_id: int | None = None,
+    ) -> tuple[ListingRecord, bool]:
+        """Upsert by Wallapop ID without changing the original seller anchor.
+
+        Profile tracking historically treats a listing/profile mismatch as an
+        invariant violation. Search results are global, so an item may already
+        be anchored to a seller profile or to another search's technical
+        profile; this method intentionally keeps that first anchor.
+        """
+        now = observed_at or _utc_now()
+        valid_observation = tracking_run_id is not None and _run_is_valid(
+            self.session, tracking_run_id
+        )
+        record = self.get_listing_by_wallapop_id(listing.item_id)
+        created = record is None
+        if record is None:
+            if tracking_run_id is not None and not valid_observation:
+                raise WallapopError("A non-valid tracking run cannot establish listing presence")
+            record = ListingRecord(
+                wallapop_item_id=listing.item_id,
+                profile_id=profile_id,
+                first_seen_at=now,
+                last_seen_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            try:
+                with self.session.begin_nested():
+                    self.session.add(record)
+                    self.session.flush()
+            except IntegrityError:
+                existing = self.get_listing_by_wallapop_id(listing.item_id)
+                if existing is None:
+                    raise
+                record, created = existing, False
+        if valid_observation and record is not None:
+            record.last_seen_at = now
+            record.updated_at = now
+            self.session.flush()
+        return record, created
+
 
 class TrackingRunRepository:
     def __init__(self, session: Session) -> None:
@@ -258,12 +483,14 @@ class TrackingRunRepository:
         *,
         started_at: datetime | None = None,
         idempotency_key: str | None = None,
+        tracked_search_id: int | None = None,
     ) -> TrackingRunRecord:
         record = TrackingRunRecord(
             profile_id=profile_id,
             started_at=started_at or _utc_now(),
             status=TrackingRunStatus.RUNNING,
             idempotency_key=idempotency_key,
+            tracked_search_id=tracked_search_id,
         )
         self.session.add(record)
         self.session.flush()
@@ -283,6 +510,10 @@ class TrackingRunRepository:
         items_ok: bool = False,
         error_type: str | None = None,
         error_message: str | None = None,
+        matched_listings: int | None = None,
+        new_listings: int | None = None,
+        price_changes: int | None = None,
+        duplicates_suppressed: int | None = None,
     ) -> TrackingRunRecord:
         if status not in {
             TrackingRunStatus.VALID,
@@ -305,6 +536,10 @@ class TrackingRunRepository:
         record.items_ok = items_ok
         record.error_type = error_type
         record.error_message = error_message
+        record.matched_listings = matched_listings
+        record.new_listings = new_listings
+        record.price_changes = price_changes
+        record.duplicates_suppressed = duplicates_suppressed
         self.session.flush()
         return record
 

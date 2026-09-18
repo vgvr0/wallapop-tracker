@@ -7,10 +7,11 @@ from typer.testing import CliRunner
 from wallapop_tracker import cli
 from wallapop_tracker.services.runner import ProfileTrackingResult
 from wallapop_tracker.services.scheduler import TrackingScheduler
+from wallapop_tracker.services.search_tracker import SearchTrackingResult
 from wallapop_tracker.services.tracker import TrackingResult
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import TrackingRunStatus
-from wallapop_tracker.storage.repositories import TrackedProfileRepository
+from wallapop_tracker.storage.repositories import TrackedProfileRepository, TrackedSearchRepository
 
 runner = CliRunner()
 NOW = datetime(2026, 1, 10, 12, tzinfo=UTC)
@@ -36,6 +37,15 @@ class FakeRunner:
         return ProfileTrackingResult(alias, now, TrackingRunStatus.VALID)
 
 
+class FakeSearchRunner:
+    def __init__(self):
+        self.search_ids = []
+
+    async def run(self, search_id):
+        self.search_ids.append(search_id)
+        return SearchTrackingResult(search_id, 1, TrackingRunStatus.VALID, 1, 1, 1)
+
+
 def add_profiles(database, *aliases):
     with database.transaction() as session:
         repository = TrackedProfileRepository(session)
@@ -46,6 +56,27 @@ def add_profiles(database, *aliases):
 def set_last_run(database, alias, at):
     with database.transaction() as session:
         TrackedProfileRepository(session).update_last_run(alias, at, TrackingRunStatus.VALID)
+
+
+@pytest.mark.asyncio
+async def test_scheduler_coexists_with_due_tracked_search(database):
+    with database.transaction() as session:
+        search = TrackedSearchRepository(session).create("iphone", interval_seconds=60)
+        search_id = search.id
+    fake_search = FakeSearchRunner()
+    scheduler = TrackingScheduler(
+        database,
+        timedelta(hours=24),
+        runner=FakeRunner(),
+        search_runner=fake_search,
+        clock=lambda: NOW,
+    )
+
+    result = await scheduler.run_once()
+
+    assert result.evaluated == 1
+    assert result.executed == 1
+    assert fake_search.search_ids == [search_id]
 
 
 @pytest.mark.asyncio

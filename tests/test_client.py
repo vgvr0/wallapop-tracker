@@ -60,6 +60,18 @@ async def test_search_pagination_stops():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_search_query_alias_and_partial_empty_response():
+    route = respx.get(f"{BASE}/api/v3/search").mock(
+        return_value=httpx.Response(200, json={"data": {}, "meta": {}})
+    )
+    async with WallapopClient(min_interval=0) as client:
+        items = await client.search_items(query="cámara")
+    assert items == []
+    assert route.calls[0].request.url.params["keywords"] == "cámara"
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_search_repeated_cursor():
     items, route = await run_search(
         [search_page(["A"], "cursor-1"), search_page(["B"], "cursor-1")]

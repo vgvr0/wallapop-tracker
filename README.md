@@ -1,10 +1,12 @@
-# Wallapop Profile Tracker
+# Wallapop Tracker
 
-Wallapop Profile Tracker is a read-only tracker for authorized monitoring of public Wallapop profiles. It resolves profile identities, captures profile metrics and listings, and stores their history locally. Valid captures support deterministic change detection for listing appearance, disappearance, reappearance, price changes, and profile metrics, together with queryable reports and alert services. A sequential scheduler can run enabled profiles at a configurable interval.
+Wallapop Tracker is a read-only tracker for authorized monitoring of public Wallapop profiles and searches. It stores historical snapshots, applies reusable filters, derives changes, and deduplicates global listing alerts across overlapping searches. It does not write to Wallapop.
 
 ## Key features
 
 - Asynchronous HTTP client for public profile, statistics, review-summary, listing, and search data.
+- Search tracking with configurable query, price range, filters, enable/disable state, and per-search interval.
+- Pure filters for price, case-insensitive include ANY/ALL, exclusions, and regular expressions.
 - Profile URL resolution through the public profile page or a locally recognizable canonical ID.
 - Cursor-based listing pagination with duplicate and repeated-cursor protection.
 - Historical SQLite/SQLAlchemy storage for profiles, listings, tracking runs, presence, and snapshots.
@@ -12,6 +14,7 @@ Wallapop Profile Tracker is a read-only tracker for authorized monitoring of pub
 - Deterministic diffing for new, removed, and reappeared listings; prices; titles; reservation; shipping; brand; rating; review count; and sold count.
 - Read-only reporting queries for current inventory, inventory history, price history, presence history, profile metrics, active duration, and weekly summaries.
 - Internal alert services for new saved-search matches and listing price drops.
+- Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
 - Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
 - Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
 - Alembic migrations for the historical schema and alert-related tables.
@@ -35,7 +38,23 @@ flowchart LR
     Migrations[Alembic migrations] -. schema evolution .-> DB
 ```
 
-The client performs extraction asynchronously. The tracker coordinates a profile capture and persists it atomically when all required components are available. The runner updates tracked-profile scheduling metadata, while the scheduler selects enabled profiles that are due and executes them sequentially.
+The client performs extraction asynchronously. Profile and search trackers persist valid captures atomically. The shared scheduler selects due profiles and searches, while the event ledger makes global alerts idempotent.
+
+```text
+               ┌── Profile Tracker
+Wallapop ──────┤
+               └── Search Tracker
+                        │
+                     Filters
+                        │
+                     Storage
+                        │
+                       Diff
+                        │
+                  Deduplication
+                        │
+                      Alerts
+```
 
 ## Project structure
 
@@ -82,11 +101,18 @@ wallapop-track disable seller
 wallapop-track remove seller --yes
 wallapop-track schedule --once
 wallapop-track schedule --interval-hours 168
+wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
+wallapop-track search list
+wallapop-track search show 1
+wallapop-track search run 1
+wallapop-track search run-all
+wallapop-track search disable 1
+wallapop-track search delete 1 --yes
 ```
 
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Aliases are normalized to lowercase. `remove` asks for confirmation unless `--yes` is supplied. `run-all` processes enabled profiles and prints a summary of `valid`, `partial`, and `failed` outcomes.
+`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
-The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates and executes due profiles once, then exits.
+The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
 
 ## Scheduling
 
@@ -103,10 +129,13 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Profile snapshots** store change-based profile metrics such as rating, review count, published count, purchases, sales, sold count, reports, and rating distribution.
 - **Listing snapshots** store change-based listing fields such as title, price, status, reservation, shipping, brand, condition, and source timestamps.
 - **Presence rows** associate listings with valid runs. Listing snapshots use `ACTIVE` or `REMOVED` to preserve lifecycle state.
+- **Tracked searches** store query, price bounds, structured filters, enablement and interval metadata.
+- **Search matches** associate each global listing with every search that detected it, including first/last seen timestamps and detection count.
+- **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0006` covering the historical schema, presence and lifecycle fields, profile/listing field extensions, tracked profiles, saved searches, and price watches. The CLI currently initializes tables through SQLAlchemy metadata (`create_all`); Alembic is available for explicit schema migration workflows.
+The repository contains Alembic revisions `0001` through `0007`, with `0007_search_tracking` adding tracked searches, search associations, search metrics and the persistent event ledger. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 
@@ -174,4 +203,4 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 
 ## Development status
 
-This is a functional technical project with an asynchronous client, normalized parsers, historical persistence, deterministic diffing, reporting queries, alert services, a CLI, scheduling, tests, CI, Docker packaging, and manual E2E validation. Its external API integration remains subject to the limitations above, especially changes to undocumented Wallapop response contracts.
+This is a functional technical project with profile tracking, search tracking, normalized parsers, historical snapshots, deterministic diffing, reusable filters, global deduplication, reporting, alerts, a shared scheduler, CLI, SQLite, Alembic, Docker packaging, automated tests, CI, and manual E2E validation. Its external API integration remains subject to the limitations above, especially changes to undocumented Wallapop response contracts.
