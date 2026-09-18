@@ -216,3 +216,10 @@ TrackingEvent -> NotificationService -> NotificationDelivery
 El evento y el run se confirman antes de cualquier POST externo. Cada destino
 se procesa independientemente y sus reintentos están limitados por
 `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.
+
+El tercer origen monitorizable reutiliza el mismo listing global:
+
+```text
+TrackedListing -> ListingProvider -> WallapopClient.get_item
+              -> TrackingRun -> ListingSnapshot -> TrackingEvent
+```

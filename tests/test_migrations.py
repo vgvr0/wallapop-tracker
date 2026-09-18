@@ -140,3 +140,41 @@ def test_notification_delivery_migration_from_0008(tmp_path):
         "delivered_at",
     }
     assert "ix_notification_deliveries_status_created" in indexes
+
+
+def test_tracked_listing_migration_from_0009(tmp_path):
+    database_path = tmp_path / "tracked-listings.db"
+    config = _config(database_path)
+    command.upgrade(config, "0009_notification_deliveries")
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.connect() as connection:
+        tracked_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(tracked_listings)"))
+        }
+        run_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(tracking_runs)"))
+        }
+        run_foreign_keys = {
+            row[2]
+            for row in connection.execute(text("PRAGMA foreign_key_list(tracking_runs)"))
+        }
+
+    assert {
+        "id",
+        "listing_id",
+        "alias",
+        "enabled",
+        "interval_seconds",
+        "last_run_at",
+        "last_run_status",
+        "last_tracking_run_id",
+        "notes",
+        "created_at",
+        "updated_at",
+    } == tracked_columns
+    assert "tracked_listing_id" in run_columns
+    assert "tracked_listings" in run_foreign_keys

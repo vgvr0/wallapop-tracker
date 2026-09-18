@@ -10,6 +10,11 @@ class AlertType(StrEnum):
     PRICE_DROP = "PRICE_DROP"
     PRICE_INCREASE = "PRICE_INCREASE"
     REMOVED = "REMOVED"
+    REAPPEARED = "REAPPEARED"
+    TITLE_CHANGE = "TITLE_CHANGE"
+    RESERVATION_CHANGE = "RESERVATION_CHANGE"
+    SHIPPING_CHANGE = "SHIPPING_CHANGE"
+    STATUS_CHANGE = "STATUS_CHANGE"
 
 
 @dataclass(frozen=True)
@@ -44,9 +49,10 @@ class TrackingAlert:
     type: AlertType
     created_at: datetime
     listing_id: str
-    tracked_search_id: int
+    tracked_search_id: int | None
     old_price: Decimal | None
     new_price: Decimal | None
     title: str | None
     url: str | None
     idempotency_key: str
+    tracked_listing_id: int | None = None

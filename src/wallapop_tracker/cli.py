@@ -9,20 +9,33 @@ from urllib.parse import urlparse
 import typer
 
 from .client import WallapopClient
+from .domain.listing_urls import parse_listing_reference
+from .models import Listing
 from .services.notifications import NotificationService
-from .services.runner import ProfileTrackingRunner, SearchTrackingRunner
+from .services.runner import (
+    ListingTrackingRunner,
+    ProfileTrackingRunner,
+    SearchTrackingRunner,
+)
 from .services.scheduler import TrackingScheduler
 from .services.search_tracker import SearchTracker
 from .services.tracker import ProfileTracker
 from .storage.database import Database
 from .storage.models import TrackingRunStatus
-from .storage.repositories import TrackedProfileRepository, TrackedSearchRepository
+from .storage.repositories import (
+    ListingRepository,
+    TrackedListingRepository,
+    TrackedProfileRepository,
+    TrackedSearchRepository,
+)
 
 app = typer.Typer(no_args_is_help=True)
 search_app = typer.Typer(no_args_is_help=True)
 notifications_app = typer.Typer(no_args_is_help=True)
+listing_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
+app.add_typer(listing_app, name="listing")
 
 
 def _db() -> Database:
@@ -377,6 +390,163 @@ def notifications_retry() -> None:
     finally:
         database.close()
     typer.echo(f"delivered: {retried}")
+
+
+@listing_app.command("add")
+def listing_add(
+    reference: str,
+    alias: str | None = typer.Option(None, "--alias"),
+    interval_seconds: int = typer.Option(600, "--interval-seconds", min=1),
+    notes: str | None = typer.Option(None, "--notes"),
+) -> None:
+    """Add a Wallapop listing by item ID or public item URL."""
+    try:
+        item_id = parse_listing_reference(reference)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    async def fetch() -> Listing:
+        async with WallapopClient() as client:
+            return await client.get_item(item_id)
+
+    try:
+        listing = asyncio.run(fetch())
+        database = _db()
+        try:
+            with database.transaction() as session:
+                record, _ = ListingRepository(session).get_or_create_global_listing(
+                    listing, None
+                )
+                tracked = TrackedListingRepository(session).create(
+                    record.id,
+                    alias or item_id,
+                    interval_seconds=interval_seconds,
+                    notes=notes,
+                )
+        finally:
+            database.close()
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"id: {tracked.id}")
+    typer.echo(f"alias: {tracked.alias}")
+    typer.echo(f"item_id: {item_id}")
+    typer.echo("enabled: true")
+
+
+@listing_app.command("list")
+def listing_list() -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for tracked in TrackedListingRepository(session).list_all():
+                state = "enabled" if tracked.enabled else "disabled"
+                typer.echo(
+                    f"{tracked.id}\t{tracked.alias}\t{state}\t"
+                    f"{tracked.listing.wallapop_item_id}\t{tracked.last_run_at or '-'}\t"
+                    f"{tracked.last_run_status or '-'}"
+                )
+    finally:
+        database.close()
+
+
+@listing_app.command("show")
+def listing_show(value: str) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            tracked = TrackedListingRepository(session).get_by_alias_or_id(value)
+            if tracked is None:
+                raise typer.BadParameter(f"Unknown tracked listing: {value}")
+            typer.echo(f"id: {tracked.id}")
+            typer.echo(f"alias: {tracked.alias}")
+            typer.echo(f"item_id: {tracked.listing.wallapop_item_id}")
+            typer.echo(f"enabled: {tracked.enabled}")
+            typer.echo(f"interval_seconds: {tracked.interval_seconds}")
+            typer.echo(f"last_run_at: {tracked.last_run_at or '-'}")
+            typer.echo(f"last_run_status: {tracked.last_run_status or '-'}")
+            typer.echo(f"notes: {tracked.notes or '-'}")
+    finally:
+        database.close()
+
+
+def _toggle_listing(value: str, enabled: bool) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            tracked = TrackedListingRepository(session).set_enabled(value, enabled)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"{tracked.alias}: {'enabled' if tracked.enabled else 'disabled'}")
+
+
+@listing_app.command("enable")
+def listing_enable(value: str) -> None:
+    _toggle_listing(value, True)
+
+
+@listing_app.command("disable")
+def listing_disable(value: str) -> None:
+    _toggle_listing(value, False)
+
+
+@listing_app.command("remove")
+def listing_remove(value: str, yes: bool = typer.Option(False, "--yes")) -> None:
+    if not yes and not typer.confirm(f"Remove tracked listing {value}?"):
+        raise typer.Abort()
+    database = _db()
+    try:
+        with database.transaction() as session:
+            TrackedListingRepository(session).remove(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"Removed: {value}")
+
+
+async def _run_listing(value: str) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            tracked = TrackedListingRepository(session).get_by_alias_or_id(value)
+            if tracked is None:
+                raise typer.BadParameter(f"Unknown tracked listing: {value}")
+            tracked_id = tracked.id
+        notification_service = NotificationService(database)
+        result = await ListingTrackingRunner(
+            database, notification_service=notification_service
+        ).run(tracked_id)
+        await notification_service.deliver_pending()
+        if result.status is None:
+            typer.echo(f"{value}\tdisabled")
+        else:
+            typer.echo(
+                f"{value}\t{result.run_id or '-'}\t{result.status.value}\t"
+                f"events={len(result.alerts)}\t{result.error or '-'}"
+            )
+    finally:
+        database.close()
+
+
+@listing_app.command("run")
+def listing_run(value: str) -> None:
+    asyncio.run(_run_listing(value))
+
+
+@listing_app.command("run-all")
+def listing_run_all() -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            values = [
+                record.alias for record in TrackedListingRepository(session).list_enabled()
+            ]
+    finally:
+        database.close()
+    for value in values:
+        asyncio.run(_run_listing(value))
 
 
 @search_app.command("run")

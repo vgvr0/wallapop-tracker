@@ -22,6 +22,7 @@ from .models import (
     ProfileRecord,
     ProfileSnapshotRecord,
     SearchListingMatchRecord,
+    TrackedListingRecord,
     TrackedProfileRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
@@ -135,6 +136,106 @@ class TrackedSearchRepository:
         return record
 
 
+class TrackedListingRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, listing_id: int) -> TrackedListingRecord | None:
+        return self.session.get(TrackedListingRecord, listing_id)
+
+    def get_by_alias_or_id(self, value: str) -> TrackedListingRecord | None:
+        value = value.strip()
+        if value.isdigit():
+            record = self.get(int(value))
+            if record is not None:
+                return record
+        return self.session.scalar(
+            select(TrackedListingRecord).where(TrackedListingRecord.alias == value)
+        )
+
+    def list_all(self) -> list[TrackedListingRecord]:
+        return list(
+            self.session.scalars(select(TrackedListingRecord).order_by(TrackedListingRecord.id))
+        )
+
+    def list_enabled(self) -> list[TrackedListingRecord]:
+        return list(
+            self.session.scalars(
+                select(TrackedListingRecord)
+                .where(TrackedListingRecord.enabled)
+                .order_by(TrackedListingRecord.id)
+            )
+        )
+
+    def create(
+        self,
+        listing_id: int,
+        alias: str,
+        *,
+        interval_seconds: int = 600,
+        notes: str | None = None,
+    ) -> TrackedListingRecord:
+        alias = alias.strip()
+        if not alias:
+            raise ValueError("alias is required")
+        if interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        if self.session.get(ListingRecord, listing_id) is None:
+            raise ValueError(f"Unknown listing: {listing_id}")
+        now = _utc_now()
+        record = TrackedListingRecord(
+            listing_id=listing_id,
+            alias=alias,
+            interval_seconds=interval_seconds,
+            notes=notes,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def set_enabled(self, value: str, enabled: bool) -> TrackedListingRecord:
+        record = self.get_by_alias_or_id(value)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {value}")
+        record.enabled = enabled
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+    def update_last_run(
+        self,
+        listing_id: int,
+        at: datetime,
+        status: str,
+        run_id: int | None,
+    ) -> TrackedListingRecord:
+        record = self.get(listing_id)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {listing_id}")
+        record.last_run_at = at
+        record.last_run_status = status
+        record.last_tracking_run_id = run_id
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+    def remove(self, value: str) -> None:
+        record = self.get_by_alias_or_id(value)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {value}")
+        if self.session.scalar(
+            select(TrackingRunRecord.id)
+            .where(TrackingRunRecord.tracked_listing_id == record.id)
+            .limit(1)
+        ) is not None:
+            raise ValueError(
+                "Tracked listing has historical runs; disable it instead of removing it"
+            )
+        self.session.delete(record)
+        self.session.flush()
+
 class SearchMatchRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -185,7 +286,7 @@ class TrackingEventRepository:
         idempotency_key: str,
         listing_id: int,
         tracking_run_id: int,
-        tracked_search_id: int,
+        tracked_search_id: int | None,
         old_price: Decimal | None,
         new_price: Decimal | None,
         created_at: datetime,
@@ -590,6 +691,23 @@ class TrackingRunRepository:
     ) -> TrackingRunRecord:
         record = TrackingRunRecord(
             tracked_search_id=tracked_search_id,
+            started_at=started_at or _utc_now(),
+            status=TrackingRunStatus.RUNNING,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def start_listing_run(
+        self,
+        tracked_listing_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        record = TrackingRunRecord(
+            tracked_listing_id=tracked_listing_id,
             started_at=started_at or _utc_now(),
             status=TrackingRunStatus.RUNNING,
             idempotency_key=idempotency_key,

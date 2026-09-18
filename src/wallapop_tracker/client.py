@@ -23,7 +23,7 @@ from .exceptions import (
     WallapopRateLimitError,
 )
 from .models import ItemsPage, Listing, Profile, ProfileStats, ReviewSummary
-from .parsers.items import parse_items_page
+from .parsers.items import parse_item, parse_items_page
 from .parsers.profile import parse_profile
 from .parsers.reviews import parse_review_summary
 from .parsers.stats import parse_profile_stats
@@ -240,6 +240,19 @@ class WallapopClient:
             since = page.next_since
         logger.info("fetched_all_items user_id=%s total=%s pages=%s", user_id, len(items), pages)
         return items
+
+    async def get_item(self, item_id: str) -> Listing:
+        """Fetch one public listing detail from the observed v3 item endpoint."""
+        item_id = item_id.strip()
+        if not item_id:
+            raise ValueError("item_id is required")
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/items/{item_id}",
+            raw_kind="items",
+            raw_key=f"detail-{item_id}",
+        )
+        return parse_item(data, item_id=item_id)
 
     async def search_items(
         self,

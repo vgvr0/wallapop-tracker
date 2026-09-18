@@ -8,10 +8,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..client import WallapopClient
+from ..providers.listing import ListingProvider, WallapopListingProvider
 from ..providers.search import SearchProvider, WallapopSearchProvider
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
-from ..storage.repositories import TrackedProfileRepository, TrackedSearchRepository
+from ..storage.repositories import (
+    TrackedListingRepository,
+    TrackedProfileRepository,
+    TrackedSearchRepository,
+)
+from .listing_tracker import ListingTrackingResult, TrackedListingTracker
 from .notifications import NotificationService
 from .search_tracker import SearchTracker, SearchTrackingResult
 from .tracker import ProfileTracker, TrackingResult
@@ -93,6 +99,7 @@ class ProfileTrackingRunner:
 
 
 type SearchProviderFactory = Callable[[WallapopClient], SearchProvider]
+type ListingProviderFactory = Callable[[WallapopClient], ListingProvider]
 type SearchTrackerFactory = Callable[[SearchProvider, Database], SearchTracker]
 
 
@@ -136,4 +143,51 @@ class SearchTrackingRunner:
                 )
             except Exception:
                 logger.exception("notification_enqueue_failed search_id=%s", search_id)
+        return result
+
+
+class ListingTrackingRunner:
+    def __init__(
+        self,
+        database: Database,
+        *,
+        client_factory: ClientFactory = WallapopClient,
+        tracker_factory: Callable[[ListingProvider, Database], TrackedListingTracker]
+        = TrackedListingTracker,
+        notification_service: NotificationService | None = None,
+        provider_factory: ListingProviderFactory = WallapopListingProvider,
+    ) -> None:
+        self.database = database
+        self.client_factory = client_factory
+        self.tracker_factory = tracker_factory
+        self.notification_service = notification_service
+        self.provider_factory = provider_factory
+
+    async def run(self, tracked_listing_id: int) -> ListingTrackingResult:
+        with self.database.session() as session:
+            tracked = TrackedListingRepository(session).get(tracked_listing_id)
+            if tracked is None:
+                raise ValueError(f"Unknown tracked listing: {tracked_listing_id}")
+            if not tracked.enabled:
+                return ListingTrackingResult(tracked_listing_id, None, None)
+        try:
+            async with self.client_factory() as client:
+                provider = self.provider_factory(client)
+                result = await self.tracker_factory(provider, self.database).track_listing(
+                    tracked_listing_id
+                )
+        except Exception as exc:
+            return ListingTrackingResult(
+                tracked_listing_id, None, TrackingRunStatus.FAILED, error=str(exc)
+            )
+        if self.notification_service is not None and result.alerts:
+            try:
+                self.notification_service.enqueue_events(
+                    alert.event_id for alert in result.alerts
+                )
+            except Exception:
+                logger.exception(
+                    "notification_enqueue_failed tracked_listing_id=%s",
+                    tracked_listing_id,
+                )
         return result

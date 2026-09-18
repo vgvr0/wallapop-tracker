@@ -24,6 +24,7 @@ ListingRepository = _implementation.ListingRepository
 SnapshotRepository = _implementation.SnapshotRepository
 TrackingRunRepository = _implementation.TrackingRunRepository
 TrackedProfileRepository = _implementation.TrackedProfileRepository
+TrackedListingRepository = _implementation.TrackedListingRepository
 TrackedSearchRepository = _implementation.TrackedSearchRepository
 SearchMatchRepository = _implementation.SearchMatchRepository
 TrackingEventRepository = _implementation.TrackingEventRepository
@@ -35,6 +36,7 @@ __all__ = [
     "SnapshotRepository",
     "TrackingRunRepository",
     "TrackedProfileRepository",
+    "TrackedListingRepository",
     "TrackedSearchRepository",
     "SearchMatchRepository",
     "TrackingEventRepository",

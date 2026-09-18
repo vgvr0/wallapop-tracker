@@ -11,6 +11,15 @@ Path("data").mkdir(parents=True, exist_ok=True)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Historical SQLite migrations before 0010 reflect ``tracking_runs`` while
+# ``tracked_listings`` does not exist yet. Hide only this future ORM FK from
+# Alembic's reflection metadata; revision 0010 installs the real DB FK.
+_tracked_listing_column = Base.metadata.tables["tracking_runs"].c.tracked_listing_id
+for _foreign_key in list(_tracked_listing_column.foreign_keys):
+    if _foreign_key.target_fullname == "tracked_listings.id":
+        _tracked_listing_column.foreign_keys.remove(_foreign_key)
+        _tracked_listing_column.table.constraints.discard(_foreign_key.constraint)
+
 target_metadata = Base.metadata
 
 

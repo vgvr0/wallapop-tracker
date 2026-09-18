@@ -41,6 +41,26 @@ Restricciones: `UNIQUE(event_id, channel, destination)` e índice
 `(status, created_at)` para seleccionar la cola. La entrega nunca se realiza
 dentro de la transacción que confirma un tracking run.
 
+### `tracked_listings`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer | PK |
+| `listing_id` | FK a `listings.id` | NOT NULL, UNIQUE |
+| `alias` | varchar(100) | NOT NULL, UNIQUE |
+| `enabled` | boolean | NOT NULL, por defecto true |
+| `interval_seconds` | integer | NOT NULL, mayor que 0 |
+| `last_run_at` | timestamp | nullable |
+| `last_run_status` | varchar(20) | nullable |
+| `last_tracking_run_id` | integer | nullable, referencia al último run |
+| `notes` | text | nullable |
+| `created_at` / `updated_at` | timestamp | NOT NULL |
+
+`tracking_runs.tracked_listing_id` es nullable y forma parte del CHECK de
+exactamente una fuente junto con `profile_id` y `tracked_search_id`. La
+migración `0010` conserva los runs existentes y añade la FK real de
+`tracking_runs.tracked_listing_id` a `tracked_listings.id`.
+
 ## Tablas
 
 ### `profiles`

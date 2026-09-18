@@ -19,7 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
 
 
 class TrackingRunStatus(StrEnum):
@@ -93,6 +93,33 @@ class TrackedSearchRecord(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_status: Mapped[str | None] = mapped_column(String(20))
     last_run_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class TrackedListingRecord(Base):
+    """Persistent configuration for monitoring one global listing."""
+
+    __tablename__ = "tracked_listings"
+    __table_args__ = (
+        UniqueConstraint("alias", name="uq_tracked_listings_alias"),
+        UniqueConstraint("listing_id", name="uq_tracked_listings_listing"),
+        CheckConstraint("interval_seconds > 0", name="ck_tracked_listing_interval"),
+        Index("ix_tracked_listings_enabled_last_run", "enabled", "last_run_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id"), nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(20))
+    last_tracking_run_id: Mapped[int | None] = mapped_column(Integer)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    listing: Mapped["ListingRecord"] = relationship()
 
 
 class SearchListingMatchRecord(Base):
@@ -239,8 +266,8 @@ class TrackingRunRecord(Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (
         CheckConstraint(
-            "(profile_id IS NOT NULL AND tracked_search_id IS NULL) OR "
-            "(profile_id IS NULL AND tracked_search_id IS NOT NULL)",
+            "((profile_id IS NOT NULL) + (tracked_search_id IS NOT NULL) + "
+            "(tracked_listing_id IS NOT NULL)) = 1",
             name="ck_tracking_runs_exactly_one_source",
         ),
         CheckConstraint(
@@ -259,6 +286,9 @@ class TrackingRunRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
     tracked_search_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_searches.id"))
+    tracked_listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tracked_listings.id")
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TrackingRunStatus] = mapped_column(
@@ -279,6 +309,11 @@ class TrackingRunRecord(Base):
     duplicates_suppressed: Mapped[int | None] = mapped_column(Integer)
     profile: Mapped[ProfileRecord | None] = relationship(back_populates="tracking_runs")
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
+    tracked_listing: Mapped[TrackedListingRecord | None] = relationship(
+        primaryjoin=lambda: foreign(TrackingRunRecord.tracked_listing_id)
+        == TrackedListingRecord.id,
+        foreign_keys=[tracked_listing_id],
+    )
     profile_snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(
         back_populates="tracking_run"
     )

@@ -66,12 +66,14 @@ observados solo por búsquedas pueden conservar `profile_id = NULL`.
 - `SearchAlertService` y `PriceAlertService` mantienen el sistema legacy
   basado en `saved_searches`, `saved_search_items` y `price_watches`.
 - `TrackingScheduler` evalúa perfiles y búsquedas secuencialmente.
+- `TrackedListingTracker` evalúa anuncios monitorizados y comparte snapshots,
+  eventos y deliveries con los demás trackers.
 - `ProfileTrackingRunner` y `SearchTrackingRunner` encapsulan el ciclo de
   vida del cliente y actualizan metadatos de scheduling.
 
 ### Migraciones y documentación
 
-Las migraciones `0001` a `0009` evolucionan el esquema histórico, perfiles
+Las migraciones `0001` a `0010` evolucionan el esquema histórico, perfiles
 monitorizados, alertas legacy y búsquedas integradas. La `0007` añade
 `tracking_runs.tracked_search_id` como entero sin FK para evitar una
 dependencia circular durante la creación histórica de tablas; el ORM expone
@@ -138,8 +140,8 @@ de datos insuficientes.
 ### 8. Cobertura pendiente
 
 La entrega persistente ya tiene tests offline de persistencia, canales,
-reintentos, reinicio, CLI y migración. Sigue sin haber tests para listing tracking,
-importación de URLs, metadata discovery, scheduler concurrente, analytics de
+reintentos, reinicio, CLI, migración y listing tracking. Sigue sin haber tests
+para metadata discovery, scheduler concurrente, analytics de
 mercado, relisting heurístico, deal scoring ni FastAPI. Los endpoints externos
 no documentados deben seguir bloqueados detrás de fixtures y validación
 reproducible.
@@ -214,7 +216,7 @@ se conserva un fixture RAW y se marca la investigación como pendiente.
 | 2 | Implementado: separar runs de búsqueda de identidad de perfil | Nueva semántica de `TrackingRun`, preservación de histórico y `docs/tracking_run_model.md` |
 | 3 | Implementado: `SearchProvider` + `WallapopSearchProvider` | Contrato, provider testeable y documentación del endpoint |
 | 4 | Implementado: NotificationDelivery persistente | `0009_notification_deliveries`, canales mockeables y comandos `notifications retry/list` |
-| 5 | `TrackedListing` y `get_item` validado | Migración, snapshots de cambios y comandos listing |
+| 5 | Implementado: `TrackedListing` y `get_item` validado | `0010_tracked_listings`, snapshots, eventos y comandos listing |
 | 6 | Importación pura de URLs de búsqueda | `search_url_parser.py` y tests de parámetros realmente observables |
 | 7 | Discovery de metadata | `docs/discovery_endpoints.md`, requests/respuestas RAW y parsers aislados |
 | 8 | Scheduler con concurrencia acotada | `TaskGroup`, `Semaphore`, orden determinista y aislamiento de fallos |

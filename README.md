@@ -16,6 +16,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Internal alert services for new saved-search matches and listing price drops.
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
 - Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
+- Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
 - Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
 - Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
 - Alembic migrations for the historical schema and alert-related tables.
@@ -35,6 +36,9 @@ flowchart LR
     Tracker --> DB[(SQLAlchemy database)]
     DB --> Notifications[NotificationService and deliveries]
     Notifications --> Channels[Webhook / Discord / Telegram]
+    CLI --> Listing[TrackedListing commands]
+    Listing --> ListingTracker[TrackedListingTracker]
+    ListingTracker --> DB
     DB --> Diff[DiffService]
     DB --> Reporting[Reporting queries and metrics]
     DB --> Alerts[Search and price alert services]
@@ -113,6 +117,13 @@ wallapop-track search disable 1
 wallapop-track search delete 1 --yes
 wallapop-track notifications list
 wallapop-track notifications retry
+wallapop-track listing add https://es.wallapop.com/item/<slug>-<id> --alias camera
+wallapop-track listing list
+wallapop-track listing show camera
+wallapop-track listing run camera
+wallapop-track listing enable camera
+wallapop-track listing disable camera
+wallapop-track listing remove camera --yes
 ```
 
 `add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
@@ -137,10 +148,11 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Tracked searches** store query, price bounds, structured filters, enablement and interval metadata.
 - **Search matches** associate each global listing with every search that detected it, including first/last seen timestamps and detection count.
 - **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
+- **Tracked listings** monitor one global listing by alias and interval, including price, title, reservation, shipping, status, removal, and reappearance changes.
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0009`, with `0007_search_tracking` adding the persistent event ledger and `0009_notification_deliveries` adding the delivery queue. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
+The repository contains Alembic revisions `0001` through `0010`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, and `0010_tracked_listings` adding direct listing monitoring. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 
@@ -209,6 +221,7 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 - It is intended for authorized, moderate-volume monitoring, not for mass scraping.
 - Search results are intentionally limited to a configurable recent-page window (`max_pages`, default five), rather than being an exhaustive historical search.
 - Notification delivery is intentionally sequential and has no distributed queue or concurrent worker pool.
+- Direct listing detail depends on the observed public endpoint `/api/v3/items/{id}`; its undocumented contract may change and remains covered by offline fixtures.
 
 ## Development status
 

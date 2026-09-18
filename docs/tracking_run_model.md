@@ -68,13 +68,13 @@ Los eventos siguen referenciando `tracking_run_id` y, para búsquedas,
 
 ## Evolución hacia `TrackedListing`
 
-La Fase 5 puede añadir `tracked_listing_id` como tercera FK nullable y ampliar
-el `CHECK` para exigir exactamente una de las tres fuentes. No se implementa
-esa entidad en esta fase.
+La Fase 5 añade `tracked_listing_id` como tercera FK nullable y amplía el
+`CHECK` para exigir exactamente una de las tres fuentes. La entidad persistente
+se migra en `0010_tracked_listings` y reutiliza la identidad global de
+`listings`.
 
 ## Multi-marketplace
 
 El modelo mantiene FKs a entidades internas, no strings polimórficos. La futura
 introducción de `marketplace`/`external_id` puede aplicarse a las entidades de
 origen sin cambiar la semántica común de ejecución.
-

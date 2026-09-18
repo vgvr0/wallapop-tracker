@@ -140,3 +140,18 @@ def parse_items_page(data: Mapping[str, Any], *, user_id: str) -> ItemsPage:
     meta = data.get("meta")
     next_since = meta.get("next") if isinstance(meta, Mapping) else None
     return ItemsPage(items=items, next_since=next_since if isinstance(next_since, str) else None)
+
+
+def parse_item(data: Mapping[str, Any], *, item_id: str) -> Listing:
+    """Parse one detail response using the same listing contract as search."""
+    raw = data.get("data") if isinstance(data.get("data"), Mapping) else data
+    if not isinstance(raw, Mapping):
+        raise WallapopParseError("Item response has no object data")
+    user = raw.get("user_id")
+    if not isinstance(user, str):
+        user_data = raw.get("user")
+        user = user_data.get("id", "") if isinstance(user_data, Mapping) else ""
+    parsed = _listing(raw, user)
+    if parsed is None or parsed.item_id != item_id:
+        raise WallapopParseError("Item response does not contain the requested item")
+    return parsed
