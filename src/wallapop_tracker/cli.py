@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import typer
 
 from .client import WallapopClient
+from .services.notifications import NotificationService
 from .services.runner import ProfileTrackingRunner, SearchTrackingRunner
 from .services.scheduler import TrackingScheduler
 from .services.search_tracker import SearchTracker
@@ -19,7 +20,9 @@ from .storage.repositories import TrackedProfileRepository, TrackedSearchReposit
 
 app = typer.Typer(no_args_is_help=True)
 search_app = typer.Typer(no_args_is_help=True)
+notifications_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
+app.add_typer(notifications_app, name="notifications")
 
 
 def _db() -> Database:
@@ -321,11 +324,14 @@ def search_delete(search_id: int, yes: bool = typer.Option(False, "--yes")) -> N
 async def _run_search(search_id: int) -> None:
     database = _db()
     try:
+        notification_service = NotificationService(database)
         result = await SearchTrackingRunner(
             database,
             client_factory=WallapopClient,
             tracker_factory=SearchTracker,
+            notification_service=notification_service,
         ).run(search_id)
+        await notification_service.deliver_pending()
         if result.status is None:
             typer.echo(f"{search_id}\tdisabled")
         elif result.status == TrackingRunStatus.FAILED:
@@ -338,6 +344,39 @@ async def _run_search(search_id: int) -> None:
             )
     finally:
         database.close()
+
+
+def _safe_destination(destination: str) -> str:
+    if destination.startswith(("http://", "https://")):
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(destination)
+        return f"{parsed.scheme}://{parsed.netloc}/…"
+    return destination
+
+
+@notifications_app.command("list")
+def notifications_list() -> None:
+    database = _db()
+    try:
+        for delivery in NotificationService(database).list_deliveries():
+            typer.echo(
+                f"{delivery.id}\t{delivery.status.value}\t{delivery.channel}\t"
+                f"{_safe_destination(delivery.destination)}\t"
+                f"attempts={delivery.attempts}\t{delivery.last_error or '-'}"
+            )
+    finally:
+        database.close()
+
+
+@notifications_app.command("retry")
+def notifications_retry() -> None:
+    database = _db()
+    try:
+        retried = asyncio.run(NotificationService(database).retry_failed())
+    finally:
+        database.close()
+    typer.echo(f"delivered: {retried}")
 
 
 @search_app.command("run")

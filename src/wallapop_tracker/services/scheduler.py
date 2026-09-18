@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
 from ..storage.repositories import TrackedProfileRepository, TrackedSearchRepository
+from .notifications import NotificationService
 from .runner import ProfileTrackingResult, ProfileTrackingRunner, SearchTrackingRunner
 from .search_tracker import SearchTrackingResult
 
@@ -40,6 +41,7 @@ class TrackingScheduler:
         poll_seconds: float = 60.0,
         runner: ProfileTrackingRunner | None = None,
         search_runner: SearchTrackingRunner | None = None,
+        notification_service: NotificationService | None = None,
         clock: Clock | None = None,
     ) -> None:
         if interval <= timedelta(0):
@@ -51,6 +53,7 @@ class TrackingScheduler:
         self.poll_seconds = poll_seconds
         self.runner = runner or ProfileTrackingRunner(database)
         self.search_runner = search_runner or SearchTrackingRunner(database)
+        self.notification_service = notification_service or NotificationService(database)
         self.clock = clock or (lambda: datetime.now(UTC))
 
     async def run_once(self, *, now: datetime | None = None) -> SchedulerResult:
@@ -73,16 +76,16 @@ class TrackingScheduler:
         search_results: list[SearchTrackingResult] = []
         for record in due:
             try:
-                result = await self.runner.run(record.alias, now=current)
+                profile_result = await self.runner.run(record.alias, now=current)
             except Exception as exc:
-                result = ProfileTrackingResult(
+                profile_result = ProfileTrackingResult(
                     alias=record.alias,
                     attempted_at=current,
                     status=TrackingRunStatus.FAILED,
                     error=str(exc),
                 )
-            results.append(result)
-            profile_results.append(result)
+            results.append(profile_result)
+            profile_results.append(profile_result)
         for search in due_searches:
             try:
                 search_result = await self.search_runner.run(search.id)
@@ -93,6 +96,12 @@ class TrackingScheduler:
             results.append(search_result)
             search_results.append(search_result)
         failed = sum(result.status == TrackingRunStatus.FAILED for result in results)
+        for result in search_results:
+            if result.alerts:
+                self.notification_service.enqueue_events(
+                    alert.event_id for alert in result.alerts
+                )
+        await self.notification_service.deliver_pending()
         return SchedulerResult(
             evaluated=len(records) + len(searches),
             executed=len(results),

@@ -10,7 +10,7 @@ Profile
   ├──< Listing ───< ListingSnapshot
   ├──< TrackingRun ───< TrackingRunListing >─── Listing
   └──< TrackingRun
-             └──< futuros Event
+             └──< TrackingEvent ───< NotificationDelivery
 ```
 
 - Un `Profile` representa la identidad estable de un usuario de Wallapop.
@@ -19,7 +19,27 @@ Profile
 - Un `ListingSnapshot` representa el contenido observable del anuncio en una observación.
 - Un `TrackingRun` representa una ejecución completa o parcial de captura para un perfil.
 - Un `TrackingRunListing` representa que un anuncio fue visto explícitamente durante una ejecución, sin duplicar su contenido.
-- `Event` se reserva para una fase posterior y siempre debe referenciar una ejecución.
+- Un `TrackingEvent` referencia una ejecución y puede tener una `NotificationDelivery`
+  independiente por canal y destino.
+
+### `notification_deliveries`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer | PK |
+| `event_id` | FK a `tracking_events.id` | NOT NULL, `ON DELETE RESTRICT` |
+| `channel` | varchar(50) | NOT NULL |
+| `destination` | varchar(2048) | NOT NULL |
+| `status` | varchar(20) | `pending`, `delivered` o `failed` |
+| `attempts` | integer | NOT NULL, por defecto 0 |
+| `last_error` | text | nullable |
+| `created_at` | timestamp | NOT NULL |
+| `updated_at` | timestamp | NOT NULL |
+| `delivered_at` | timestamp | nullable |
+
+Restricciones: `UNIQUE(event_id, channel, destination)` e índice
+`(status, created_at)` para seleccionar la cola. La entrega nunca se realiza
+dentro de la transacción que confirma un tracking run.
 
 ## Tablas
 

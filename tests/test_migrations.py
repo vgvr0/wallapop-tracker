@@ -108,3 +108,35 @@ def test_separate_tracking_run_sources_migrates_synthetic_profiles(tmp_path):
     assert synthetic_count == 0
     assert snapshot_count == 1
     assert event_count == 1
+
+
+def test_notification_delivery_migration_from_0008(tmp_path):
+    database_path = tmp_path / "notification.db"
+    config = _config(database_path)
+    command.upgrade(config, "0008_separate_tracking_run_sources")
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.connect() as connection:
+        columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(notification_deliveries)"))
+        }
+        indexes = {
+            row[1]
+            for row in connection.execute(text("PRAGMA index_list(notification_deliveries)"))
+        }
+
+    assert columns == {
+        "id",
+        "event_id",
+        "channel",
+        "destination",
+        "status",
+        "attempts",
+        "last_error",
+        "created_at",
+        "updated_at",
+        "delivered_at",
+    }
+    assert "ix_notification_deliveries_status_created" in indexes

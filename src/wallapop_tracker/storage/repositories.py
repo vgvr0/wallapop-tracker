@@ -16,6 +16,8 @@ from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummar
 from .models import (
     ListingRecord,
     ListingSnapshotRecord,
+    NotificationDeliveryRecord,
+    NotificationDeliveryStatus,
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
@@ -211,6 +213,77 @@ class TrackingEventRepository:
                 raise
             return existing, False
         return record, True
+
+
+class NotificationDeliveryRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_all(self) -> list[NotificationDeliveryRecord]:
+        return list(
+            self.session.scalars(
+                select(NotificationDeliveryRecord).order_by(NotificationDeliveryRecord.id)
+            )
+        )
+
+    def create_once(
+        self,
+        *,
+        event_id: int,
+        channel: str,
+        destination: str,
+        created_at: datetime,
+    ) -> tuple[NotificationDeliveryRecord, bool]:
+        existing = self.session.scalar(
+            select(NotificationDeliveryRecord).where(
+                NotificationDeliveryRecord.event_id == event_id,
+                NotificationDeliveryRecord.channel == channel,
+                NotificationDeliveryRecord.destination == destination,
+            )
+        )
+        if existing is not None:
+            return existing, False
+        record = NotificationDeliveryRecord(
+            event_id=event_id,
+            channel=channel,
+            destination=destination,
+            status=NotificationDeliveryStatus.PENDING,
+            attempts=0,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.session.scalar(
+                select(NotificationDeliveryRecord).where(
+                    NotificationDeliveryRecord.event_id == event_id,
+                    NotificationDeliveryRecord.channel == channel,
+                    NotificationDeliveryRecord.destination == destination,
+                )
+            )
+            if existing is None:
+                raise
+            return existing, False
+        return record, True
+
+    def next_pending(
+        self, max_attempts: int, *, include_failed: bool = False
+    ) -> NotificationDeliveryRecord | None:
+        statuses = [NotificationDeliveryStatus.PENDING]
+        if include_failed:
+            statuses.append(NotificationDeliveryStatus.FAILED)
+        return self.session.scalar(
+            select(NotificationDeliveryRecord)
+            .where(
+                NotificationDeliveryRecord.status.in_(statuses),
+                NotificationDeliveryRecord.attempts < max_attempts,
+            )
+            .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
+            .limit(1)
+        )
 
 
 class TrackedProfileRepository:

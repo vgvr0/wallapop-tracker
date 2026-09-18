@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,8 +12,11 @@ from ..providers.search import SearchProvider, WallapopSearchProvider
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
 from ..storage.repositories import TrackedProfileRepository, TrackedSearchRepository
+from .notifications import NotificationService
 from .search_tracker import SearchTracker, SearchTrackingResult
 from .tracker import ProfileTracker, TrackingResult
+
+logger = logging.getLogger(__name__)
 
 type ClientFactory = Callable[[], WallapopClient]
 type TrackerFactory = Callable[[WallapopClient, Database], ProfileTracker]
@@ -101,12 +105,14 @@ class SearchTrackingRunner:
         *,
         client_factory: ClientFactory = WallapopClient,
         tracker_factory: SearchTrackerFactory = SearchTracker,
+        notification_service: NotificationService | None = None,
         provider_factory: SearchProviderFactory = WallapopSearchProvider,
     ) -> None:
         self.database = database
         self.client_factory = client_factory
         self.tracker_factory = tracker_factory
         self.provider_factory = provider_factory
+        self.notification_service = notification_service
 
     async def run(self, search_id: int) -> SearchTrackingResult:
         with self.database.session() as session:
@@ -118,8 +124,16 @@ class SearchTrackingRunner:
         try:
             async with self.client_factory() as client:
                 provider = self.provider_factory(client)
-                return await self.tracker_factory(provider, self.database).track_search(search_id)
+                result = await self.tracker_factory(provider, self.database).track_search(search_id)
         except Exception as exc:
             return SearchTrackingResult(
                 search_id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
             )
+        if self.notification_service is not None and result.alerts:
+            try:
+                self.notification_service.enqueue_events(
+                    alert.event_id for alert in result.alerts
+                )
+            except Exception:
+                logger.exception("notification_enqueue_failed search_id=%s", search_id)
+        return result

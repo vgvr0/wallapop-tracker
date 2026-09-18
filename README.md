@@ -15,6 +15,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Read-only reporting queries for current inventory, inventory history, price history, presence history, profile metrics, active duration, and weekly summaries.
 - Internal alert services for new saved-search matches and listing price drops.
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
+- Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
 - Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
 - Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
 - Alembic migrations for the historical schema and alert-related tables.
@@ -32,6 +33,8 @@ flowchart LR
     Client --> Parsers[Profile, stats, reviews, item parsers]
     Parsers --> Tracker
     Tracker --> DB[(SQLAlchemy database)]
+    DB --> Notifications[NotificationService and deliveries]
+    Notifications --> Channels[Webhook / Discord / Telegram]
     DB --> Diff[DiffService]
     DB --> Reporting[Reporting queries and metrics]
     DB --> Alerts[Search and price alert services]
@@ -108,6 +111,8 @@ wallapop-track search run 1
 wallapop-track search run-all
 wallapop-track search disable 1
 wallapop-track search delete 1 --yes
+wallapop-track notifications list
+wallapop-track notifications retry
 ```
 
 `add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
@@ -135,7 +140,7 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0007`, with `0007_search_tracking` adding tracked searches, search associations, search metrics and the persistent event ledger. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
+The repository contains Alembic revisions `0001` through `0009`, with `0007_search_tracking` adding the persistent event ledger and `0009_notification_deliveries` adding the delivery queue. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 
@@ -190,6 +195,10 @@ The application reads the following environment variables:
 - `WALLAPOP_TRACKER_DB_URL`: SQLAlchemy database URL used by the CLI. It defaults to `sqlite:///data/wallapop_tracker.db`.
 - `WALLAPOP_TEST_PROFILE_URL`: optional profile URL used by the opt-in live pytest.
 - `WALLAPOP_E2E_PROFILE_URL_1` and `WALLAPOP_E2E_PROFILE_URL_2`: the two optional profile URLs required by `scripts/run_e2e_validation.py`.
+- `WALLAPOP_WEBHOOK_URL`: optional generic webhook destination.
+- `WALLAPOP_DISCORD_WEBHOOK_URL`: optional Discord webhook destination.
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`: optional Telegram Bot API configuration.
+- `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`: delivery attempt limit, default `3`.
 
 The client itself also accepts runtime options such as base URLs, timeout, retry limits, rate-limit interval, user agent, and an optional RAW data directory through its Python constructor; these are not environment variables.
 
@@ -199,7 +208,7 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 - The project is read-only. It does not automate purchases, messages, listing edits, or any other action on Wallapop.
 - It is intended for authorized, moderate-volume monitoring, not for mass scraping.
 - Search results are intentionally limited to a configurable recent-page window (`max_pages`, default five), rather than being an exhaustive historical search.
-- Alert services currently produce domain alert objects; notification delivery and corresponding CLI administration are not implemented.
+- Notification delivery is intentionally sequential and has no distributed queue or concurrent worker pool.
 
 ## Development status
 

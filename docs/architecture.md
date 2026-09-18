@@ -205,3 +205,14 @@ Las búsquedas pasan por un provider normalizado:
 ```text
 SearchTracker -> SearchProvider -> WallapopSearchProvider -> WallapopClient
 ```
+
+Los eventos se entregan mediante una cola persistente desacoplada:
+
+```text
+TrackingEvent -> NotificationService -> NotificationDelivery
+                                  -> Webhook / Discord / Telegram
+```
+
+El evento y el run se confirman antes de cualquier POST externo. Cada destino
+se procesa independientemente y sus reintentos están limitados por
+`WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.

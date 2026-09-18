@@ -139,6 +139,46 @@ class TrackingEventRecord(Base):
     listing: Mapped["ListingRecord"] = relationship()
     tracking_run: Mapped["TrackingRunRecord"] = relationship()
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
+    deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(
+        back_populates="event"
+    )
+
+
+class NotificationDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class NotificationDeliveryRecord(Base):
+    """Durable delivery attempt for one event and destination."""
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "channel",
+            "destination",
+            name="uq_notification_delivery_target",
+        ),
+        Index("ix_notification_deliveries_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("tracking_events.id", ondelete="RESTRICT"), nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination: Mapped[str] = mapped_column(String(2048), nullable=False)
+    status: Mapped[NotificationDeliveryStatus] = mapped_column(
+        String(20), nullable=False, default=NotificationDeliveryStatus.PENDING
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    event: Mapped[TrackingEventRecord] = relationship(back_populates="deliveries")
 
 
 class PriceWatchRecord(Base):

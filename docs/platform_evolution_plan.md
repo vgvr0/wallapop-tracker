@@ -51,10 +51,10 @@ Las entidades históricas principales son:
 - `tracked_searches`, `search_listing_matches` y `tracking_events` para la
   búsqueda integrada y su deduplicación global.
 
-`TrackingRunRecord.profile_id` es obligatorio. Para que una búsqueda pueda
-reutilizar el pipeline de snapshots, `SearchTracker` crea actualmente un
-perfil técnico con ID `tracked-search:<id>`. Esto mezcla identidad de perfil
-con origen de ejecución y es la principal deuda arquitectónica detectada.
+`TrackingRunRecord.profile_id` es nullable y `tracked_search_id` es la fuente
+alternativa. Un `TrackingRun` exige exactamente una de las dos FKs. Las
+búsquedas no crean perfiles técnicos `tracked-search:<id>` y los anuncios
+observados solo por búsquedas pueden conservar `profile_id = NULL`.
 
 ### Servicios
 
@@ -71,7 +71,7 @@ con origen de ejecución y es la principal deuda arquitectónica detectada.
 
 ### Migraciones y documentación
 
-Las migraciones `0001` a `0007` evolucionan el esquema histórico, perfiles
+Las migraciones `0001` a `0009` evolucionan el esquema histórico, perfiles
 monitorizados, alertas legacy y búsquedas integradas. La `0007` añade
 `tracking_runs.tracked_search_id` como entero sin FK para evitar una
 dependencia circular durante la creación histórica de tablas; el ORM expone
@@ -110,11 +110,11 @@ a la vez transporte HTTP, construcción del request y normalización de resultad
 de búsqueda. Esto dificulta probar el tracker contra un contrato estable y
 reutilizar la lógica con otro proveedor.
 
-### 4. Entrega de notificaciones inexistente
+### 4. Entrega de notificaciones desacoplada
 
-`alert_delivered` está almacenado en `tracking_events` y por defecto vale
-`true`, pero no existe una cola/registro de entregas, retries o destinos. Los
-eventos son auditables, no notificaciones efectivamente entregadas.
+La Fase 4 añade `notification_deliveries` como cola persistente, idempotente y
+acotada. `alert_delivered` se conserva por compatibilidad histórica, pero ya
+no representa por sí solo el resultado de todos los destinos.
 
 ### 5. Modelo de anuncios monitorizados incompleto
 
@@ -137,7 +137,8 @@ de datos insuficientes.
 
 ### 8. Cobertura pendiente
 
-No hay tests para notification delivery persistente, listing tracking,
+La entrega persistente ya tiene tests offline de persistencia, canales,
+reintentos, reinicio, CLI y migración. Sigue sin haber tests para listing tracking,
 importación de URLs, metadata discovery, scheduler concurrente, analytics de
 mercado, relisting heurístico, deal scoring ni FastAPI. Los endpoints externos
 no documentados deben seguir bloqueados detrás de fixtures y validación
@@ -169,15 +170,14 @@ TrackedListing ─────┘          |
 
 Decisiones objetivo:
 
-1. `TrackingRun` debe distinguir el origen sin inventar una identidad de
-   perfil. Se recomienda la opción A de la solicitud, ampliada con una
-   relación opcional al perfil:
+1. `TrackingRun` distingue el origen mediante dos FKs mutuamente exclusivas,
+   sin introducir `source_type` ni `source_id`:
 
    ```text
    TrackingRun
-   - source_type: profile | search | listing
-   - source_id: integer
-   - profile_id: nullable, solo para source_type=profile o compatibilidad
+   - profile_id: nullable, para profile runs
+   - tracked_search_id: nullable, para search runs
+   - CHECK: exactamente una FK no nula
    ```
 
    En una primera migración, se conservan `profile_id` y los runs históricos;
@@ -213,7 +213,7 @@ se conserva un fixture RAW y se marca la investigación como pendiente.
 | 1 | Implementado: detección unificada en tracking events; servicios legacy fuera del flujo activo | Deprecation explícita, eventos simétricos, cobertura de restart, solapamiento, subidas y bajadas |
 | 2 | Implementado: separar runs de búsqueda de identidad de perfil | Nueva semántica de `TrackingRun`, preservación de histórico y `docs/tracking_run_model.md` |
 | 3 | Implementado: `SearchProvider` + `WallapopSearchProvider` | Contrato, provider testeable y documentación del endpoint |
-| 4 | Notification layer persistente | `notification_deliveries`, canales mockeables y comandos retry/list |
+| 4 | Implementado: NotificationDelivery persistente | `0009_notification_deliveries`, canales mockeables y comandos `notifications retry/list` |
 | 5 | `TrackedListing` y `get_item` validado | Migración, snapshots de cambios y comandos listing |
 | 6 | Importación pura de URLs de búsqueda | `search_url_parser.py` y tests de parámetros realmente observables |
 | 7 | Discovery de metadata | `docs/discovery_endpoints.md`, requests/respuestas RAW y parsers aislados |
@@ -236,8 +236,8 @@ producto y la API se construyen sobre esos contratos.
 Los nombres son propuestas sujetas a revisión en cada fase; no se deben
 aplicar todas de una vez.
 
-- `tracking_runs`: añadir `source_type` y `source_id`; hacer `profile_id`
-  nullable para nuevos orígenes; mantener una ruta de lectura para históricos.
+- `tracking_runs`: mantener `profile_id` nullable y `tracked_search_id` nullable
+  con CHECK de exactamente una fuente; no añadir `source_type/source_id`.
 - `tracking_events`: conservar el ledger actual, normalizar su clave y
   considerar `marketplace` y `external_id` cuando se introduzca el límite
   multi-marketplace.
@@ -277,8 +277,9 @@ o de compatibilidad del schema.
 - Los comandos actuales de perfiles y búsquedas seguirán funcionando durante la
   migración. Los nuevos comandos se añadirán sin cambiar la semántica de los
   existentes sin una nota explícita.
-- Las filas históricas se conservarán; los adaptadores traducirán runs antiguos
-  a la semántica `source_type` cuando sea necesario.
+- Las filas históricas se conservarán; los runs de búsqueda históricos se
+  reasocian a `tracked_search_id` y los perfiles sintéticos se eliminan solo
+  cuando ya no tienen referencias reales.
 - Los modelos Pydantic públicos y la firma de `WallapopClient` se modificarán
   solo de forma compatible. Las nuevas abstracciones se introducirán mediante
   constructor injection, sin framework DI.
@@ -295,7 +296,8 @@ o de compatibilidad del schema.
    estado y desaparición de un anuncio.
 3. Compatibilidad de URLs de búsquedas y nombres de filtros visibles en la
    interfaz.
-4. Política exacta de retries por canal de notificación.
+4. Política de backoff futura por canal de notificación; la Fase 4 usa un
+   límite simple de intentos sin backoff distribuido.
 5. Necesidad real de índices/materializaciones adicionales tras medir queries.
 
 Hasta que esas preguntas tengan evidencia offline o validación autorizada, no
