@@ -10,16 +10,23 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
 from wallapop_tracker.exceptions import WallapopError
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
+from wallapop_tracker.observability import get_metrics
 
 from .models import (
     ListingRecord,
     ListingSnapshotRecord,
+    NotificationDeliveryRecord,
+    NotificationDeliveryStatus,
+    PossibleRelistingRecord,
+    PossibleRelistingStatus,
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
     SearchListingMatchRecord,
+    TrackedListingRecord,
     TrackedProfileRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
@@ -59,6 +66,8 @@ class TrackedSearchRepository:
         max_price: Decimal | None = None,
         filters: dict[str, Any] | None = None,
         interval_seconds: int = 600,
+        notify_on_first_run: bool = False,
+        marketplace: Marketplace = Marketplace.WALLAPOP,
     ) -> TrackedSearchRecord:
         query = query.strip()
         if not query:
@@ -69,18 +78,33 @@ class TrackedSearchRepository:
             raise ValueError("min_price must not exceed max_price")
         now = datetime.now(UTC)
         record = TrackedSearchRecord(
+            marketplace=require_supported_marketplace(marketplace).value,
             name=name.strip() if name and name.strip() else None,
             query=query,
             min_price=min_price,
             max_price=max_price,
             filters_json=_json_text(filters),
             interval_seconds=interval_seconds,
+            notify_on_first_run=notify_on_first_run,
             created_at=now,
             updated_at=now,
         )
         self.session.add(record)
         self.session.flush()
         return record
+
+    def has_valid_run(self, search_id: int) -> bool:
+        return (
+            self.session.scalar(
+                select(TrackingRunRecord.id)
+                .where(
+                    TrackingRunRecord.tracked_search_id == search_id,
+                    TrackingRunRecord.status == TrackingRunStatus.VALID,
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     def enable(self, search_id: int) -> TrackedSearchRecord:
         return self._set_enabled(search_id, True)
@@ -132,6 +156,184 @@ class TrackedSearchRepository:
         self.session.flush()
         return record
 
+    def update(
+        self,
+        search_id: int,
+        *,
+        name: str | None = None,
+        query: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
+        filters: dict[str, Any] | None = None,
+        enabled: bool | None = None,
+        notify_on_first_run: bool | None = None,
+        interval_seconds: int | None = None,
+        marketplace: str | Marketplace | None = None,
+    ) -> TrackedSearchRecord:
+        record = self.get(search_id)
+        if record is None:
+            raise ValueError(f"Unknown search: {search_id}")
+        if query is not None and not query.strip():
+            raise ValueError("query is required")
+        if interval_seconds is not None and interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        effective_min = min_price if min_price is not None else record.min_price
+        effective_max = max_price if max_price is not None else record.max_price
+        if (
+            effective_min is not None
+            and effective_max is not None
+            and effective_min > effective_max
+        ):
+            raise ValueError("min_price must not exceed max_price")
+        if name is not None:
+            record.name = name.strip() or None
+        if query is not None:
+            record.query = query.strip()
+        if min_price is not None:
+            record.min_price = min_price
+        if max_price is not None:
+            record.max_price = max_price
+        if filters is not None:
+            record.filters_json = _json_text(filters)
+        if enabled is not None:
+            record.enabled = enabled
+        if notify_on_first_run is not None:
+            record.notify_on_first_run = notify_on_first_run
+        if interval_seconds is not None:
+            record.interval_seconds = interval_seconds
+        if marketplace is not None:
+            record.marketplace = require_supported_marketplace(marketplace).value
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+
+class TrackedListingRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, listing_id: int) -> TrackedListingRecord | None:
+        return self.session.get(TrackedListingRecord, listing_id)
+
+    def get_by_alias_or_id(self, value: str) -> TrackedListingRecord | None:
+        value = value.strip()
+        if value.isdigit():
+            record = self.get(int(value))
+            if record is not None:
+                return record
+        return self.session.scalar(
+            select(TrackedListingRecord).where(TrackedListingRecord.alias == value)
+        )
+
+    def list_all(self) -> list[TrackedListingRecord]:
+        return list(
+            self.session.scalars(select(TrackedListingRecord).order_by(TrackedListingRecord.id))
+        )
+
+    def list_enabled(self) -> list[TrackedListingRecord]:
+        return list(
+            self.session.scalars(
+                select(TrackedListingRecord)
+                .where(TrackedListingRecord.enabled)
+                .order_by(TrackedListingRecord.id)
+            )
+        )
+
+    def create(
+        self,
+        listing_id: int,
+        alias: str,
+        *,
+        interval_seconds: int = 600,
+        notes: str | None = None,
+    ) -> TrackedListingRecord:
+        alias = alias.strip()
+        if not alias:
+            raise ValueError("alias is required")
+        if interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        if self.session.get(ListingRecord, listing_id) is None:
+            raise ValueError(f"Unknown listing: {listing_id}")
+        now = _utc_now()
+        record = TrackedListingRecord(
+            listing_id=listing_id,
+            alias=alias,
+            interval_seconds=interval_seconds,
+            notes=notes,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def set_enabled(self, value: str, enabled: bool) -> TrackedListingRecord:
+        record = self.get_by_alias_or_id(value)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {value}")
+        record.enabled = enabled
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+    def update_last_run(
+        self,
+        listing_id: int,
+        at: datetime,
+        status: str,
+        run_id: int | None,
+    ) -> TrackedListingRecord:
+        record = self.get(listing_id)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {listing_id}")
+        record.last_run_at = at
+        record.last_run_status = status
+        record.last_tracking_run_id = run_id
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+    def update(
+        self,
+        listing_id: int,
+        *,
+        enabled: bool | None = None,
+        interval_seconds: int | None = None,
+        notes: str | None = None,
+    ) -> TrackedListingRecord:
+        record = self.get(listing_id)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {listing_id}")
+        if interval_seconds is not None and interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        if enabled is not None:
+            record.enabled = enabled
+        if interval_seconds is not None:
+            record.interval_seconds = interval_seconds
+        if notes is not None:
+            record.notes = notes
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
+    def remove(self, value: str) -> None:
+        record = self.get_by_alias_or_id(value)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {value}")
+        if (
+            self.session.scalar(
+                select(TrackingRunRecord.id)
+                .where(TrackingRunRecord.tracked_listing_id == record.id)
+                .limit(1)
+            )
+            is not None
+        ):
+            raise ValueError(
+                "Tracked listing has historical runs; disable it instead of removing it"
+            )
+        self.session.delete(record)
+        self.session.flush()
+
 
 class SearchMatchRepository:
     def __init__(self, session: Session) -> None:
@@ -149,12 +351,25 @@ class SearchMatchRepository:
                 last_seen_at=observed_at,
                 detection_count=1,
             )
-            self.session.add(record)
+            try:
+                with self.session.begin_nested():
+                    self.session.add(record)
+                    self.session.flush()
+            except IntegrityError:
+                existing = self.session.get(SearchListingMatchRecord, (search_id, listing_id))
+                if existing is None:
+                    raise
+                record = existing
+            else:
+                return record
         else:
             record.last_seen_at = observed_at
             record.detection_count += 1
         self.session.flush()
         return record
+
+    def get(self, search_id: int, listing_id: int) -> SearchListingMatchRecord | None:
+        return self.session.get(SearchListingMatchRecord, (search_id, listing_id))
 
 
 class TrackingEventRepository:
@@ -173,7 +388,7 @@ class TrackingEventRepository:
         idempotency_key: str,
         listing_id: int,
         tracking_run_id: int,
-        tracked_search_id: int,
+        tracked_search_id: int | None,
         old_price: Decimal | None,
         new_price: Decimal | None,
         created_at: datetime,
@@ -200,7 +415,79 @@ class TrackingEventRepository:
             if existing is None:
                 raise
             return existing, False
+        get_metrics().tracking_events_created_total.labels(event_type).inc()
         return record, True
+
+
+class NotificationDeliveryRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_all(self) -> list[NotificationDeliveryRecord]:
+        return list(
+            self.session.scalars(
+                select(NotificationDeliveryRecord).order_by(NotificationDeliveryRecord.id)
+            )
+        )
+
+    def create_once(
+        self,
+        *,
+        event_id: int,
+        channel: str,
+        destination: str,
+        created_at: datetime,
+    ) -> tuple[NotificationDeliveryRecord, bool]:
+        existing = self.session.scalar(
+            select(NotificationDeliveryRecord).where(
+                NotificationDeliveryRecord.event_id == event_id,
+                NotificationDeliveryRecord.channel == channel,
+                NotificationDeliveryRecord.destination == destination,
+            )
+        )
+        if existing is not None:
+            return existing, False
+        record = NotificationDeliveryRecord(
+            event_id=event_id,
+            channel=channel,
+            destination=destination,
+            status=NotificationDeliveryStatus.PENDING,
+            attempts=0,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.session.scalar(
+                select(NotificationDeliveryRecord).where(
+                    NotificationDeliveryRecord.event_id == event_id,
+                    NotificationDeliveryRecord.channel == channel,
+                    NotificationDeliveryRecord.destination == destination,
+                )
+            )
+            if existing is None:
+                raise
+            return existing, False
+        return record, True
+
+    def next_pending(
+        self, max_attempts: int, *, include_failed: bool = False
+    ) -> NotificationDeliveryRecord | None:
+        statuses = [NotificationDeliveryStatus.PENDING]
+        if include_failed:
+            statuses.append(NotificationDeliveryStatus.FAILED)
+        return self.session.scalar(
+            select(NotificationDeliveryRecord)
+            .where(
+                NotificationDeliveryRecord.status.in_(statuses),
+                NotificationDeliveryRecord.attempts < max_attempts,
+            )
+            .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
+            .limit(1)
+        )
 
 
 class TrackedProfileRepository:
@@ -383,8 +670,15 @@ class ListingRepository:
         self.session = session
 
     def get_listing_by_wallapop_id(self, item_id: str) -> ListingRecord | None:
+        return self.get_listing(Marketplace.WALLAPOP, item_id)
+
+    def get_listing(self, marketplace: Marketplace | str, external_id: str) -> ListingRecord | None:
+        supported = require_supported_marketplace(marketplace)
         return self.session.scalar(
-            select(ListingRecord).where(ListingRecord.wallapop_item_id == item_id)
+            select(ListingRecord).where(
+                ListingRecord.marketplace == supported.value,
+                ListingRecord.external_id == external_id,
+            )
         )
 
     def get_or_create_listing(
@@ -399,13 +693,16 @@ class ListingRepository:
         valid_observation = tracking_run_id is not None and _run_is_valid(
             self.session, tracking_run_id
         )
-        record = self.get_listing_by_wallapop_id(listing.item_id)
+        record = self.get_listing(listing.marketplace, listing.item_id)
         if record is None:
             if tracking_run_id is not None and not valid_observation:
                 raise WallapopError("A non-valid tracking run cannot establish listing presence")
             record = ListingRecord(
+                marketplace=listing.marketplace.value,
                 wallapop_item_id=listing.item_id,
+                external_id=listing.item_id,
                 profile_id=profile_id,
+                seller_user_id=listing.user_id or None,
                 first_seen_at=now,
                 last_seen_at=now,
                 created_at=now,
@@ -414,12 +711,16 @@ class ListingRepository:
             self.session.add(record)
             self.session.flush()
             return record
-        if record.profile_id != profile_id:
+        if record.profile_id not in {None, profile_id}:
             raise WallapopError(
                 f"Listing {listing.item_id} changed profile from "
                 f"{record.profile_id} to {profile_id}"
             )
         if valid_observation:
+            if record.profile_id is None:
+                record.profile_id = profile_id
+            if record.seller_user_id is None and listing.user_id:
+                record.seller_user_id = listing.user_id
             record.last_seen_at = now
             record.updated_at = now
         self.session.flush()
@@ -428,7 +729,7 @@ class ListingRepository:
     def get_or_create_global_listing(
         self,
         listing: Listing,
-        profile_id: int,
+        profile_id: int | None,
         *,
         observed_at: datetime | None = None,
         tracking_run_id: int | None = None,
@@ -436,22 +737,25 @@ class ListingRepository:
         """Upsert by Wallapop ID without changing the original seller anchor.
 
         Profile tracking historically treats a listing/profile mismatch as an
-        invariant violation. Search results are global, so an item may already
-        be anchored to a seller profile or to another search's technical
-        profile; this method intentionally keeps that first anchor.
+        invariant violation. Search results are global and do not require a
+        profile identity; a later profile capture may attach one to an
+        unanchored listing, while an existing seller anchor is preserved.
         """
         now = observed_at or _utc_now()
         valid_observation = tracking_run_id is not None and _run_is_valid(
             self.session, tracking_run_id
         )
-        record = self.get_listing_by_wallapop_id(listing.item_id)
+        record = self.get_listing(listing.marketplace, listing.item_id)
         created = record is None
         if record is None:
             if tracking_run_id is not None and not valid_observation:
                 raise WallapopError("A non-valid tracking run cannot establish listing presence")
             record = ListingRecord(
+                marketplace=listing.marketplace.value,
                 wallapop_item_id=listing.item_id,
+                external_id=listing.item_id,
                 profile_id=profile_id,
+                seller_user_id=listing.user_id or None,
                 first_seen_at=now,
                 last_seen_at=now,
                 created_at=now,
@@ -462,10 +766,14 @@ class ListingRepository:
                     self.session.add(record)
                     self.session.flush()
             except IntegrityError:
-                existing = self.get_listing_by_wallapop_id(listing.item_id)
+                existing = self.get_listing(listing.marketplace, listing.item_id)
                 if existing is None:
                     raise
                 record, created = existing, False
+        if record.profile_id is None and profile_id is not None:
+            record.profile_id = profile_id
+        if record.seller_user_id is None and listing.user_id:
+            record.seller_user_id = listing.user_id
         if valid_observation and record is not None:
             record.last_seen_at = now
             record.updated_at = now
@@ -473,9 +781,124 @@ class ListingRepository:
         return record, created
 
 
+class PossibleRelistingRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, relisting_id: int) -> PossibleRelistingRecord | None:
+        return self.session.get(PossibleRelistingRecord, relisting_id)
+
+    def get_by_pair(
+        self, previous_listing_id: int, current_listing_id: int
+    ) -> PossibleRelistingRecord | None:
+        return self.session.scalar(
+            select(PossibleRelistingRecord).where(
+                PossibleRelistingRecord.previous_listing_id == previous_listing_id,
+                PossibleRelistingRecord.current_listing_id == current_listing_id,
+            )
+        )
+
+    def create_once(
+        self,
+        *,
+        previous_listing_id: int,
+        current_listing_id: int,
+        score: Decimal,
+        reasons_json: str,
+        detected_at: datetime,
+    ) -> tuple[PossibleRelistingRecord, bool]:
+        existing = self.get_by_pair(previous_listing_id, current_listing_id)
+        if existing is not None:
+            return existing, False
+        record = PossibleRelistingRecord(
+            previous_listing_id=previous_listing_id,
+            current_listing_id=current_listing_id,
+            score=score,
+            reasons_json=reasons_json,
+            detected_at=detected_at,
+            status=PossibleRelistingStatus.CANDIDATE,
+        )
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.get_by_pair(previous_listing_id, current_listing_id)
+            if existing is None:
+                raise
+            return existing, False
+        return record, True
+
+    def list_all(
+        self, *, min_score: Decimal | None = None, listing_id: int | None = None
+    ) -> list[PossibleRelistingRecord]:
+        statement = select(PossibleRelistingRecord).order_by(
+            PossibleRelistingRecord.score.desc(), PossibleRelistingRecord.detected_at.desc()
+        )
+        if min_score is not None:
+            statement = statement.where(PossibleRelistingRecord.score >= min_score)
+        if listing_id is not None:
+            statement = statement.where(
+                (PossibleRelistingRecord.previous_listing_id == listing_id)
+                | (PossibleRelistingRecord.current_listing_id == listing_id)
+            )
+        return list(self.session.scalars(statement))
+
+
 class TrackingRunRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def start_profile_run(
+        self,
+        profile_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        record = TrackingRunRecord(
+            profile_id=profile_id,
+            started_at=started_at or _utc_now(),
+            status=TrackingRunStatus.RUNNING,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def start_search_run(
+        self,
+        tracked_search_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        record = TrackingRunRecord(
+            tracked_search_id=tracked_search_id,
+            started_at=started_at or _utc_now(),
+            status=TrackingRunStatus.RUNNING,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def start_listing_run(
+        self,
+        tracked_listing_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        record = TrackingRunRecord(
+            tracked_listing_id=tracked_listing_id,
+            started_at=started_at or _utc_now(),
+            status=TrackingRunStatus.RUNNING,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
 
     def start_tracking_run(
         self,
@@ -483,18 +906,11 @@ class TrackingRunRepository:
         *,
         started_at: datetime | None = None,
         idempotency_key: str | None = None,
-        tracked_search_id: int | None = None,
     ) -> TrackingRunRecord:
-        record = TrackingRunRecord(
-            profile_id=profile_id,
-            started_at=started_at or _utc_now(),
-            status=TrackingRunStatus.RUNNING,
-            idempotency_key=idempotency_key,
-            tracked_search_id=tracked_search_id,
+        """Compatibility alias for callers that create profile runs."""
+        return self.start_profile_run(
+            profile_id, started_at=started_at, idempotency_key=idempotency_key
         )
-        self.session.add(record)
-        self.session.flush()
-        return record
 
     def finish_tracking_run(
         self,
@@ -541,6 +957,32 @@ class TrackingRunRepository:
         record.price_changes = price_changes
         record.duplicates_suppressed = duplicates_suppressed
         self.session.flush()
+        source = (
+            "profile"
+            if record.profile_id is not None
+            else "search"
+            if record.tracked_search_id is not None
+            else "listing"
+        )
+        get_metrics().tracking_runs_total.labels(source, record.status.value).inc()
+        if record.status == TrackingRunStatus.FAILED:
+            get_metrics().tracking_runs_failed_total.labels(source).inc()
+        if record.started_at is not None and record.finished_at is not None:
+            started = (
+                record.started_at.replace(tzinfo=UTC)
+                if record.started_at.tzinfo is None
+                else record.started_at
+            )
+            finished = (
+                record.finished_at.replace(tzinfo=UTC)
+                if record.finished_at.tzinfo is None
+                else record.finished_at
+            )
+            get_metrics().tracking_run_duration_seconds.labels(source).observe(
+                max(0.0, (finished - started).total_seconds())
+            )
+        if items_fetched is not None:
+            get_metrics().listings_fetched_total.labels(source).inc(max(0, items_fetched))
         return record
 
     def mark_valid(self, run_id: int, **kwargs: Any) -> TrackingRunRecord:

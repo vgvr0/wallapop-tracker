@@ -3,36 +3,40 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from wallapop_tracker.client import WallapopClient
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
-from wallapop_tracker.models import Listing, Profile
+from wallapop_tracker.exceptions import WallapopParseError
+from wallapop_tracker.models import Listing
+from wallapop_tracker.observability import get_metrics
+from wallapop_tracker.providers.search import SearchProvider, SearchRequest
+from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
     ListingSnapshotRecord,
-    ProfileRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
     TrackingRunStatus,
 )
 from wallapop_tracker.storage.repositories import (
     ListingRepository,
-    ProfileRepository,
     SearchMatchRepository,
     SnapshotRepository,
     TrackedSearchRepository,
     TrackingEventRepository,
     TrackingRunRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,10 +58,10 @@ class SearchTracker:
 
     def __init__(
         self,
-        client: WallapopClient,
+        provider: SearchProvider,
         session_factory: sessionmaker[Session] | Database,
     ) -> None:
-        self.client = client
+        self.provider = provider
         self.session_factory = (
             session_factory.session_factory
             if isinstance(session_factory, Database)
@@ -75,7 +79,7 @@ class SearchTracker:
             config = self._config(search)
 
         try:
-            listings = await self.client.search_items(
+            request = SearchRequest(
                 query=search.query,
                 min_price=search.min_price,
                 max_price=search.max_price,
@@ -92,6 +96,7 @@ class SearchTracker:
                 distance=self._optional_float(config.get("distance")),
                 max_pages=int(config.get("max_pages", 5)),
             )
+            listings = await self.provider.search(request)
             filtered = filters_from_config(
                 {
                     **config,
@@ -101,6 +106,8 @@ class SearchTracker:
             ).apply(listings)
             return self._persist_success(search_id, started_at, listings, filtered)
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("search").inc()
             return self._persist_failure(search_id, started_at, exc)
 
     def _persist_success(
@@ -115,11 +122,11 @@ class SearchTracker:
             search = search_repo.get(search_id)
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
-            anchor = self._anchor(session, search, started_at)
             runs = TrackingRunRepository(session)
-            run = runs.start_tracking_run(
-                anchor.id, started_at=started_at, tracked_search_id=search_id
+            initial_baseline = (
+                not search_repo.has_valid_run(search_id) and not search.notify_on_first_run
             )
+            run = runs.start_search_run(search_id, started_at=started_at)
             runs.mark_valid(run.id, items_fetched=len(fetched), items_ok=True)
             listing_repo = ListingRepository(session)
             snapshots = SnapshotRepository(session)
@@ -133,11 +140,16 @@ class SearchTracker:
                 if listing.item_id in seen_ids:
                     continue
                 seen_ids.add(listing.item_id)
-                existing = listing_repo.get_listing_by_wallapop_id(listing.item_id)
+                existing = listing_repo.get_listing(listing.marketplace, listing.external_id)
                 previous_snapshot = self._latest_snapshot(session, existing)
-                record, _ = listing_repo.get_or_create_global_listing(
+                previous_match = (
+                    matches.get(search_id, existing.id)
+                    if existing is not None
+                    else None
+                )
+                record, created = listing_repo.get_or_create_global_listing(
                     listing,
-                    anchor.id,
+                    None,
                     observed_at=started_at,
                     tracking_run_id=run.id,
                 )
@@ -147,22 +159,45 @@ class SearchTracker:
                     record.id, run.id, listing, observed_at=started_at
                 )
 
-                new_key = self._event_key(AlertType.NEW_LISTING, listing.item_id)
-                new_event, created = events.create_once(
-                    event_type=AlertType.NEW_LISTING.value,
-                    idempotency_key=new_key,
-                    listing_id=record.id,
-                    tracking_run_id=run.id,
-                    tracked_search_id=search_id,
-                    old_price=None,
-                    new_price=listing.price,
-                    created_at=started_at,
-                )
                 if created:
-                    new_count += 1
-                    alerts.append(self._alert(new_event, listing, search_id))
-                else:
-                    duplicate_count += 1
+                    try:
+                        detection = RelistingDetectionService(session).detect_new_listing(
+                            record,
+                            listing,
+                            tracking_run_id=run.id,
+                            detected_at=started_at,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "relisting_detection_failed listing_id=%s run_id=%s",
+                            record.id,
+                            run.id,
+                        )
+                    else:
+                        if detection is not None:
+                            relisting_event = session.get(
+                                TrackingEventRecord, detection.event_id
+                            )
+                            if relisting_event is not None:
+                                alerts.append(self._alert(relisting_event, listing, search_id))
+
+                if previous_match is None and not initial_baseline:
+                    new_key = self._event_key(AlertType.NEW_LISTING, listing.item_id)
+                    new_event, created = events.create_once(
+                        event_type=AlertType.NEW_LISTING.value,
+                        idempotency_key=new_key,
+                        listing_id=record.id,
+                        tracking_run_id=run.id,
+                        tracked_search_id=search_id,
+                        old_price=None,
+                        new_price=listing.price,
+                        created_at=started_at,
+                    )
+                    if created:
+                        new_count += 1
+                        alerts.append(self._alert(new_event, listing, search_id))
+                    else:
+                        duplicate_count += 1
 
                 if (
                     previous_snapshot is not None
@@ -224,9 +259,8 @@ class SearchTracker:
             search = TrackedSearchRepository(session).get(search_id)
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
-            anchor = self._anchor(session, search, started_at)
-            run = TrackingRunRepository(session).start_tracking_run(
-                anchor.id, started_at=started_at, tracked_search_id=search_id
+            run = TrackingRunRepository(session).start_search_run(
+                search_id, started_at=started_at
             )
             TrackingRunRepository(session).mark_failed(
                 run.id, error_type=type(error).__name__, error_message=str(error)
@@ -237,21 +271,6 @@ class SearchTracker:
             return SearchTrackingResult(
                 search_id, run.id, TrackingRunStatus.FAILED, 0, error=str(error)
             )
-
-    @staticmethod
-    def _anchor(
-        session: Session, search: TrackedSearchRecord, observed_at: datetime
-    ) -> ProfileRecord:
-        return cast(
-            ProfileRecord,
-            ProfileRepository(session).get_or_create_profile(
-                Profile(
-                    user_id=f"tracked-search:{search.id}",
-                    name=search.name or search.query,
-                ),
-                observed_at=observed_at,
-            ),
-        )
 
     @staticmethod
     def _latest_snapshot(

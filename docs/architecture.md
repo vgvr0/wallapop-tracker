@@ -91,7 +91,8 @@ Auditoría de cada intento, incluidos los que no generan cambios:
 
 ```text
 id
-profile_id
+profile_id                 # nullable; source for profile runs
+tracked_search_id          # nullable; source for search runs
 started_at
 finished_at
 status                 # running | valid | partial | failed
@@ -99,6 +100,10 @@ error_message
 items_fetched
 pages_fetched
 ```
+
+Exactly one of `profile_id` and `tracked_search_id` is required by a database
+constraint. Search runs do not create a synthetic `ProfileRecord`; listings
+seen only from searches may temporarily have a null `profile_id`.
 
 Se pueden añadir detalles operativos pequeños si resultan útiles para diagnóstico, pero no se almacenarán headers, cookies ni secretos.
 
@@ -126,7 +131,8 @@ Identidad estable del anuncio:
 
 ```text
 id
-wallapop_item_id UNIQUE
+marketplace
+external_id UNIQUE per marketplace
 profile_id
 first_seen_at
 last_seen_at
@@ -195,4 +201,119 @@ La siguiente fase podrá implementar modelos SQLAlchemy 2, SQLite, esquema/migra
 - scheduler;
 - CLI de tracking;
 - integración automática con `WallapopClient`.
+Las búsquedas pasan por un provider normalizado y llevan identidad explícita
+de marketplace (actualmente solo `wallapop`):
 
+```text
+SearchTracker -> SearchProvider -> WallapopSearchProvider -> WallapopClient
+```
+
+Los listings se identifican por `(marketplace, external_id)` y
+`wallapop_item_id` permanece solo como bridge de migración. `TrackingRun` no
+duplica marketplace: lo deriva de su source.
+
+Los eventos se entregan mediante una cola persistente desacoplada:
+
+```text
+TrackingEvent -> NotificationService -> NotificationDelivery
+                                  -> Webhook / Discord / Telegram
+```
+
+Las nuevas identidades de anuncio pasan además por un análisis best-effort:
+
+```text
+new Listing + removed historical Listing
+              ↓
+RelistingDetectionService
+              ↓
+PossibleRelisting + POSSIBLE_RELISTING (si supera el threshold)
+```
+
+La relación es heurística y explicable; nunca fusiona listings.
+
+Los analytics de mercado son una capa read-only sobre `SearchMatch`, runs
+válidos, presence, snapshots y eventos:
+
+```text
+SearchMatch + valid runs + snapshots + TrackingEvent
+                         ↓
+                 reporting.market
+                         ↓
+              summary / series / aggregations
+```
+
+Una ausencia observada se denomina `removed`; no se interpreta como venta.
+
+### Discovery de metadata
+
+`WallapopClient` expone APIs read-only para categorías, filtros, marcas y
+modelos. Cada respuesta pasa por un parser puro y produce modelos pequeños de
+`domain/metadata.py`; esta rama no conecta discovery con `SearchTracker`.
+
+### Scheduler concurrente
+
+El scheduler construye primero los jobs due y los ejecuta con un único
+`asyncio.Semaphore` y `TaskGroup`. Los runners mantienen sesiones SQLAlchemy
+independientes; el limiter de `WallapopClient` es compartido por host y las
+notificaciones se procesan después de completar el tracking.
+
+El evento y el run se confirman antes de cualquier POST externo. Cada destino
+se procesa independientemente y sus reintentos están limitados por
+`WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.
+
+Las búsquedas nuevas comienzan con un baseline silencioso: la primera
+ejecución válida persiste anuncios, snapshots y matches sin emitir
+`NEW_LISTING`, salvo que la búsqueda se cree con `notify_on_first_run=true`.
+Los cambios de precio con histórico previo siguen generando eventos.
+
+El tercer origen monitorizable reutiliza el mismo listing global:
+
+```text
+TrackedListing -> ListingProvider -> WallapopClient.get_item
+              -> TrackingRun -> ListingSnapshot -> TrackingEvent
+```
+
+## Deal scoring
+
+Read-only `DealScoringService` consumes the persisted search history and the
+existing market reporting layer. It returns an explainable score and separate
+confidence value without adding a persistence table or coupling tracking to
+analysis.
+
+## FastAPI
+
+`wallapop_tracker.api.app.create_app` creates the HTTP transport layer. Each
+request gets its own synchronous SQLAlchemy session; routers map validated
+input to existing repositories, reporting functions, and services.
+
+Operational observability is centralized in `observability.py` and consumed by
+the HTTP client, persistence boundaries, scheduler, notifications and FastAPI
+middleware. It does not alter business analytics or tracking semantics.
+
+## Arquitectura final
+
+```text
+                         Wallapop
+                            │
+                       adapters/client
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+   ProfileTracker    SearchTracker    ListingTracker
+          └─────────────────┼─────────────────┘
+                            │
+                     persistence
+                            │
+           snapshots / presence / TrackingEvent
+                    ┌───────┼────────┐
+                    │       │        │
+             notifications analytics scoring
+                    │
+                 scheduler
+
+FastAPI and CLI are local/private operator transports.
+```
+
+The active alert path is `TrackingEvent -> NotificationDelivery`. The old
+saved-search and price-watch services remain deprecated compatibility code and
+are outside the scheduler.

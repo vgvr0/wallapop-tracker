@@ -19,7 +19,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
+
+from wallapop_tracker.domain.marketplace import Marketplace
 
 
 class TrackingRunStatus(StrEnum):
@@ -39,6 +41,7 @@ class Base(DeclarativeBase):
 
 
 class SavedSearchRecord(Base):
+    """Deprecated pre-TrackedSearch persistence kept for old databases."""
     __tablename__ = "saved_searches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -57,6 +60,7 @@ class SavedSearchRecord(Base):
 
 
 class SavedSearchItemRecord(Base):
+    """Deprecated child rows for :class:`SavedSearchRecord`."""
     __tablename__ = "saved_search_items"
     __table_args__ = (
         UniqueConstraint("saved_search_id", "wallapop_item_id", name="uq_saved_search_item"),
@@ -81,18 +85,54 @@ class TrackedSearchRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    marketplace: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=Marketplace.WALLAPOP,
+        server_default=Marketplace.WALLAPOP,
+    )
     name: Mapped[str | None] = mapped_column(String(255))
     query: Mapped[str] = mapped_column(String(255), nullable=False)
     min_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     max_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     filters_json: Mapped[str | None] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    notify_on_first_run: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_status: Mapped[str | None] = mapped_column(String(20))
     last_run_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class TrackedListingRecord(Base):
+    """Persistent configuration for monitoring one global listing."""
+
+    __tablename__ = "tracked_listings"
+    __table_args__ = (
+        UniqueConstraint("alias", name="uq_tracked_listings_alias"),
+        UniqueConstraint("listing_id", name="uq_tracked_listings_listing"),
+        CheckConstraint("interval_seconds > 0", name="ck_tracked_listing_interval"),
+        Index("ix_tracked_listings_enabled_last_run", "enabled", "last_run_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id"), nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(20))
+    last_tracking_run_id: Mapped[int | None] = mapped_column(Integer)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    listing: Mapped["ListingRecord"] = relationship()
 
 
 class SearchListingMatchRecord(Base):
@@ -135,13 +175,55 @@ class TrackingEventRecord(Base):
     old_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     new_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Deprecated compatibility flag; notification_deliveries is authoritative.
     alert_delivered: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     listing: Mapped["ListingRecord"] = relationship()
     tracking_run: Mapped["TrackingRunRecord"] = relationship()
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
+    deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(
+        back_populates="event"
+    )
+
+
+class NotificationDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class NotificationDeliveryRecord(Base):
+    """Durable delivery attempt for one event and destination."""
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "channel",
+            "destination",
+            name="uq_notification_delivery_target",
+        ),
+        Index("ix_notification_deliveries_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("tracking_events.id", ondelete="RESTRICT"), nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination: Mapped[str] = mapped_column(String(2048), nullable=False)
+    status: Mapped[NotificationDeliveryStatus] = mapped_column(
+        String(20), nullable=False, default=NotificationDeliveryStatus.PENDING
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    event: Mapped[TrackingEventRecord] = relationship(back_populates="deliveries")
 
 
 class PriceWatchRecord(Base):
+    """Deprecated pre-TrackedListing watch retained for historical data."""
     __tablename__ = "price_watches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), unique=True, nullable=False)
@@ -199,6 +281,11 @@ class TrackingRunRecord(Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (
         CheckConstraint(
+            "((profile_id IS NOT NULL) + (tracked_search_id IS NOT NULL) + "
+            "(tracked_listing_id IS NOT NULL)) = 1",
+            name="ck_tracking_runs_exactly_one_source",
+        ),
+        CheckConstraint(
             "status IN ('running', 'valid', 'partial', 'failed')",
             name="ck_tracking_runs_status",
         ),
@@ -212,10 +299,11 @@ class TrackingRunRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), nullable=False)
-    # Kept as a portable association key. The initial historical migration
-    # creates this table before the tracked-search table exists.
-    tracked_search_id: Mapped[int | None] = mapped_column(Integer)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
+    tracked_search_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_searches.id"))
+    tracked_listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tracked_listings.id")
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TrackingRunStatus] = mapped_column(
@@ -234,7 +322,13 @@ class TrackingRunRecord(Base):
     new_listings: Mapped[int | None] = mapped_column(Integer)
     price_changes: Mapped[int | None] = mapped_column(Integer)
     duplicates_suppressed: Mapped[int | None] = mapped_column(Integer)
-    profile: Mapped[ProfileRecord] = relationship(back_populates="tracking_runs")
+    profile: Mapped[ProfileRecord | None] = relationship(back_populates="tracking_runs")
+    tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
+    tracked_listing: Mapped[TrackedListingRecord | None] = relationship(
+        primaryjoin=lambda: foreign(TrackingRunRecord.tracked_listing_id)
+        == TrackedListingRecord.id,
+        foreign_keys=[tracked_listing_id],
+    )
     profile_snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(
         back_populates="tracking_run"
     )
@@ -245,17 +339,70 @@ class TrackingRunRecord(Base):
 
 class ListingRecord(Base):
     __tablename__ = "listings"
-    __table_args__ = (Index("ix_listings_profile_last_seen", "profile_id", "last_seen_at"),)
+    __table_args__ = (
+        UniqueConstraint("marketplace", "external_id", name="uq_listings_marketplace_external_id"),
+        Index("ix_listings_profile_last_seen", "profile_id", "last_seen_at"),
+        Index("ix_listings_seller_last_seen", "seller_user_id", "last_seen_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    wallapop_item_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), nullable=False)
+    marketplace: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=Marketplace.WALLAPOP,
+        server_default=Marketplace.WALLAPOP,
+    )
+    # Kept as a physical legacy bridge because revision 0001 is historical
+    # and creates its tables from metadata. New code uses external_id.
+    wallapop_item_id: Mapped[str | None] = mapped_column(String(100))
+    external_id: Mapped[str | None] = mapped_column(String(100), default=None)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
+    seller_user_id: Mapped[str | None] = mapped_column(String(100))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    profile: Mapped[ProfileRecord] = relationship(back_populates="listings")
+    profile: Mapped[ProfileRecord | None] = relationship(back_populates="listings")
     snapshots: Mapped[list["ListingSnapshotRecord"]] = relationship(back_populates="listing")
+
+
+class PossibleRelistingStatus(StrEnum):
+    CANDIDATE = "candidate"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
+class PossibleRelistingRecord(Base):
+    """Explainable relation between two independent listing identities."""
+
+    __tablename__ = "possible_relistings"
+    __table_args__ = (
+        UniqueConstraint(
+            "previous_listing_id", "current_listing_id", name="uq_possible_relisting_pair"
+        ),
+        Index("ix_possible_relistings_score_detected", "score", "detected_at"),
+        Index("ix_possible_relistings_current", "current_listing_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    previous_listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    current_listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    reasons_json: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[PossibleRelistingStatus] = mapped_column(
+        String(20), nullable=False, default=PossibleRelistingStatus.CANDIDATE,
+        server_default="candidate",
+    )
+    event_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tracking_events.id", ondelete="SET NULL"), unique=True
+    )
+    previous_listing: Mapped["ListingRecord"] = relationship(foreign_keys=[previous_listing_id])
+    current_listing: Mapped["ListingRecord"] = relationship(foreign_keys=[current_listing_id])
 
 
 class ProfileSnapshotRecord(Base):

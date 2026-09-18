@@ -155,6 +155,30 @@ async def test_items_pagination_and_duplicate_deduplication():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_get_item_uses_validated_detail_endpoint_and_parser():
+    route = respx.get(f"{BASE}/api/v3/items/item-1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "item-1",
+                "user_id": "seller-1",
+                "title": "Cámara",
+                "price": {"amount": "80.00", "currency": "EUR"},
+                "reserved": {"flag": False},
+                "shipping": {"item_is_shippable": True},
+                "slug": "camara-1",
+            },
+        )
+    )
+    async with WallapopClient(min_interval=0) as client:
+        result = await client.get_item("item-1")
+    assert route.called
+    assert result.item_id == "item-1"
+    assert result.price == Decimal("80.00")
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_items_pagination_requests_first_second_and_final_pages():
     first = load_fixture("items_page_1.json")
     second = load_fixture("items_page_2.json")

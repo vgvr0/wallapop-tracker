@@ -2,6 +2,8 @@ services:
   tracker:
     build:
       context: .
+    ports:
+      - "8000:8000"
     environment:
       WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-sqlite:///data/wallapop_tracker.db}
     volumes:

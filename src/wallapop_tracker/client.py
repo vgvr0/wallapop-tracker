@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import (
     WallapopHTTPError,
     WallapopNotFoundError,
@@ -23,12 +24,70 @@ from .exceptions import (
     WallapopRateLimitError,
 )
 from .models import ItemsPage, Listing, Profile, ProfileStats, ReviewSummary
-from .parsers.items import parse_items_page
+from .observability import get_metrics, log_event, operation_for_url, status_class
+from .parsers.brands import parse_brands
+from .parsers.categories import parse_categories
+from .parsers.filters import parse_available_filters
+from .parsers.items import parse_item, parse_items_page
+from .parsers.models import parse_models
 from .parsers.profile import parse_profile
 from .parsers.reviews import parse_review_summary
 from .parsers.stats import parse_profile_stats
 
 logger = logging.getLogger(__name__)
+
+
+class _SharedRateLimiter:
+    """Process-local limiter shared by clients targeting one Wallapop host."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.last_request_at = 0.0
+        self.blocked_until = 0.0
+
+    async def acquire(self, min_interval: float) -> None:
+        async with self.lock:
+            now = asyncio.get_running_loop().time()
+            wait = max(
+                0.0,
+                min_interval - (now - self.last_request_at),
+                self.blocked_until - now,
+            )
+            if wait:
+                await asyncio.sleep(wait)
+            self.last_request_at = asyncio.get_running_loop().time()
+
+    async def block(self, delay: float) -> float:
+        async with self.lock:
+            deadline = asyncio.get_running_loop().time() + delay
+            self.blocked_until = max(
+                self.blocked_until,
+                deadline,
+            )
+            return deadline
+
+    async def clear_block(self, deadline: float) -> None:
+        async with self.lock:
+            if self.blocked_until <= deadline:
+                self.blocked_until = min(self.blocked_until, asyncio.get_running_loop().time())
+
+
+_RATE_LIMITERS: dict[str, _SharedRateLimiter] = {}
+
+
+def _rate_limiter_for(base_url: str) -> _SharedRateLimiter:
+    return _RATE_LIMITERS.setdefault(base_url, _SharedRateLimiter())
+
+
+def _metadata_search_params(
+    query: str | None, category_id: str | None, order_by: str
+) -> dict[str, str]:
+    params = {"order_by": order_by, "source": "search_box"}
+    if query is not None:
+        params["keywords"] = query
+    if category_id is not None:
+        params["category_id"] = category_id
+    return params
 
 
 class WallapopClient:
@@ -57,8 +116,7 @@ class WallapopClient:
         self.user_agent = user_agent
         self.raw_data_dir = raw_data_dir
         self._http: httpx.AsyncClient | None = None
-        self._rate_lock = asyncio.Lock()
-        self._last_request_at = 0.0
+        self._rate_limiter = _rate_limiter_for(self.base_url)
 
     async def __aenter__(self) -> "WallapopClient":
         self._http = httpx.AsyncClient(timeout=self.timeout)
@@ -85,18 +143,26 @@ class WallapopClient:
             "Accept": "application/json" if expect_json else "text/html",
             "User-Agent": self.user_agent,
         }
+        operation = operation_for_url(url)
+        self._observability_operation = operation
+        metrics = get_metrics()
         for attempt in range(self.max_retries + 1):
             await self._wait_for_rate_limit()
             try:
                 response = await self._http.request(method, url, params=params, headers=headers)
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                metrics.wallapop_http_requests_total.labels(operation, method, "error").inc()
                 if attempt >= self.max_retries:
                     raise WallapopHTTPError(f"Transient request failed: {url}") from exc
                 await self._backoff(attempt, None)
                 continue
+            metrics.wallapop_http_requests_total.labels(
+                operation, method, status_class(response.status_code)
+            ).inc()
             if response.status_code == 404:
                 raise WallapopNotFoundError(f"Resource not found: {url}")
             if response.status_code == 429:
+                metrics.wallapop_http_429_total.labels(operation).inc()
                 if attempt >= self.max_retries:
                     raise WallapopRateLimitError(f"Rate limited: {url}")
                 await self._backoff(attempt, response.headers.get("Retry-After"))
@@ -113,6 +179,7 @@ class WallapopClient:
                     raw_value = json.loads(response.text)
                     value = json.loads(response.text, parse_float=Decimal)
                 except json.JSONDecodeError as exc:
+                    metrics.wallapop_parse_errors_total.labels(operation).inc()
                     raise WallapopParseError(f"Invalid JSON response: {url}") from exc
             else:
                 raw_value = response.text
@@ -123,11 +190,7 @@ class WallapopClient:
         raise WallapopHTTPError(f"Request failed: {url}")
 
     async def _wait_for_rate_limit(self) -> None:
-        async with self._rate_lock:
-            elapsed = asyncio.get_running_loop().time() - self._last_request_at
-            if elapsed < self.min_interval:
-                await asyncio.sleep(self.min_interval - elapsed)
-            self._last_request_at = asyncio.get_running_loop().time()
+        await self._rate_limiter.acquire(self.min_interval)
 
     async def _backoff(self, attempt: int, retry_after: str | None) -> None:
         delay = self.backoff_factor * (2**attempt)
@@ -140,14 +203,28 @@ class WallapopClient:
                     retry_delay = (retry_at - datetime.now(UTC)).total_seconds()
                     delay = max(delay, min(retry_delay, self.max_retry_after))
                 except (TypeError, ValueError, OverflowError):
-                    logger.warning("invalid_retry_after value=%s", retry_after)
-        rate_remaining = max(
-            0.0,
-            self.min_interval - (asyncio.get_running_loop().time() - self._last_request_at),
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "invalid_retry_after",
+                        operation=getattr(self, "_observability_operation", "request"),
+                    )
+        delay = max(0.0, delay)
+        get_metrics().wallapop_http_retries_total.labels(
+            getattr(self, "_observability_operation", "request")
+        ).inc()
+        log_event(
+            logger,
+            logging.WARNING,
+            "retrying_wallapop_request",
+            operation=getattr(self, "_observability_operation", "request"),
+            attempt=attempt + 1,
         )
-        delay = max(delay, rate_remaining)
-        logger.warning("retrying_wallapop_request attempt=%s delay=%.2f", attempt + 1, delay)
-        await asyncio.sleep(max(0.0, delay))
+        deadline = await self._rate_limiter.block(delay)
+        try:
+            await asyncio.sleep(delay)
+        finally:
+            await self._rate_limiter.clear_block(deadline)
 
     def _save_raw(self, kind: str, key: str, value: Any) -> None:
         if self.raw_data_dir is None:
@@ -240,6 +317,83 @@ class WallapopClient:
             since = page.next_since
         logger.info("fetched_all_items user_id=%s total=%s pages=%s", user_id, len(items), pages)
         return items
+
+    async def get_item(self, item_id: str) -> Listing:
+        """Fetch one public listing detail from the observed v3 item endpoint."""
+        item_id = item_id.strip()
+        if not item_id:
+            raise ValueError("item_id is required")
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/items/{item_id}",
+            raw_kind="items",
+            raw_key=f"detail-{item_id}",
+        )
+        return parse_item(data, item_id=item_id)
+
+    async def categories(self, *, context: str | None = None) -> list[Category]:
+        """Fetch the observed public category catalog."""
+        params = {"context": context} if context is not None else None
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/categories",
+            params=params,
+            raw_kind="metadata",
+            raw_key="categories",
+        )
+        return parse_categories(data)
+
+    async def available_filters(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[AvailableFilter]:
+        """Fetch filters exposed for one observed search context."""
+        params = _metadata_search_params(query, category_id, order_by)
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/regular-filters",
+            params=params,
+            raw_kind="metadata",
+            raw_key="filters",
+        )
+        return parse_available_filters(data)
+
+    async def brands(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[Brand]:
+        """Fetch the observed brand options for one search context."""
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/brand",
+            params=_metadata_search_params(query, category_id, order_by),
+            raw_kind="metadata",
+            raw_key="brands",
+        )
+        return parse_brands(data)
+
+    async def models(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[ProductModel]:
+        """Fetch the observed model options for one search context."""
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/model",
+            params=_metadata_search_params(query, category_id, order_by),
+            raw_kind="metadata",
+            raw_key="models",
+        )
+        return parse_models(data)
 
     async def search_items(
         self,

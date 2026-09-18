@@ -52,8 +52,12 @@ class DiffService:
         if previous_run_id is None:
             return []
         previous = self._valid_run(previous_run_id)
-        if previous.profile_id != current.profile_id:
-            raise ValueError("Runs must belong to the same profile")
+        if (
+            previous.profile_id is None
+            or current.profile_id is None
+            or previous.profile_id != current.profile_id
+        ):
+            raise ValueError("Runs must be profile runs for the same profile")
         if self._run_key(previous) >= self._run_key(current):
             raise ValueError("Current run must be later than previous run")
 
@@ -268,6 +272,8 @@ class DiffService:
         old: object | None = None,
         new: object | None = None,
     ) -> DetectedChange:
+        if current.profile_id is None:
+            raise ValueError("Diff changes require a profile tracking run")
         return DetectedChange(
             kind,
             current.profile_id,

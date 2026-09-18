@@ -10,7 +10,7 @@ Profile
   ├──< Listing ───< ListingSnapshot
   ├──< TrackingRun ───< TrackingRunListing >─── Listing
   └──< TrackingRun
-             └──< futuros Event
+             └──< TrackingEvent ───< NotificationDelivery
 ```
 
 - Un `Profile` representa la identidad estable de un usuario de Wallapop.
@@ -19,7 +19,47 @@ Profile
 - Un `ListingSnapshot` representa el contenido observable del anuncio en una observación.
 - Un `TrackingRun` representa una ejecución completa o parcial de captura para un perfil.
 - Un `TrackingRunListing` representa que un anuncio fue visto explícitamente durante una ejecución, sin duplicar su contenido.
-- `Event` se reserva para una fase posterior y siempre debe referenciar una ejecución.
+- Un `TrackingEvent` referencia una ejecución y puede tener una `NotificationDelivery`
+  independiente por canal y destino.
+
+### `notification_deliveries`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer | PK |
+| `event_id` | FK a `tracking_events.id` | NOT NULL, `ON DELETE RESTRICT` |
+| `channel` | varchar(50) | NOT NULL |
+| `destination` | varchar(2048) | NOT NULL |
+| `status` | varchar(20) | `pending`, `delivered` o `failed` |
+| `attempts` | integer | NOT NULL, por defecto 0 |
+| `last_error` | text | nullable |
+| `created_at` | timestamp | NOT NULL |
+| `updated_at` | timestamp | NOT NULL |
+| `delivered_at` | timestamp | nullable |
+
+Restricciones: `UNIQUE(event_id, channel, destination)` e índice
+`(status, created_at)` para seleccionar la cola. La entrega nunca se realiza
+dentro de la transacción que confirma un tracking run.
+
+### `tracked_listings`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer | PK |
+| `listing_id` | FK a `listings.id` | NOT NULL, UNIQUE |
+| `alias` | varchar(100) | NOT NULL, UNIQUE |
+| `enabled` | boolean | NOT NULL, por defecto true |
+| `interval_seconds` | integer | NOT NULL, mayor que 0 |
+| `last_run_at` | timestamp | nullable |
+| `last_run_status` | varchar(20) | nullable |
+| `last_tracking_run_id` | integer | nullable, referencia al último run |
+| `notes` | text | nullable |
+| `created_at` / `updated_at` | timestamp | NOT NULL |
+
+`tracking_runs.tracked_listing_id` es nullable y forma parte del CHECK de
+exactamente una fuente junto con `profile_id` y `tracked_search_id`. La
+migración `0010` conserva los runs existentes y añade la FK real de
+`tracking_runs.tracked_listing_id` a `tracked_listings.id`.
 
 ## Tablas
 
@@ -67,8 +107,10 @@ Los snapshots de perfil son change-based: solo se inserta una fila si cambia alg
 | Campo | Tipo lógico | Reglas |
 |---|---|---|
 | `id` | integer/bigint | PK |
-| `wallapop_item_id` | varchar | NOT NULL, UNIQUE |
-| `profile_id` | FK a `profiles.id` | NOT NULL |
+| `marketplace` | varchar(32) | NOT NULL, default `wallapop` |
+| `external_id` | varchar | parte de UNIQUE con `marketplace` |
+| `wallapop_item_id` | varchar | nullable, deprecated bridge legacy |
+| `profile_id` | FK a `profiles.id` | nullable; NULL para listings observados solo por búsquedas |
 | `first_seen_at` | timestamp with timezone | NOT NULL |
 | `last_seen_at` | timestamp with timezone | NOT NULL |
 
@@ -123,7 +165,8 @@ La fila significa únicamente “fue visto explícitamente”. No significa que 
 | Campo | Tipo lógico | Reglas |
 |---|---|---|
 | `id` | integer/bigint | PK |
-| `profile_id` | FK a `profiles.id` | NOT NULL |
+| `profile_id` | FK a `profiles.id` | nullable; mutuamente excluyente con `tracked_search_id` |
+| `tracked_search_id` | FK a `tracked_searches.id` | nullable; mutuamente excluyente con `profile_id` |
 | `started_at` | timestamp with timezone | NOT NULL |
 | `finished_at` | timestamp with timezone | nullable mientras está `running` |
 | `status` | varchar/enum controlado | `running`, `valid`, `partial`, `failed` |
@@ -137,18 +180,58 @@ La fila significa únicamente “fue visto explícitamente”. No significa que 
 | `error_message` | text | nullable |
 | `idempotency_key` | varchar | nullable, UNIQUE si se usa |
 
+`TrackingRun` exige exactamente una fuente mediante un `CHECK`: un run de
+perfil tiene `profile_id` y un run de búsqueda tiene `tracked_search_id`.
+Los anuncios observados exclusivamente desde búsquedas pueden tener
+`listings.profile_id = NULL`; no se crea un perfil sintético.
+
+### `possible_relistings`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer/bigint | PK |
+| `previous_listing_id` | FK a `listings.id` | NOT NULL, RESTRICT |
+| `current_listing_id` | FK a `listings.id` | NOT NULL, RESTRICT |
+| `score` | numeric(5,4) | NOT NULL, 0..1 heurístico |
+| `reasons_json` | text/JSON portable | NOT NULL |
+| `detected_at` | timestamp with timezone | NOT NULL |
+| `status` | varchar | `candidate`, `confirmed`, `rejected`; actualmente `candidate` |
+| `event_id` | FK a `tracking_events.id` | nullable, UNIQUE |
+
+La pareja `(previous_listing_id, current_listing_id)` es única. Existen
+índices por `(score, detected_at)` y `current_listing_id`. `listings` conserva
+también el `seller_user_id` observado, nullable, para acotar candidatos sin
+alterar la identidad por `(marketplace, external_id)`.
+
+### `tracked_searches`
+
+Todas las búsquedas tienen `marketplace` (`varchar(32)`, NOT NULL, default
+`wallapop`).
+
+Además de la configuración de consulta, filtros, enablement e intervalo, la
+tabla contiene:
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `notify_on_first_run` | boolean | NOT NULL, default `false` para búsquedas nuevas |
+
+La migración `0011_search_initial_baseline` establece temporalmente `true` en
+las filas existentes para conservar las notificaciones históricas de la
+primera ejecución. Las filas nuevas usan el default `false`.
+
 ## Índices
 
 Índices iniciales, evitando indexar cada campo:
 
 - `profiles(wallapop_user_id)` mediante UNIQUE.
 - `profile_snapshots(profile_id, observed_at DESC)` para histórico y último snapshot.
-- `listings(wallapop_item_id)` mediante UNIQUE.
+- `listings(marketplace, external_id)` mediante UNIQUE.
 - `listings(profile_id, last_seen_at)` para anuncios de un perfil.
 - `listing_snapshots(listing_id, observed_at DESC)` para histórico y precio actual.
 - `tracking_run_listings(listing_id, tracking_run_id)` para presencia de un anuncio por ejecución.
 - `tracking_run_listings(tracking_run_id, listing_id)` mediante su PK para listar anuncios vistos en una ejecución.
 - `tracking_runs(profile_id, started_at DESC)` para ejecuciones recientes.
+- `tracking_runs(tracked_search_id, started_at DESC)` para ejecuciones de búsquedas.
 - `tracking_runs(status, finished_at)` para fallos y ejecuciones incompletas.
 - `listing_snapshots(price)` solo si las consultas de precio demuestran que lo necesitan; no es obligatorio inicialmente.
 
@@ -158,12 +241,13 @@ Las expresiones `DESC` deben declararse mediante SQLAlchemy de forma portable; n
 
 En base de datos:
 
-- unicidad de `wallapop_user_id` y `wallapop_item_id`;
+- unicidad de `wallapop_user_id` y `(marketplace, external_id)`;
 - foreign keys con borrado restrictivo por defecto;
 - valores no negativos para contadores y precios;
 - `finished_at IS NULL` mientras `status = running`;
 - `finished_at IS NOT NULL` para `valid`, `partial` y `failed`;
 - `status` limitado a los valores documentados.
+- exactamente una de `tracking_runs.profile_id` y `tracking_runs.tracked_search_id` debe estar informada.
 - `tracking_run_listings` no se usa para inferir ausencias si el `tracking_run` no es completo y válido.
 
 En Pydantic o capa de dominio:

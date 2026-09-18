@@ -86,3 +86,11 @@ def test_cli_run_and_run_all_continue(tmp_path, monkeypatch):
     assert result.exit_code == 0 and "valid" in result.output
     all_result = runner.invoke(cli.app, ["run-all"])
     assert all_result.exit_code == 0 and "valid: 1" in all_result.output
+
+
+def test_cli_notifications_list_and_retry(tmp_path, monkeypatch):
+    _database(tmp_path, monkeypatch)
+    listed = runner.invoke(cli.app, ["notifications", "list"])
+    retried = runner.invoke(cli.app, ["notifications", "retry"])
+    assert listed.exit_code == 0
+    assert retried.exit_code == 0 and "delivered: 0" in retried.output

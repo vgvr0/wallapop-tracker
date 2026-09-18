@@ -1,0 +1,28 @@
+{
+  "categories": [
+    {
+      "id": 100,
+      "name": "Cars",
+      "path": "",
+      "vertical_id": "cars",
+      "icon": "car",
+      "attributes": {
+        "brand": {"title": "brand", "order": 0},
+        "model": {"title": "Model", "order": 1}
+      },
+      "subcategories": [],
+      "category_leaf_selection_mandatory": false
+    },
+    {
+      "id": 24200,
+      "name": "Technology & electronics",
+      "path": "",
+      "vertical_id": "consumer_goods",
+      "icon": "technology",
+      "attributes": {},
+      "subcategories": [
+        {"id": 24201, "name": "Phones", "parent_id": 24200, "subcategories": []}
+      ]
+    }
+  ]
+}

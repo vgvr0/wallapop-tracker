@@ -174,6 +174,11 @@ Para la frecuencia aproximada de una captura semanal se adopta una variante de l
 
 La unidad de idempotencia debe ser una ejecución, no el timestamp del anuncio.
 
+Un `TrackingRun` tiene exactamente una fuente: `profile_id` para capturas de
+perfil o `tracked_search_id` para capturas de búsqueda. Las búsquedas no crean
+perfiles sintéticos; su presencia se registra directamente en el run y en las
+tablas de matches.
+
 - Cada `tracking_run` recibe un `idempotency_key` determinista cuando el invocador puede proporcionarlo.
 - `profile_snapshots` debe ser único por `(profile_id, tracking_run_id)`.
 - `listing_snapshots` debe ser único por `(listing_id, tracking_run_id)`.

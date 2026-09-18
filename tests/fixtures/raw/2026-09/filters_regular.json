@@ -1,0 +1,60 @@
+{
+  "selected_filters": [
+    {"id": "category_id", "value_type": "single", "value": {"value": "24200"}}
+  ],
+  "filter_sections": [
+    {
+      "filters": [
+        {
+          "type": "tree",
+          "type_data": {"selected_id": "24200", "root_id": "24200", "title": "Technology & electronics"},
+          "search_params": {"root_param": {"param_key": "category_id", "param_value": "24200"}},
+          "id": "category",
+          "title": "Category",
+          "reload_when_changed": true
+        }
+      ]
+    },
+    {
+      "filters": [
+        {
+          "type": "toggle",
+          "type_data": {"label": "Shipping"},
+          "search_params": {"toggle_param": {"param_key": "is_shippable", "param_value": null}},
+          "id": "is_shippable",
+          "title": "Shipping options",
+          "reload_when_changed": false
+        },
+        {
+          "type": "slider",
+          "type_data": {"unit": "EUR", "format": "currency"},
+          "search_params": {
+            "min_param": {"param_key": "min_sale_price", "param_value": null},
+            "max_param": {"param_key": "max_sale_price", "param_value": null}
+          },
+          "id": "price",
+          "title": "Price",
+          "reload_when_changed": true
+        },
+        {
+          "type": "list",
+          "type_data": {
+            "selection": "multi",
+            "source_data": {
+              "options_data": {
+                "options": [
+                  {"id": "new", "title": "New"},
+                  {"id": "good", "title": "Good condition"}
+                ]
+              }
+            }
+          },
+          "search_params": {"list_param": {"param_key": "condition", "param_value": null}},
+          "id": "condition",
+          "title": "Condition",
+          "reload_when_changed": false
+        }
+      ]
+    }
+  ]
+}

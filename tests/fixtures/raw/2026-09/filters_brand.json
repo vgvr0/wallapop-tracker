@@ -1,0 +1,11 @@
+{
+  "type": "list",
+  "id": "brand",
+  "title": "filters_brand_label",
+  "options": [
+    {"id": "Apple", "title": "Apple"},
+    {"id": "Acer", "title": "Acer"},
+    {"id": "Sin marca", "title": "Sin marca"}
+  ],
+  "pagination": {"options_page_size": 100}
+}
