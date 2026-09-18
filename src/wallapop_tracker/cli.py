@@ -2,12 +2,14 @@
 
 import asyncio
 import os
-from datetime import UTC, datetime
+from datetime import timedelta
 from urllib.parse import urlparse
 
 import typer
 
 from .client import WallapopClient
+from .services.runner import ProfileTrackingRunner
+from .services.scheduler import TrackingScheduler
 from .services.tracker import ProfileTracker
 from .storage.database import Database
 from .storage.models import TrackingRunStatus
@@ -122,21 +124,18 @@ def remove(alias: str, yes: bool = typer.Option(False, "--yes")) -> None:
 
 async def _run(alias: str) -> TrackingRunStatus:
     database = _db()
-    with database.session() as session:
-        tracked = TrackedProfileRepository(session).get_by_alias(alias)
-        if tracked is None:
-            raise typer.BadParameter(f"Unknown alias: {alias}")
-        url = tracked.profile_url
     try:
-        async with WallapopClient() as client:
-            result = await ProfileTracker(client, database).track_profile(url)
-        with database.transaction() as session:
-            repo = TrackedProfileRepository(session)
-            repo.update_last_run(alias, datetime.now(UTC), result.status)
-            if result.profile_id is not None:
-                repo.attach_profile(alias, result.profile_id)
-        typer.echo(f"{alias}\t{result.run_id}\t{result.status.value}\t{result.items_fetched}")
+        result = await ProfileTrackingRunner(
+            database, client_factory=WallapopClient, tracker_factory=ProfileTracker
+        ).run(alias)
+        if result.tracking_result is not None:
+            tracking = result.tracking_result
+            typer.echo(f"{alias}\t{tracking.run_id}\t{result.status.value}\t{tracking.items_fetched}")
+        else:
+            typer.echo(f"{alias}\tfailed\t{result.error or 'unknown error'}")
         return result.status
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     finally:
         database.close()
 
@@ -167,6 +166,37 @@ def run_all() -> None:
             totals["failed"] += 1
     typer.echo("Summary")
     typer.echo(" ".join(f"{key}: {value}" for key, value in totals.items()))
+
+
+@app.command()
+def schedule(
+    interval_hours: int = typer.Option(168, min=1),
+    poll_seconds: float = typer.Option(60.0, min=0),
+    once: bool = typer.Option(False, "--once"),
+) -> None:
+    """Run enabled profiles on a recurring schedule."""
+    database = _db()
+    scheduler = TrackingScheduler(
+        database,
+        timedelta(hours=interval_hours),
+        poll_seconds=poll_seconds,
+        runner=ProfileTrackingRunner(
+            database, client_factory=WallapopClient, tracker_factory=ProfileTracker
+        ),
+    )
+    try:
+        if once:
+            result = asyncio.run(scheduler.run_once())
+            typer.echo(
+                f"evaluated: {result.evaluated} executed: {result.executed} "
+                f"succeeded: {result.succeeded} failed: {result.failed}"
+            )
+        else:
+            asyncio.run(scheduler.run_forever())
+    except KeyboardInterrupt:
+        typer.echo("Scheduler stopped")
+    finally:
+        database.close()
 
 
 if __name__ == "__main__":
