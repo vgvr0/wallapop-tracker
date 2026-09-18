@@ -90,14 +90,17 @@ class TrackedSearchRepository:
         return record
 
     def has_valid_run(self, search_id: int) -> bool:
-        return self.session.scalar(
-            select(TrackingRunRecord.id)
-            .where(
-                TrackingRunRecord.tracked_search_id == search_id,
-                TrackingRunRecord.status == TrackingRunStatus.VALID,
+        return (
+            self.session.scalar(
+                select(TrackingRunRecord.id)
+                .where(
+                    TrackingRunRecord.tracked_search_id == search_id,
+                    TrackingRunRecord.status == TrackingRunStatus.VALID,
+                )
+                .limit(1)
             )
-            .limit(1)
-        ) is not None
+            is not None
+        )
 
     def enable(self, search_id: int) -> TrackedSearchRecord:
         return self._set_enabled(search_id, True)
@@ -146,6 +149,54 @@ class TrackedSearchRepository:
         record.last_run_status = status
         record.last_run_id = run_id
         record.updated_at = datetime.now(UTC)
+        self.session.flush()
+        return record
+
+    def update(
+        self,
+        search_id: int,
+        *,
+        name: str | None = None,
+        query: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
+        filters: dict[str, Any] | None = None,
+        enabled: bool | None = None,
+        notify_on_first_run: bool | None = None,
+        interval_seconds: int | None = None,
+    ) -> TrackedSearchRecord:
+        record = self.get(search_id)
+        if record is None:
+            raise ValueError(f"Unknown search: {search_id}")
+        if query is not None and not query.strip():
+            raise ValueError("query is required")
+        if interval_seconds is not None and interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        effective_min = min_price if min_price is not None else record.min_price
+        effective_max = max_price if max_price is not None else record.max_price
+        if (
+            effective_min is not None
+            and effective_max is not None
+            and effective_min > effective_max
+        ):
+            raise ValueError("min_price must not exceed max_price")
+        if name is not None:
+            record.name = name.strip() or None
+        if query is not None:
+            record.query = query.strip()
+        if min_price is not None:
+            record.min_price = min_price
+        if max_price is not None:
+            record.max_price = max_price
+        if filters is not None:
+            record.filters_json = _json_text(filters)
+        if enabled is not None:
+            record.enabled = enabled
+        if notify_on_first_run is not None:
+            record.notify_on_first_run = notify_on_first_run
+        if interval_seconds is not None:
+            record.interval_seconds = interval_seconds
+        record.updated_at = _utc_now()
         self.session.flush()
         return record
 
@@ -235,20 +286,47 @@ class TrackedListingRepository:
         self.session.flush()
         return record
 
+    def update(
+        self,
+        listing_id: int,
+        *,
+        enabled: bool | None = None,
+        interval_seconds: int | None = None,
+        notes: str | None = None,
+    ) -> TrackedListingRecord:
+        record = self.get(listing_id)
+        if record is None:
+            raise ValueError(f"Unknown tracked listing: {listing_id}")
+        if interval_seconds is not None and interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        if enabled is not None:
+            record.enabled = enabled
+        if interval_seconds is not None:
+            record.interval_seconds = interval_seconds
+        if notes is not None:
+            record.notes = notes
+        record.updated_at = _utc_now()
+        self.session.flush()
+        return record
+
     def remove(self, value: str) -> None:
         record = self.get_by_alias_or_id(value)
         if record is None:
             raise ValueError(f"Unknown tracked listing: {value}")
-        if self.session.scalar(
-            select(TrackingRunRecord.id)
-            .where(TrackingRunRecord.tracked_listing_id == record.id)
-            .limit(1)
-        ) is not None:
+        if (
+            self.session.scalar(
+                select(TrackingRunRecord.id)
+                .where(TrackingRunRecord.tracked_listing_id == record.id)
+                .limit(1)
+            )
+            is not None
+        ):
             raise ValueError(
                 "Tracked listing has historical runs; disable it instead of removing it"
             )
         self.session.delete(record)
         self.session.flush()
+
 
 class SearchMatchRepository:
     def __init__(self, session: Session) -> None:

@@ -225,6 +225,7 @@ The image installs the package into a Python 3.12 slim image and runs as a non-r
 docker build -t wallapop-tracker .
 docker compose run --rm tracker wallapop-track --help
 docker compose run --rm tracker wallapop-track list
+docker compose run --rm --service-ports tracker uvicorn wallapop_tracker.api.app:app --host 0.0.0.0
 ```
 
 ## Configuration
@@ -261,3 +262,9 @@ Listings can be scored deterministically within a tracked search with
 with `wallapop-track score search <search-id>`. See
 [`docs/deal_scoring.md`](docs/deal_scoring.md); the score is contextual market
 analysis, not purchase advice.
+
+## API
+
+Run the local API with `uvicorn wallapop_tracker.api.app:app --reload`.
+It is documented in [`docs/api.md`](docs/api.md), uses `/api/v1`, and has no
+authentication in this phase; keep it private.

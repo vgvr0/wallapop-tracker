@@ -9,6 +9,7 @@ description = "Read-only client and parsers for authorized Wallapop public profi
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.13",
+  "fastapi>=0.115",
   "httpx>=0.27",
   "pydantic>=2",
   "sqlalchemy>=2.0",
@@ -23,6 +24,7 @@ dev = [
   "ruff>=0.6",
   "mypy>=1.11",
   "alembic>=1.13",
+  "uvicorn>=0.30",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -42,6 +44,9 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/wallapop_tracker/api/*.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

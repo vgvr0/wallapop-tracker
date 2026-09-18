@@ -273,3 +273,9 @@ Read-only `DealScoringService` consumes the persisted search history and the
 existing market reporting layer. It returns an explainable score and separate
 confidence value without adding a persistence table or coupling tracking to
 analysis.
+
+## FastAPI
+
+`wallapop_tracker.api.app.create_app` creates the HTTP transport layer. Each
+request gets its own synchronous SQLAlchemy session; routers map validated
+input to existing repositories, reporting functions, and services.

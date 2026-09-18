@@ -312,3 +312,10 @@ price history, freshness, objective seller metrics, and relisting context. The
 result is contextual per search, explicitly explains its contributions, and is
 not persisted. ML, recommendations, forecasting, and Phase 13 remain out of
 scope.
+
+## Phase 13 — FastAPI application
+
+Completed as a local/private `/api/v1` transport layer over the existing
+domain services, reporting, repositories, analytics, scoring, relisting and
+notification state. Authentication, users, subscriptions, frontend and
+external writes remain out of scope.
