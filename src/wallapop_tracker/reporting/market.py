@@ -102,6 +102,7 @@ def get_market_summary(
     *,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
+    exclude_listing_id: int | None = None,
 ) -> MarketSummary:
     runs = _search_runs(session, search_id, end_at=end_at)
     period_runs = [run for run in runs if _in_period(run.started_at, start_at, end_at)]
@@ -109,6 +110,8 @@ def get_market_summary(
     match_rows = _matches(session, search_id, end)
     listing_ids = {row.listing_id for row in match_rows}
     active_ids = _active_ids(session, runs, end)
+    if exclude_listing_id is not None:
+        active_ids.discard(exclude_listing_id)
     prices = _prices_at(session, active_ids, end)
     stats = _price_stats(prices.values())
     removed = _removed_transitions(session, runs, start_at, end_at)

@@ -253,3 +253,11 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 ## Development status
 
 This is a functional technical project with profile tracking, search tracking, normalized parsers, historical snapshots, deterministic diffing, reusable filters, global deduplication, reporting, alerts, a shared scheduler, CLI, SQLite, Alembic, Docker packaging, automated tests, CI, and manual E2E validation. Its external API integration remains subject to the limitations above, especially changes to undocumented Wallapop response contracts.
+
+## Deal scoring
+
+Listings can be scored deterministically within a tracked search with
+`wallapop-track score listing <listing-id> --search-id <id>` or ranked in batch
+with `wallapop-track score search <search-id>`. See
+[`docs/deal_scoring.md`](docs/deal_scoring.md); the score is contextual market
+analysis, not purchase advice.

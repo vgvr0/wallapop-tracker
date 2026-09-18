@@ -266,3 +266,10 @@ El tercer origen monitorizable reutiliza el mismo listing global:
 TrackedListing -> ListingProvider -> WallapopClient.get_item
               -> TrackingRun -> ListingSnapshot -> TrackingEvent
 ```
+
+## Deal scoring
+
+Read-only `DealScoringService` consumes the persisted search history and the
+existing market reporting layer. It returns an explainable score and separate
+confidence value without adding a persistence table or coupling tracking to
+analysis.

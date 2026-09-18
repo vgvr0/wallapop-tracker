@@ -304,3 +304,11 @@ o de compatibilidad del schema.
 
 Hasta que esas preguntas tengan evidencia offline o validación autorizada, no
 se debe inventar un contrato ni cambiar automáticamente a endpoints modernos.
+
+## Phase 12 — Deterministic Deal Scoring
+
+Completed as a derived domain service. It uses the latest valid market state,
+price history, freshness, objective seller metrics, and relisting context. The
+result is contextual per search, explicitly explains its contributions, and is
+not persisted. ML, recommendations, forecasting, and Phase 13 remain out of
+scope.

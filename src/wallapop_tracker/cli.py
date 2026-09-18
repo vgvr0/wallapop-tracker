@@ -22,6 +22,7 @@ from .reporting import (
     get_price_time_series,
     get_seller_market_stats,
 )
+from .services.deal_scoring import DealScoringService
 from .services.notifications import NotificationService
 from .services.runner import (
     ListingTrackingRunner,
@@ -32,7 +33,7 @@ from .services.scheduler import TrackingScheduler
 from .services.search_tracker import SearchTracker
 from .services.tracker import ProfileTracker
 from .storage.database import Database
-from .storage.models import TrackingRunStatus
+from .storage.models import ListingRecord, TrackingRunStatus
 from .storage.repositories import (
     ListingRepository,
     PossibleRelistingRepository,
@@ -48,12 +49,14 @@ listing_app = typer.Typer(no_args_is_help=True)
 metadata_app = typer.Typer(no_args_is_help=True)
 relistings_app = typer.Typer(no_args_is_help=True)
 analytics_app = typer.Typer(no_args_is_help=True)
+score_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
 app.add_typer(listing_app, name="listing")
 app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
 app.add_typer(analytics_app, name="analytics")
+app.add_typer(score_app, name="score")
 
 
 def _db() -> Database:
@@ -175,6 +178,55 @@ def analytics_brands(search_id: int) -> None:
                 typer.echo(
                     f"{brand.brand}\t{brand.listing_count}\t{brand.active_count}\t"
                     f"{_money(brand.median_price)}"
+                )
+    finally:
+        database.close()
+
+
+@score_app.command("listing")
+def score_listing(
+    listing_id: int,
+    search_id: int = typer.Option(..., "--search-id", min=1),
+) -> None:
+    """Show a deterministic opportunity score in one search context."""
+    database = _db()
+    try:
+        with database.session() as session:
+            result = DealScoringService(session).score_listing(listing_id, search_id)
+            typer.echo(
+                f"Deal score: {result.score}/100"
+                if result.score is not None
+                else "Deal score: unavailable"
+            )
+            typer.echo(f"Confidence: {result.confidence:.0%}")
+            typer.echo(f"Status: {result.status.value}")
+            if result.reasons:
+                typer.echo("Reasons:")
+                for reason in result.reasons:
+                    typer.echo(f"+ {reason.contribution:>5.1f}  {reason.description}")
+    finally:
+        database.close()
+
+
+@score_app.command("search")
+def score_search(
+    search_id: int,
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+) -> None:
+    """Rank active listings by their derived score for one search."""
+    database = _db()
+    try:
+        with database.session() as session:
+            typer.echo("Score\tConfidence\tPrice\tListing")
+            service = DealScoringService(session)
+            for result in service.score_search(search_id, limit=limit):
+                listing = session.get(ListingRecord, result.listing_id)
+                snapshot = service._latest_snapshot(result.listing_id)
+                price = _money(snapshot.price if snapshot is not None else None)
+                label = listing.wallapop_item_id if listing is not None else str(result.listing_id)
+                typer.echo(
+                    f"{result.score if result.score is not None else '-'}\t"
+                    f"{result.confidence:.0%}\t{price}\t{label}"
                 )
     finally:
         database.close()
