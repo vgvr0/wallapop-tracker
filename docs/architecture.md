@@ -91,7 +91,8 @@ Auditoría de cada intento, incluidos los que no generan cambios:
 
 ```text
 id
-profile_id
+profile_id                 # nullable; source for profile runs
+tracked_search_id          # nullable; source for search runs
 started_at
 finished_at
 status                 # running | valid | partial | failed
@@ -99,6 +100,10 @@ error_message
 items_fetched
 pages_fetched
 ```
+
+Exactly one of `profile_id` and `tracked_search_id` is required by a database
+constraint. Search runs do not create a synthetic `ProfileRecord`; listings
+seen only from searches may temporarily have a null `profile_id`.
 
 Se pueden añadir detalles operativos pequeños si resultan útiles para diagnóstico, pero no se almacenarán headers, cookies ni secretos.
 
@@ -195,4 +200,3 @@ La siguiente fase podrá implementar modelos SQLAlchemy 2, SQLite, esquema/migra
 - scheduler;
 - CLI de tracking;
 - integración automática con `WallapopClient`.
-

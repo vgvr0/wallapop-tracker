@@ -199,6 +199,11 @@ class TrackingRunRecord(Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (
         CheckConstraint(
+            "(profile_id IS NOT NULL AND tracked_search_id IS NULL) OR "
+            "(profile_id IS NULL AND tracked_search_id IS NOT NULL)",
+            name="ck_tracking_runs_exactly_one_source",
+        ),
+        CheckConstraint(
             "status IN ('running', 'valid', 'partial', 'failed')",
             name="ck_tracking_runs_status",
         ),
@@ -212,10 +217,8 @@ class TrackingRunRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), nullable=False)
-    # Kept as a portable association key. The initial historical migration
-    # creates this table before the tracked-search table exists.
-    tracked_search_id: Mapped[int | None] = mapped_column(Integer)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
+    tracked_search_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_searches.id"))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TrackingRunStatus] = mapped_column(
@@ -234,7 +237,8 @@ class TrackingRunRecord(Base):
     new_listings: Mapped[int | None] = mapped_column(Integer)
     price_changes: Mapped[int | None] = mapped_column(Integer)
     duplicates_suppressed: Mapped[int | None] = mapped_column(Integer)
-    profile: Mapped[ProfileRecord] = relationship(back_populates="tracking_runs")
+    profile: Mapped[ProfileRecord | None] = relationship(back_populates="tracking_runs")
+    tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
     profile_snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(
         back_populates="tracking_run"
     )
@@ -249,12 +253,12 @@ class ListingRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     wallapop_item_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), nullable=False)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    profile: Mapped[ProfileRecord] = relationship(back_populates="listings")
+    profile: Mapped[ProfileRecord | None] = relationship(back_populates="listings")
     snapshots: Mapped[list["ListingSnapshotRecord"]] = relationship(back_populates="listing")
 
 

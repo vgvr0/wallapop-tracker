@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,19 +14,17 @@ from sqlalchemy.orm import Session, sessionmaker
 from wallapop_tracker.client import WallapopClient
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
-from wallapop_tracker.models import Listing, Profile
+from wallapop_tracker.models import Listing
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
     ListingSnapshotRecord,
-    ProfileRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
     TrackingRunStatus,
 )
 from wallapop_tracker.storage.repositories import (
     ListingRepository,
-    ProfileRepository,
     SearchMatchRepository,
     SnapshotRepository,
     TrackedSearchRepository,
@@ -115,11 +113,8 @@ class SearchTracker:
             search = search_repo.get(search_id)
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
-            anchor = self._anchor(session, search, started_at)
             runs = TrackingRunRepository(session)
-            run = runs.start_tracking_run(
-                anchor.id, started_at=started_at, tracked_search_id=search_id
-            )
+            run = runs.start_search_run(search_id, started_at=started_at)
             runs.mark_valid(run.id, items_fetched=len(fetched), items_ok=True)
             listing_repo = ListingRepository(session)
             snapshots = SnapshotRepository(session)
@@ -137,7 +132,7 @@ class SearchTracker:
                 previous_snapshot = self._latest_snapshot(session, existing)
                 record, _ = listing_repo.get_or_create_global_listing(
                     listing,
-                    anchor.id,
+                    None,
                     observed_at=started_at,
                     tracking_run_id=run.id,
                 )
@@ -224,9 +219,8 @@ class SearchTracker:
             search = TrackedSearchRepository(session).get(search_id)
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
-            anchor = self._anchor(session, search, started_at)
-            run = TrackingRunRepository(session).start_tracking_run(
-                anchor.id, started_at=started_at, tracked_search_id=search_id
+            run = TrackingRunRepository(session).start_search_run(
+                search_id, started_at=started_at
             )
             TrackingRunRepository(session).mark_failed(
                 run.id, error_type=type(error).__name__, error_message=str(error)
@@ -237,21 +231,6 @@ class SearchTracker:
             return SearchTrackingResult(
                 search_id, run.id, TrackingRunStatus.FAILED, 0, error=str(error)
             )
-
-    @staticmethod
-    def _anchor(
-        session: Session, search: TrackedSearchRecord, observed_at: datetime
-    ) -> ProfileRecord:
-        return cast(
-            ProfileRecord,
-            ProfileRepository(session).get_or_create_profile(
-                Profile(
-                    user_id=f"tracked-search:{search.id}",
-                    name=search.name or search.query,
-                ),
-                observed_at=observed_at,
-            ),
-        )
 
     @staticmethod
     def _latest_snapshot(

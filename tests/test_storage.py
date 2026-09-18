@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from wallapop_tracker.exceptions import WallapopError
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
@@ -14,7 +15,9 @@ from wallapop_tracker.storage.models import (
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
+    TrackedSearchRecord,
     TrackingRunListingRecord,
+    TrackingRunRecord,
 )
 from wallapop_tracker.storage.repositories import (
     ListingRepository,
@@ -39,6 +42,32 @@ def profile() -> Profile:
         slug="test-user-1",
         url="https://www.wallapop.com/user/test-user-1",
     )
+
+
+def test_tracking_run_requires_exactly_one_source(database):
+    now = datetime.now(UTC)
+    with database.transaction() as session:
+        profile_record = ProfileRepository(session).get_or_create_profile(profile())
+        search = TrackedSearchRecord(query="phone", created_at=now, updated_at=now)
+        session.add(search)
+        session.flush()
+        profile_id, search_id = profile_record.id, search.id
+
+    with pytest.raises(IntegrityError):
+        with database.transaction() as session:
+            session.add(TrackingRunRecord(started_at=now))
+            session.flush()
+
+    with pytest.raises(IntegrityError):
+        with database.transaction() as session:
+            session.add(
+                TrackingRunRecord(
+                    profile_id=profile_id,
+                    tracked_search_id=search_id,
+                    started_at=now,
+                )
+            )
+            session.flush()
 
 
 def listing(price: str = "120") -> Listing:

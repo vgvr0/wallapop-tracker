@@ -188,7 +188,7 @@ def _latest_listing_snapshots(
 
 def get_price_history(session: Session, listing_id: int) -> list[PricePoint]:
     listing = session.get(ListingRecord, listing_id)
-    if listing is None:
+    if listing is None or listing.profile_id is None:
         return []
     runs = _valid_runs(session, listing.profile_id)
     presence = _presence_by_run(session, [run.id for run in runs], listing_id)
@@ -222,7 +222,7 @@ def get_price_history(session: Session, listing_id: int) -> list[PricePoint]:
 
 def get_presence_history(session: Session, listing_id: int) -> list[PresencePoint]:
     listing = session.get(ListingRecord, listing_id)
-    if listing is None:
+    if listing is None or listing.profile_id is None:
         return []
     runs = _valid_runs(session, listing.profile_id)
     presence = _presence_by_run(session, [run.id for run in runs], listing_id)

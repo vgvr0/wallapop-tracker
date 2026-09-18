@@ -170,7 +170,7 @@ class ProfileTracker:
         error: BaseException | None,
     ) -> TrackingResult:
         with self.session_factory.begin() as session:
-            run = TrackingRunRepository(session).start_tracking_run(
+            run = TrackingRunRepository(session).start_profile_run(
                 profile_id, started_at=started_at
             )
             TrackingRunRepository(session).finish_tracking_run(
@@ -212,7 +212,7 @@ class ProfileTracker:
                     session, user_id, profile_url, started_at
                 ).id
             runs = TrackingRunRepository(session)
-            run = runs.start_tracking_run(profile_id, started_at=started_at)
+            run = runs.start_profile_run(profile_id, started_at=started_at)
             runs.mark_valid(
                 run.id,
                 items_fetched=len(listings),

@@ -9,6 +9,7 @@ from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
     PresenceState,
+    ProfileRecord,
     ProfileSnapshotRecord,
     TrackingRunListingRecord,
     TrackingRunRecord,
@@ -86,6 +87,10 @@ async def test_valid_capture_and_identical_second_capture(database):
         assert session.scalar(select(func.count()).select_from(TrackingRunListingRecord)) == 4
         assert session.scalar(select(func.count()).select_from(ProfileSnapshotRecord)) == 1
         assert session.scalar(select(func.count()).select_from(ListingSnapshotRecord)) == 2
+        run = session.scalar(select(TrackingRunRecord).order_by(TrackingRunRecord.id))
+        assert run is not None
+        assert run.profile_id == session.scalar(select(ProfileRecord.id))
+        assert run.tracked_search_id is None
 
 
 @pytest.mark.asyncio

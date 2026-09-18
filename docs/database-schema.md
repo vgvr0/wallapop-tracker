@@ -68,7 +68,7 @@ Los snapshots de perfil son change-based: solo se inserta una fila si cambia alg
 |---|---|---|
 | `id` | integer/bigint | PK |
 | `wallapop_item_id` | varchar | NOT NULL, UNIQUE |
-| `profile_id` | FK a `profiles.id` | NOT NULL |
+| `profile_id` | FK a `profiles.id` | nullable; NULL para listings observados solo por búsquedas |
 | `first_seen_at` | timestamp with timezone | NOT NULL |
 | `last_seen_at` | timestamp with timezone | NOT NULL |
 
@@ -123,7 +123,8 @@ La fila significa únicamente “fue visto explícitamente”. No significa que 
 | Campo | Tipo lógico | Reglas |
 |---|---|---|
 | `id` | integer/bigint | PK |
-| `profile_id` | FK a `profiles.id` | NOT NULL |
+| `profile_id` | FK a `profiles.id` | nullable; mutuamente excluyente con `tracked_search_id` |
+| `tracked_search_id` | FK a `tracked_searches.id` | nullable; mutuamente excluyente con `profile_id` |
 | `started_at` | timestamp with timezone | NOT NULL |
 | `finished_at` | timestamp with timezone | nullable mientras está `running` |
 | `status` | varchar/enum controlado | `running`, `valid`, `partial`, `failed` |
@@ -137,6 +138,11 @@ La fila significa únicamente “fue visto explícitamente”. No significa que 
 | `error_message` | text | nullable |
 | `idempotency_key` | varchar | nullable, UNIQUE si se usa |
 
+`TrackingRun` exige exactamente una fuente mediante un `CHECK`: un run de
+perfil tiene `profile_id` y un run de búsqueda tiene `tracked_search_id`.
+Los anuncios observados exclusivamente desde búsquedas pueden tener
+`listings.profile_id = NULL`; no se crea un perfil sintético.
+
 ## Índices
 
 Índices iniciales, evitando indexar cada campo:
@@ -149,6 +155,7 @@ La fila significa únicamente “fue visto explícitamente”. No significa que 
 - `tracking_run_listings(listing_id, tracking_run_id)` para presencia de un anuncio por ejecución.
 - `tracking_run_listings(tracking_run_id, listing_id)` mediante su PK para listar anuncios vistos en una ejecución.
 - `tracking_runs(profile_id, started_at DESC)` para ejecuciones recientes.
+- `tracking_runs(tracked_search_id, started_at DESC)` para ejecuciones de búsquedas.
 - `tracking_runs(status, finished_at)` para fallos y ejecuciones incompletas.
 - `listing_snapshots(price)` solo si las consultas de precio demuestran que lo necesitan; no es obligatorio inicialmente.
 
@@ -164,6 +171,7 @@ En base de datos:
 - `finished_at IS NULL` mientras `status = running`;
 - `finished_at IS NOT NULL` para `valid`, `partial` y `failed`;
 - `status` limitado a los valores documentados.
+- exactamente una de `tracking_runs.profile_id` y `tracking_runs.tracked_search_id` debe estar informada.
 - `tracking_run_listings` no se usa para inferir ausencias si el `tracking_run` no es completo y válido.
 
 En Pydantic o capa de dominio:

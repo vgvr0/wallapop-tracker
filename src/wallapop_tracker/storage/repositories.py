@@ -438,7 +438,7 @@ class ListingRepository:
     def get_or_create_global_listing(
         self,
         listing: Listing,
-        profile_id: int,
+        profile_id: int | None,
         *,
         observed_at: datetime | None = None,
         tracking_run_id: int | None = None,
@@ -446,9 +446,9 @@ class ListingRepository:
         """Upsert by Wallapop ID without changing the original seller anchor.
 
         Profile tracking historically treats a listing/profile mismatch as an
-        invariant violation. Search results are global, so an item may already
-        be anchored to a seller profile or to another search's technical
-        profile; this method intentionally keeps that first anchor.
+        invariant violation. Search results are global and do not require a
+        profile identity; a later profile capture may attach one to an
+        unanchored listing, while an existing seller anchor is preserved.
         """
         now = observed_at or _utc_now()
         valid_observation = tracking_run_id is not None and _run_is_valid(
@@ -476,6 +476,8 @@ class ListingRepository:
                 if existing is None:
                     raise
                 record, created = existing, False
+        if record.profile_id is None and profile_id is not None:
+            record.profile_id = profile_id
         if valid_observation and record is not None:
             record.last_seen_at = now
             record.updated_at = now
@@ -487,24 +489,51 @@ class TrackingRunRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def start_tracking_run(
+    def start_profile_run(
         self,
         profile_id: int,
         *,
         started_at: datetime | None = None,
         idempotency_key: str | None = None,
-        tracked_search_id: int | None = None,
     ) -> TrackingRunRecord:
         record = TrackingRunRecord(
             profile_id=profile_id,
             started_at=started_at or _utc_now(),
             status=TrackingRunStatus.RUNNING,
             idempotency_key=idempotency_key,
-            tracked_search_id=tracked_search_id,
         )
         self.session.add(record)
         self.session.flush()
         return record
+
+    def start_search_run(
+        self,
+        tracked_search_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        record = TrackingRunRecord(
+            tracked_search_id=tracked_search_id,
+            started_at=started_at or _utc_now(),
+            status=TrackingRunStatus.RUNNING,
+            idempotency_key=idempotency_key,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def start_tracking_run(
+        self,
+        profile_id: int,
+        *,
+        started_at: datetime | None = None,
+        idempotency_key: str | None = None,
+    ) -> TrackingRunRecord:
+        """Compatibility alias for callers that create profile runs."""
+        return self.start_profile_run(
+            profile_id, started_at=started_at, idempotency_key=idempotency_key
+        )
 
     def finish_tracking_run(
         self,

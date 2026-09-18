@@ -10,6 +10,7 @@ from wallapop_tracker.services.search_tracker import SearchTracker
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
+    ProfileRecord,
     SearchListingMatchRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
@@ -67,8 +68,16 @@ async def test_overlapping_searches_share_listing_and_new_alert(database):
     assert result_b.duplicates_suppressed == 1
     with database.session() as session:
         assert session.scalar(select(func.count()).select_from(ListingRecord)) == 1
+        assert session.scalar(select(func.count()).select_from(ProfileRecord)) == 0
         assert session.scalar(select(func.count()).select_from(SearchListingMatchRecord)) == 2
-        assert session.scalar(select(func.count()).select_from(TrackingEventRecord)) == 1
+        runs = session.scalars(select(TrackingRunRecord)).all()
+        assert len(runs) == 2
+        assert all(run.profile_id is None for run in runs)
+        assert {run.tracked_search_id for run in runs} == {first, second}
+        event = session.scalar(select(TrackingEventRecord))
+        assert event is not None
+        assert event.tracking_run_id in {run.id for run in runs}
+        assert event.tracked_search_id in {first, second}
 
 
 @pytest.mark.asyncio
