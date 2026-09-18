@@ -21,6 +21,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
 
+from wallapop_tracker.domain.marketplace import Marketplace
+
 
 class TrackingRunStatus(StrEnum):
     RUNNING = "running"
@@ -81,6 +83,12 @@ class TrackedSearchRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    marketplace: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=Marketplace.WALLAPOP,
+        server_default=Marketplace.WALLAPOP,
+    )
     name: Mapped[str | None] = mapped_column(String(255))
     query: Mapped[str] = mapped_column(String(255), nullable=False)
     min_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
@@ -328,12 +336,22 @@ class TrackingRunRecord(Base):
 class ListingRecord(Base):
     __tablename__ = "listings"
     __table_args__ = (
+        UniqueConstraint("marketplace", "external_id", name="uq_listings_marketplace_external_id"),
         Index("ix_listings_profile_last_seen", "profile_id", "last_seen_at"),
         Index("ix_listings_seller_last_seen", "seller_user_id", "last_seen_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    wallapop_item_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    marketplace: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=Marketplace.WALLAPOP,
+        server_default=Marketplace.WALLAPOP,
+    )
+    # Kept as a physical legacy bridge because revision 0001 is historical
+    # and creates its tables from metadata. New code uses external_id.
+    wallapop_item_id: Mapped[str | None] = mapped_column(String(100))
+    external_id: Mapped[str | None] = mapped_column(String(100), default=None)
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
     seller_user_id: Mapped[str | None] = mapped_column(String(100))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

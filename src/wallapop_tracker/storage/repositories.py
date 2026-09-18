@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
 from wallapop_tracker.exceptions import WallapopError
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
 from wallapop_tracker.observability import get_metrics
@@ -66,6 +67,7 @@ class TrackedSearchRepository:
         filters: dict[str, Any] | None = None,
         interval_seconds: int = 600,
         notify_on_first_run: bool = False,
+        marketplace: Marketplace = Marketplace.WALLAPOP,
     ) -> TrackedSearchRecord:
         query = query.strip()
         if not query:
@@ -76,6 +78,7 @@ class TrackedSearchRepository:
             raise ValueError("min_price must not exceed max_price")
         now = datetime.now(UTC)
         record = TrackedSearchRecord(
+            marketplace=require_supported_marketplace(marketplace).value,
             name=name.strip() if name and name.strip() else None,
             query=query,
             min_price=min_price,
@@ -165,6 +168,7 @@ class TrackedSearchRepository:
         enabled: bool | None = None,
         notify_on_first_run: bool | None = None,
         interval_seconds: int | None = None,
+        marketplace: str | Marketplace | None = None,
     ) -> TrackedSearchRecord:
         record = self.get(search_id)
         if record is None:
@@ -197,6 +201,8 @@ class TrackedSearchRepository:
             record.notify_on_first_run = notify_on_first_run
         if interval_seconds is not None:
             record.interval_seconds = interval_seconds
+        if marketplace is not None:
+            record.marketplace = require_supported_marketplace(marketplace).value
         record.updated_at = _utc_now()
         self.session.flush()
         return record
@@ -664,8 +670,15 @@ class ListingRepository:
         self.session = session
 
     def get_listing_by_wallapop_id(self, item_id: str) -> ListingRecord | None:
+        return self.get_listing(Marketplace.WALLAPOP, item_id)
+
+    def get_listing(self, marketplace: Marketplace | str, external_id: str) -> ListingRecord | None:
+        supported = require_supported_marketplace(marketplace)
         return self.session.scalar(
-            select(ListingRecord).where(ListingRecord.wallapop_item_id == item_id)
+            select(ListingRecord).where(
+                ListingRecord.marketplace == supported.value,
+                ListingRecord.external_id == external_id,
+            )
         )
 
     def get_or_create_listing(
@@ -680,12 +693,14 @@ class ListingRepository:
         valid_observation = tracking_run_id is not None and _run_is_valid(
             self.session, tracking_run_id
         )
-        record = self.get_listing_by_wallapop_id(listing.item_id)
+        record = self.get_listing(listing.marketplace, listing.item_id)
         if record is None:
             if tracking_run_id is not None and not valid_observation:
                 raise WallapopError("A non-valid tracking run cannot establish listing presence")
             record = ListingRecord(
+                marketplace=listing.marketplace.value,
                 wallapop_item_id=listing.item_id,
+                external_id=listing.item_id,
                 profile_id=profile_id,
                 seller_user_id=listing.user_id or None,
                 first_seen_at=now,
@@ -730,13 +745,15 @@ class ListingRepository:
         valid_observation = tracking_run_id is not None and _run_is_valid(
             self.session, tracking_run_id
         )
-        record = self.get_listing_by_wallapop_id(listing.item_id)
+        record = self.get_listing(listing.marketplace, listing.item_id)
         created = record is None
         if record is None:
             if tracking_run_id is not None and not valid_observation:
                 raise WallapopError("A non-valid tracking run cannot establish listing presence")
             record = ListingRecord(
+                marketplace=listing.marketplace.value,
                 wallapop_item_id=listing.item_id,
+                external_id=listing.item_id,
                 profile_id=profile_id,
                 seller_user_id=listing.user_id or None,
                 first_seen_at=now,
@@ -749,7 +766,7 @@ class ListingRepository:
                     self.session.add(record)
                     self.session.flush()
             except IntegrityError:
-                existing = self.get_listing_by_wallapop_id(listing.item_id)
+                existing = self.get_listing(listing.marketplace, listing.item_id)
                 if existing is None:
                     raise
                 record, created = existing, False

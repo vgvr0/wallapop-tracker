@@ -142,6 +142,47 @@ def test_notification_delivery_migration_from_0008(tmp_path):
     assert "ix_notification_deliveries_status_created" in indexes
 
 
+def test_marketplace_identity_migration_preserves_listing_history(tmp_path):
+    database_path = tmp_path / "marketplace.db"
+    config = _config(database_path)
+    command.upgrade(config, "0012_possible_relistings")
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO listings "
+                "(wallapop_item_id, first_seen_at, last_seen_at, created_at, updated_at) "
+                "VALUES ('ABC', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO tracked_searches "
+                "(query, enabled, interval_seconds, created_at, updated_at) "
+                "VALUES ('phone', 1, 600, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+    command.upgrade(config, "0013_marketplace_identity")
+    with engine.connect() as connection:
+        listing = connection.execute(
+            text("SELECT marketplace, external_id FROM listings")
+        ).one()
+        search_marketplace = connection.execute(
+            text("SELECT marketplace FROM tracked_searches")
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO listings "
+                "(marketplace, external_id, first_seen_at, last_seen_at, created_at, updated_at) "
+                "VALUES ('vinted', 'ABC', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+    assert listing == ("wallapop", "ABC")
+    assert search_marketplace == "wallapop"
+
+
 def test_tracked_listing_migration_from_0009(tmp_path):
     database_path = tmp_path / "tracked-listings.db"
     config = _config(database_path)

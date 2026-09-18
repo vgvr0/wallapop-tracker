@@ -326,3 +326,13 @@ Completed with structured human/JSON logging, Prometheus-compatible local
 metrics, health/readiness checks and low-cardinality instrumentation for HTTP,
 tracking, scheduler and notifications. No external monitoring infrastructure
 or Phase 15 work is included.
+
+## Phase 15 — Preparación multi-marketplace
+
+Completed incrementally. `Marketplace.WALLAPOP`, identity
+`(marketplace, external_id)` for listings, marketplace-scoped tracked
+searches, same-market relisting checks, API response fields and migration
+`0013_marketplace_identity` are in place. Providers remain small contracts
+with only Wallapop adapters. Profile identity, metadata taxonomy, URLs and
+additional providers are intentionally deferred; this phase does not
+implement Vinted or Phase 16.

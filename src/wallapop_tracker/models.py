@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from wallapop_tracker.domain.marketplace import Marketplace
+
 
 class Profile(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -48,6 +50,7 @@ class Listing(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     item_id: str
+    marketplace: Marketplace = Marketplace.WALLAPOP
     user_id: str
     title: str | None = None
     description: str | None = None
@@ -69,6 +72,11 @@ class Listing(BaseModel):
     attributes_json: dict[str, Any] | None = None
     created_at: datetime | None = None
     modified_at: datetime | None = None
+
+    @property
+    def external_id(self) -> str:
+        """Marketplace-neutral alias retained alongside the legacy item_id."""
+        return self.item_id
 
 
 class ItemsPage(BaseModel):

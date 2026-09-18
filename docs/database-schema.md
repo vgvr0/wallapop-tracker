@@ -107,7 +107,9 @@ Los snapshots de perfil son change-based: solo se inserta una fila si cambia alg
 | Campo | Tipo lógico | Reglas |
 |---|---|---|
 | `id` | integer/bigint | PK |
-| `wallapop_item_id` | varchar | NOT NULL, UNIQUE |
+| `marketplace` | varchar(32) | NOT NULL, default `wallapop` |
+| `external_id` | varchar | parte de UNIQUE con `marketplace` |
+| `wallapop_item_id` | varchar | nullable, bridge legacy |
 | `profile_id` | FK a `profiles.id` | nullable; NULL para listings observados solo por búsquedas |
 | `first_seen_at` | timestamp with timezone | NOT NULL |
 | `last_seen_at` | timestamp with timezone | NOT NULL |
@@ -203,6 +205,9 @@ alterar la identidad por `wallapop_item_id`.
 
 ### `tracked_searches`
 
+Todas las búsquedas tienen `marketplace` (`varchar(32)`, NOT NULL, default
+`wallapop`).
+
 Además de la configuración de consulta, filtros, enablement e intervalo, la
 tabla contiene:
 
@@ -220,7 +225,7 @@ primera ejecución. Las filas nuevas usan el default `false`.
 
 - `profiles(wallapop_user_id)` mediante UNIQUE.
 - `profile_snapshots(profile_id, observed_at DESC)` para histórico y último snapshot.
-- `listings(wallapop_item_id)` mediante UNIQUE.
+- `listings(marketplace, external_id)` mediante UNIQUE.
 - `listings(profile_id, last_seen_at)` para anuncios de un perfil.
 - `listing_snapshots(listing_id, observed_at DESC)` para histórico y precio actual.
 - `tracking_run_listings(listing_id, tracking_run_id)` para presencia de un anuncio por ejecución.
@@ -236,7 +241,7 @@ Las expresiones `DESC` deben declararse mediante SQLAlchemy de forma portable; n
 
 En base de datos:
 
-- unicidad de `wallapop_user_id` y `wallapop_item_id`;
+- unicidad de `wallapop_user_id` y `(marketplace, external_id)`;
 - foreign keys con borrado restrictivo por defecto;
 - valores no negativos para contadores y precios;
 - `finished_at IS NULL` mientras `status = running`;

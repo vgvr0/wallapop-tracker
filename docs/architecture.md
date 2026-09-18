@@ -131,7 +131,8 @@ Identidad estable del anuncio:
 
 ```text
 id
-wallapop_item_id UNIQUE
+marketplace
+external_id UNIQUE per marketplace
 profile_id
 first_seen_at
 last_seen_at
@@ -200,11 +201,16 @@ La siguiente fase podrá implementar modelos SQLAlchemy 2, SQLite, esquema/migra
 - scheduler;
 - CLI de tracking;
 - integración automática con `WallapopClient`.
-Las búsquedas pasan por un provider normalizado:
+Las búsquedas pasan por un provider normalizado y llevan identidad explícita
+de marketplace (actualmente solo `wallapop`):
 
 ```text
 SearchTracker -> SearchProvider -> WallapopSearchProvider -> WallapopClient
 ```
+
+Los listings se identifican por `(marketplace, external_id)` y
+`wallapop_item_id` permanece solo como bridge de migración. `TrackingRun` no
+duplica marketplace: lo deriva de su source.
 
 Los eventos se entregan mediante una cola persistente desacoplada:
 

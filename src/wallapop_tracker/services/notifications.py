@@ -381,7 +381,7 @@ class NotificationService:
         return Notification(
             event_id=event.id,
             event_type=AlertType(event.event_type),
-            listing_id=listing_id,
+            listing_id=listing_id or str(event.listing_id),
             title=snapshot.title if snapshot is not None else None,
             url=snapshot.url if snapshot is not None else None,
             old_price=event.old_price,

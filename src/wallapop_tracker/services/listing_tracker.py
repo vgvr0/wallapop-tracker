@@ -311,7 +311,7 @@ class TrackedListingTracker:
             event_id=event.id,
             type=event_type,
             created_at=created_at,
-            listing_id=listing.wallapop_item_id,
+            listing_id=listing.external_id or listing.wallapop_item_id or str(listing.id),
             tracked_search_id=None,
             old_price=old_price,
             new_price=new_price,

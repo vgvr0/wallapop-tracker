@@ -167,6 +167,9 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Tracked profiles** are user-managed configurations with a profile URL, unique alias, enabled flag, notes, and scheduling metadata.
 - **Tracking runs** record each capture attempt, timestamps, status, fetched-item counts, component success flags, and errors. Terminal statuses are `valid`, `partial`, and `failed`.
 - **Listings** represent normalized Wallapop items associated with a profile.
+- Listing identity is scoped by `(marketplace, external_id)`; `wallapop` is the
+  only supported marketplace in this phase and legacy `wallapop_item_id` is
+  retained as a migration bridge.
 - **Profile snapshots** store change-based profile metrics such as rating, review count, published count, purchases, sales, sold count, reports, and rating distribution.
 - **Listing snapshots** store change-based listing fields such as title, price, status, reservation, shipping, brand, condition, and source timestamps.
 - **Presence rows** associate listings with valid runs. Listing snapshots use `ACTIVE` or `REMOVED` to preserve lifecycle state.
@@ -179,7 +182,7 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0012`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, `0011_search_initial_baseline` adding the per-search baseline policy, and `0012_possible_relistings` adding heuristic candidate persistence. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
+The repository contains Alembic revisions `0001` through `0013`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, `0011_search_initial_baseline` adding the per-search baseline policy, `0012_possible_relistings` adding heuristic candidate persistence, and `0013_marketplace_identity` adding marketplace-scoped listing and search identity. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 

@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.domain.deal_scoring import DealScore
+from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
 from wallapop_tracker.observability import Metrics, configure_logging, get_metrics
 from wallapop_tracker.parsers.search_url import SearchURLParseError, parse_search_url
 from wallapop_tracker.reporting.market import (
@@ -60,6 +61,7 @@ class APIModel(BaseModel):
 
 
 class SearchCreate(APIModel):
+    marketplace: str = Marketplace.WALLAPOP.value
     name: str | None = None
     query: str = Field(min_length=1, max_length=255)
     min_price: Decimal | None = Field(default=None, ge=0)
@@ -71,6 +73,7 @@ class SearchCreate(APIModel):
 
 
 class SearchPatch(APIModel):
+    marketplace: str | None = None
     name: str | None = None
     query: str | None = Field(default=None, min_length=1, max_length=255)
     min_price: Decimal | None = Field(default=None, ge=0)
@@ -102,6 +105,7 @@ class TrackedListingPatch(APIModel):
 
 class SearchResponse(APIModel):
     id: int
+    marketplace: str
     name: str | None
     query: str
     min_price: Decimal | None
@@ -127,6 +131,7 @@ class ProfileResponse(APIModel):
 
 class ListingResponse(APIModel):
     id: int
+    marketplace: str
     external_id: str
     profile_id: int | None
     seller_user_id: str | None
@@ -211,6 +216,7 @@ def _filters(record: TrackedSearchRecord) -> dict[str, Any] | None:
 def _search(record: TrackedSearchRecord) -> SearchResponse:
     return SearchResponse(
         id=record.id,
+        marketplace=record.marketplace,
         name=record.name,
         query=record.query,
         min_price=record.min_price,
@@ -250,7 +256,8 @@ def _listing(session: Session, record: ListingRecord) -> ListingResponse:
     snapshot = _latest_snapshot(session, record.id)
     return ListingResponse(
         id=record.id,
-        external_id=record.wallapop_item_id,
+        marketplace=record.marketplace,
+        external_id=record.external_id or record.wallapop_item_id or "",
         profile_id=record.profile_id,
         seller_user_id=record.seller_user_id,
         first_seen_at=_utc(record.first_seen_at),
@@ -470,6 +477,7 @@ def create_app(
                 filters=payload.filters,
                 interval_seconds=payload.interval_seconds,
                 notify_on_first_run=payload.notify_on_first_run,
+                marketplace=payload.marketplace,
             )
             row.enabled = payload.enabled
             session.commit()
@@ -482,6 +490,8 @@ def create_app(
         search_id: int, payload: SearchPatch, session: Session = Depends(get_session)
     ) -> SearchResponse:
         try:
+            if payload.marketplace is not None:
+                require_supported_marketplace(payload.marketplace)
             row = TrackedSearchRepository(session).update(
                 search_id, **payload.model_dump(exclude_unset=True)
             )

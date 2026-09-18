@@ -166,6 +166,22 @@ def test_candidate_window_and_duplicate_restart(database):
         assert session.scalar(select(func.count()).select_from(PossibleRelistingRecord)) == 1
 
 
+def test_relisting_does_not_cross_marketplaces(database):
+    observed, previous_id, current_id, run_id = setup_pair(database)
+    with database.transaction() as session:
+        previous = session.get(ListingRecord, previous_id)
+        current = session.get(ListingRecord, current_id)
+        assert previous is not None and current is not None
+        previous.marketplace = "vinted"
+        result = RelistingDetectionService(session).detect_new_listing(
+            current,
+            item("new-id", "iPhone 15 Pro 256 GB", "840"),
+            tracking_run_id=run_id,
+            detected_at=observed,
+        )
+        assert result is None
+
+
 @pytest.mark.asyncio
 async def test_notification_delivery_for_possible_relisting(database):
     observed, _, current_id, run_id = setup_pair(database)

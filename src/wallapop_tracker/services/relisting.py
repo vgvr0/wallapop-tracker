@@ -64,6 +64,7 @@ class RelistingDetectionService:
             select(ListingRecord)
             .where(
                 ListingRecord.id != current.id,
+                ListingRecord.marketplace == listing.marketplace.value,
                 ListingRecord.seller_user_id == seller,
                 ListingRecord.last_seen_at >= cutoff,
             )

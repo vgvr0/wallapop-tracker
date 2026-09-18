@@ -50,7 +50,7 @@ def test_ready_requires_current_alembic_revision():
                 text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
             )
             connection.execute(
-                text("INSERT INTO alembic_version VALUES ('0012_possible_relistings')")
+                text("INSERT INTO alembic_version VALUES ('0013_marketplace_identity')")
             )
         assert client.get("/ready").status_code == 200
     database.close()

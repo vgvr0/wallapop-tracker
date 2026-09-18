@@ -142,7 +142,11 @@ def get_current_inventory(session: Session, profile_id: int) -> list[InventoryLi
     result = []
     for row in rows:
         title, price = snapshots.get(row.id, (None, None))
-        result.append(InventoryListing(row.id, row.wallapop_item_id, title, price))
+        result.append(
+            InventoryListing(
+                row.id, row.external_id or row.wallapop_item_id or "", title, price
+            )
+        )
     return result
 
 
