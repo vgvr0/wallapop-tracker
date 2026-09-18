@@ -198,6 +198,7 @@ def schedule(
     interval_hours: int = typer.Option(168, min=1),
     poll_seconds: float = typer.Option(60.0, min=0),
     once: bool = typer.Option(False, "--once"),
+    max_concurrency: int = typer.Option(4, "--max-concurrency", min=1),
 ) -> None:
     """Run enabled profiles on a recurring schedule."""
     database = _db()
@@ -208,6 +209,7 @@ def schedule(
         runner=ProfileTrackingRunner(
             database, client_factory=WallapopClient, tracker_factory=ProfileTracker
         ),
+        max_concurrency=max_concurrency,
     )
     try:
         if once:

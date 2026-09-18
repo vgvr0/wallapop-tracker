@@ -219,6 +219,13 @@ TrackingEvent -> NotificationService -> NotificationDelivery
 modelos. Cada respuesta pasa por un parser puro y produce modelos pequeños de
 `domain/metadata.py`; esta rama no conecta discovery con `SearchTracker`.
 
+### Scheduler concurrente
+
+El scheduler construye primero los jobs due y los ejecuta con un único
+`asyncio.Semaphore` y `TaskGroup`. Los runners mantienen sesiones SQLAlchemy
+independientes; el limiter de `WallapopClient` es compartido por host y las
+notificaciones se procesan después de completar el tracking.
+
 El evento y el run se confirman antes de cualquier POST externo. Cada destino
 se procesa independientemente y sus reintentos están limitados por
 `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.

@@ -1,4 +1,4 @@
-"""Sequential scheduler for enabled tracked profiles."""
+"""Bounded-concurrency scheduler for enabled tracking sources."""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ class SchedulerResult:
     profile_results: tuple[ProfileTrackingResult, ...] = ()
     search_results: tuple[SearchTrackingResult, ...] = ()
     listing_results: tuple[ListingTrackingResult, ...] = ()
+    max_concurrency: int = 4
 
 
 class TrackingScheduler:
@@ -57,11 +58,14 @@ class TrackingScheduler:
         listing_runner: ListingTrackingRunner | None = None,
         notification_service: NotificationService | None = None,
         clock: Clock | None = None,
+        max_concurrency: int = 4,
     ) -> None:
         if interval <= timedelta(0):
             raise ValueError("interval must be positive")
         if poll_seconds < 0:
             raise ValueError("poll_seconds must not be negative")
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency must be positive")
         self.database = database
         self.interval = interval
         self.poll_seconds = poll_seconds
@@ -70,6 +74,7 @@ class TrackingScheduler:
         self.listing_runner = listing_runner or ListingTrackingRunner(database)
         self.notification_service = notification_service or NotificationService(database)
         self.clock = clock or (lambda: datetime.now(UTC))
+        self.max_concurrency = max_concurrency
 
     async def run_once(self, *, now: datetime | None = None) -> SchedulerResult:
         current = _as_utc(now or self.clock())
@@ -92,41 +97,69 @@ class TrackingScheduler:
             for listing in listings
             if _is_due(listing.last_run_at, current, timedelta(seconds=listing.interval_seconds))
         ]
-        results: list[ProfileTrackingResult | SearchTrackingResult | ListingTrackingResult] = []
+        total_jobs = len(due) + len(due_searches) + len(due_listings)
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+        results: list[
+            ProfileTrackingResult | SearchTrackingResult | ListingTrackingResult | None
+        ] = [None] * total_jobs
         profile_results: list[ProfileTrackingResult] = []
         search_results: list[SearchTrackingResult] = []
         listing_results: list[ListingTrackingResult] = []
-        for record in due:
-            try:
-                profile_result = await self.runner.run(record.alias, now=current)
-            except Exception as exc:
-                profile_result = ProfileTrackingResult(
-                    alias=record.alias,
-                    attempted_at=current,
-                    status=TrackingRunStatus.FAILED,
-                    error=str(exc),
-                )
-            results.append(profile_result)
-            profile_results.append(profile_result)
-        for search in due_searches:
-            try:
-                current_search_result = await self.search_runner.run(search.id)
-            except Exception as exc:
-                current_search_result = SearchTrackingResult(
-                    search.id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
-                )
-            results.append(current_search_result)
-            search_results.append(current_search_result)
-        for listing in due_listings:
-            try:
-                current_listing_result = await self.listing_runner.run(listing.id)
-            except Exception as exc:
-                current_listing_result = ListingTrackingResult(
-                    listing.id, None, TrackingRunStatus.FAILED, error=str(exc)
-                )
-            results.append(current_listing_result)
-            listing_results.append(current_listing_result)
-        failed = sum(result.status == TrackingRunStatus.FAILED for result in results)
+
+        async def run_profile(index: int, alias: str) -> None:
+            async with semaphore:
+                try:
+                    result = await self.runner.run(alias, now=current)
+                except Exception as exc:
+                    result = ProfileTrackingResult(
+                        alias=alias,
+                        attempted_at=current,
+                        status=TrackingRunStatus.FAILED,
+                        error=str(exc),
+                    )
+                results[index] = result
+
+        async def run_search(index: int, search_id: int) -> None:
+            async with semaphore:
+                try:
+                    result = await self.search_runner.run(search_id)
+                except Exception as exc:
+                    result = SearchTrackingResult(
+                        search_id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
+                    )
+                results[index] = result
+
+        async def run_listing(index: int, listing_id: int) -> None:
+            async with semaphore:
+                try:
+                    result = await self.listing_runner.run(listing_id)
+                except Exception as exc:
+                    result = ListingTrackingResult(
+                        listing_id, None, TrackingRunStatus.FAILED, error=str(exc)
+                    )
+                results[index] = result
+
+        async with asyncio.TaskGroup() as task_group:
+            for index, record in enumerate(due):
+                task_group.create_task(run_profile(index, record.alias))
+            search_offset = len(due)
+            for offset, search in enumerate(due_searches):
+                task_group.create_task(run_search(search_offset + offset, search.id))
+            listing_offset = search_offset + len(due_searches)
+            for offset, listing in enumerate(due_listings):
+                task_group.create_task(run_listing(listing_offset + offset, listing.id))
+
+        ordered_results = tuple(result for result in results if result is not None)
+        profile_results = [
+            result for result in ordered_results if isinstance(result, ProfileTrackingResult)
+        ]
+        search_results = [
+            result for result in ordered_results if isinstance(result, SearchTrackingResult)
+        ]
+        listing_results = [
+            result for result in ordered_results if isinstance(result, ListingTrackingResult)
+        ]
+        failed = sum(result.status == TrackingRunStatus.FAILED for result in ordered_results)
         for result in search_results:
             if result.alerts:
                 try:
@@ -149,13 +182,14 @@ class TrackingScheduler:
             logger.exception("notification_delivery_cycle_failed")
         return SchedulerResult(
             evaluated=len(records) + len(searches) + len(listings),
-            executed=len(results),
-            succeeded=len(results) - failed,
+            executed=len(ordered_results),
+            succeeded=len(ordered_results) - failed,
             failed=failed,
-            results=tuple(results),
+            results=ordered_results,
             profile_results=tuple(profile_results),
             search_results=tuple(search_results),
             listing_results=tuple(listing_results),
+            max_concurrency=self.max_concurrency,
         )
 
     async def run_forever(self) -> None:

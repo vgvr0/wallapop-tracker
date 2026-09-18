@@ -26,15 +26,18 @@ class Database:
             url, future=True, connect_args=connect_args, poolclass=poolclass
         )
         if url.startswith("sqlite"):
-            event.listen(self.engine, "connect", self._enable_sqlite_foreign_keys)
+            event.listen(self.engine, "connect", self._configure_sqlite)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False)
 
     @staticmethod
-    def _enable_sqlite_foreign_keys(dbapi_connection: Any, connection_record: object) -> None:
+    def _configure_sqlite(dbapi_connection: Any, connection_record: object) -> None:
         del connection_record
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            if dbapi_connection.execute("PRAGMA database_list").fetchone()[2] != ":memory:":
+                cursor.execute("PRAGMA journal_mode=WAL")
         finally:
             cursor.close()
 

@@ -109,6 +109,7 @@ wallapop-track disable seller
 wallapop-track remove seller --yes
 wallapop-track schedule --once
 wallapop-track schedule --interval-hours 168
+wallapop-track schedule --once --max-concurrency 4
 wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
 wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato"
 wallapop-track metadata categories
@@ -139,6 +140,11 @@ The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, i
 Metadata commands are read-only and use only discovery endpoints validated by
 RAW fixtures. Suggestions/autocomplete remain pending because the observed
 endpoint did not return a reproducible public contract.
+
+The scheduler runs due profiles, searches, and tracked listings with bounded
+global concurrency (default `4`), while the shared Wallapop client limiter
+continues to control HTTP request rate. SQLite file databases use WAL and a
+busy timeout; multiple scheduler processes are not coordinated.
 
 ## Scheduling
 

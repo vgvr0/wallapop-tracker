@@ -36,6 +36,48 @@ from .parsers.stats import parse_profile_stats
 logger = logging.getLogger(__name__)
 
 
+class _SharedRateLimiter:
+    """Process-local limiter shared by clients targeting one Wallapop host."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.last_request_at = 0.0
+        self.blocked_until = 0.0
+
+    async def acquire(self, min_interval: float) -> None:
+        async with self.lock:
+            now = asyncio.get_running_loop().time()
+            wait = max(
+                0.0,
+                min_interval - (now - self.last_request_at),
+                self.blocked_until - now,
+            )
+            if wait:
+                await asyncio.sleep(wait)
+            self.last_request_at = asyncio.get_running_loop().time()
+
+    async def block(self, delay: float) -> float:
+        async with self.lock:
+            deadline = asyncio.get_running_loop().time() + delay
+            self.blocked_until = max(
+                self.blocked_until,
+                deadline,
+            )
+            return deadline
+
+    async def clear_block(self, deadline: float) -> None:
+        async with self.lock:
+            if self.blocked_until <= deadline:
+                self.blocked_until = min(self.blocked_until, asyncio.get_running_loop().time())
+
+
+_RATE_LIMITERS: dict[str, _SharedRateLimiter] = {}
+
+
+def _rate_limiter_for(base_url: str) -> _SharedRateLimiter:
+    return _RATE_LIMITERS.setdefault(base_url, _SharedRateLimiter())
+
+
 def _metadata_search_params(
     query: str | None, category_id: str | None, order_by: str
 ) -> dict[str, str]:
@@ -73,8 +115,7 @@ class WallapopClient:
         self.user_agent = user_agent
         self.raw_data_dir = raw_data_dir
         self._http: httpx.AsyncClient | None = None
-        self._rate_lock = asyncio.Lock()
-        self._last_request_at = 0.0
+        self._rate_limiter = _rate_limiter_for(self.base_url)
 
     async def __aenter__(self) -> "WallapopClient":
         self._http = httpx.AsyncClient(timeout=self.timeout)
@@ -139,11 +180,7 @@ class WallapopClient:
         raise WallapopHTTPError(f"Request failed: {url}")
 
     async def _wait_for_rate_limit(self) -> None:
-        async with self._rate_lock:
-            elapsed = asyncio.get_running_loop().time() - self._last_request_at
-            if elapsed < self.min_interval:
-                await asyncio.sleep(self.min_interval - elapsed)
-            self._last_request_at = asyncio.get_running_loop().time()
+        await self._rate_limiter.acquire(self.min_interval)
 
     async def _backoff(self, attempt: int, retry_after: str | None) -> None:
         delay = self.backoff_factor * (2**attempt)
@@ -157,13 +194,13 @@ class WallapopClient:
                     delay = max(delay, min(retry_delay, self.max_retry_after))
                 except (TypeError, ValueError, OverflowError):
                     logger.warning("invalid_retry_after value=%s", retry_after)
-        rate_remaining = max(
-            0.0,
-            self.min_interval - (asyncio.get_running_loop().time() - self._last_request_at),
-        )
-        delay = max(delay, rate_remaining)
+        delay = max(0.0, delay)
         logger.warning("retrying_wallapop_request attempt=%s delay=%.2f", attempt + 1, delay)
-        await asyncio.sleep(max(0.0, delay))
+        deadline = await self._rate_limiter.block(delay)
+        try:
+            await asyncio.sleep(delay)
+        finally:
+            await self._rate_limiter.clear_block(deadline)
 
     def _save_raw(self, kind: str, key: str, value: Any) -> None:
         if self.raw_data_dir is None:
