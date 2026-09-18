@@ -13,8 +13,10 @@ from wallapop_tracker.storage.models import (
     SearchListingMatchRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
+    TrackingRunRecord,
+    TrackingRunStatus,
 )
-from wallapop_tracker.storage.repositories import TrackedSearchRepository
+from wallapop_tracker.storage.repositories import SearchMatchRepository, TrackedSearchRepository
 
 
 @pytest.fixture
@@ -90,6 +92,51 @@ async def test_price_change_is_global_and_survives_service_restart(database):
         metrics = get_search_tracking_metrics(session, first)
         assert metrics.matched_listings == 1
         assert metrics.alerts_generated == 2
+
+
+@pytest.mark.asyncio
+async def test_price_increase_after_a_new_drop_is_a_new_global_event(database):
+    search_id = create_search(database, "macbook air m2")
+
+    await SearchTracker(FakeSearchClient(item("100")), database).track_search(search_id)
+    dropped = await SearchTracker(FakeSearchClient(item("80")), database).track_search(search_id)
+    increased = await SearchTracker(FakeSearchClient(item("90")), database).track_search(search_id)
+
+    assert [alert.type for alert in dropped.alerts] == [AlertType.PRICE_DROP]
+    assert [alert.type for alert in increased.alerts] == [AlertType.PRICE_INCREASE]
+    assert increased.alerts[0].old_price == Decimal("80")
+    assert increased.alerts[0].new_price == Decimal("90")
+    with database.session() as session:
+        events = session.scalars(
+            select(TrackingEventRecord).order_by(TrackingEventRecord.id)
+        ).all()
+        assert [event.event_type for event in events] == [
+            AlertType.NEW_LISTING,
+            AlertType.PRICE_DROP,
+            AlertType.PRICE_INCREASE,
+        ]
+
+
+@pytest.mark.asyncio
+async def test_persistence_failure_rolls_back_listing_match_snapshot_and_event(
+    database, monkeypatch
+):
+    search_id = create_search(database, "macbook air m2")
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("forced persistence failure")
+
+    monkeypatch.setattr(SearchMatchRepository, "touch", fail)
+    result = await SearchTracker(FakeSearchClient(item()), database).track_search(search_id)
+
+    assert result.status == TrackingRunStatus.FAILED
+    with database.session() as session:
+        assert session.scalar(select(func.count()).select_from(ListingRecord)) == 0
+        assert session.scalar(select(func.count()).select_from(SearchListingMatchRecord)) == 0
+        assert session.scalar(select(func.count()).select_from(TrackingEventRecord)) == 0
+        failed_runs = session.scalars(select(TrackingRunRecord)).all()
+        assert len(failed_runs) == 1
+        assert failed_runs[0].status == TrackingRunStatus.FAILED
 
 
 @pytest.mark.asyncio

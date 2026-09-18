@@ -17,6 +17,15 @@ SearchRunner = Callable[[SavedSearchRecord], Awaitable[Sequence[Listing]]]
 
 
 class SearchAlertService:
+    """Legacy saved-search alerts retained for database compatibility.
+
+    .. deprecated::
+       New application code must use ``TrackedSearch`` and the persistent
+       ``TrackingEventRecord`` ledger through ``SearchTracker``. This service
+       is intentionally not used by the CLI or scheduler and will be removed
+       after legacy data has a documented migration path.
+    """
+
     def __init__(self, session: Session, runner: SearchRunner) -> None:
         self.session, self.runner = session, runner
 
@@ -74,6 +83,14 @@ class SearchAlertService:
 
 
 class PriceAlertService:
+    """Legacy price-watch reader retained until ``TrackedListing`` exists.
+
+    .. deprecated::
+       New search alerts are emitted by ``SearchTracker``. Direct listing
+       watches remain available temporarily because they are a distinct use
+       case and will migrate to ``TrackedListing`` in a later phase.
+    """
+
     def __init__(self, session: Session) -> None:
         self.session = session
 

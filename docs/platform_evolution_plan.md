@@ -210,7 +210,7 @@ se conserva un fixture RAW y se marca la investigación como pendiente.
 
 | Fase | Resultado | Migración/documentación clave |
 |---|---|---|
-| 1 | Unificar detección en tracking events; retirar gradualmente servicios legacy | Deprecation explícita, eventos simétricos, cobertura de restart, solapamiento, subidas y bajadas |
+| 1 | Implementado: detección unificada en tracking events; servicios legacy fuera del flujo activo | Deprecation explícita, eventos simétricos, cobertura de restart, solapamiento, subidas y bajadas |
 | 2 | Separar runs de búsqueda de identidad de perfil | Nueva semántica de `TrackingRun`, preservación de histórico y `docs/tracking_run_model.md` |
 | 3 | `SearchProvider` + `WallapopSearchProvider` | Contrato y fixtures independientes del tracker |
 | 4 | Notification layer persistente | `notification_deliveries`, canales mockeables y comandos retry/list |
@@ -300,4 +300,3 @@ o de compatibilidad del schema.
 
 Hasta que esas preguntas tengan evidencia offline o validación autorizada, no
 se debe inventar un contrato ni cambiar automáticamente a endpoints modernos.
-

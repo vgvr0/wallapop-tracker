@@ -149,7 +149,17 @@ class SearchMatchRepository:
                 last_seen_at=observed_at,
                 detection_count=1,
             )
-            self.session.add(record)
+            try:
+                with self.session.begin_nested():
+                    self.session.add(record)
+                    self.session.flush()
+            except IntegrityError:
+                existing = self.session.get(SearchListingMatchRecord, (search_id, listing_id))
+                if existing is None:
+                    raise
+                record = existing
+            else:
+                return record
         else:
             record.last_seen_at = observed_at
             record.detection_count += 1
