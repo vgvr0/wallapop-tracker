@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import (
     WallapopHTTPError,
     WallapopNotFoundError,
@@ -23,12 +24,27 @@ from .exceptions import (
     WallapopRateLimitError,
 )
 from .models import ItemsPage, Listing, Profile, ProfileStats, ReviewSummary
+from .parsers.brands import parse_brands
+from .parsers.categories import parse_categories
+from .parsers.filters import parse_available_filters
 from .parsers.items import parse_item, parse_items_page
+from .parsers.models import parse_models
 from .parsers.profile import parse_profile
 from .parsers.reviews import parse_review_summary
 from .parsers.stats import parse_profile_stats
 
 logger = logging.getLogger(__name__)
+
+
+def _metadata_search_params(
+    query: str | None, category_id: str | None, order_by: str
+) -> dict[str, str]:
+    params = {"order_by": order_by, "source": "search_box"}
+    if query is not None:
+        params["keywords"] = query
+    if category_id is not None:
+        params["category_id"] = category_id
+    return params
 
 
 class WallapopClient:
@@ -253,6 +269,70 @@ class WallapopClient:
             raw_key=f"detail-{item_id}",
         )
         return parse_item(data, item_id=item_id)
+
+    async def categories(self, *, context: str | None = None) -> list[Category]:
+        """Fetch the observed public category catalog."""
+        params = {"context": context} if context is not None else None
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/categories",
+            params=params,
+            raw_kind="metadata",
+            raw_key="categories",
+        )
+        return parse_categories(data)
+
+    async def available_filters(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[AvailableFilter]:
+        """Fetch filters exposed for one observed search context."""
+        params = _metadata_search_params(query, category_id, order_by)
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/regular-filters",
+            params=params,
+            raw_kind="metadata",
+            raw_key="filters",
+        )
+        return parse_available_filters(data)
+
+    async def brands(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[Brand]:
+        """Fetch the observed brand options for one search context."""
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/brand",
+            params=_metadata_search_params(query, category_id, order_by),
+            raw_kind="metadata",
+            raw_key="brands",
+        )
+        return parse_brands(data)
+
+    async def models(
+        self,
+        *,
+        query: str | None = None,
+        category_id: str | None = None,
+        order_by: str = "most_relevance",
+    ) -> list[ProductModel]:
+        """Fetch the observed model options for one search context."""
+        data = await self._request(
+            "GET",
+            f"{self.base_url}/api/v3/search/filters/model",
+            params=_metadata_search_params(query, category_id, order_by),
+            raw_kind="metadata",
+            raw_key="models",
+        )
+        return parse_models(data)
 
     async def search_items(
         self,

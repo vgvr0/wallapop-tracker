@@ -10,6 +10,8 @@ import typer
 
 from .client import WallapopClient
 from .domain.listing_urls import parse_listing_reference
+from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
+from .exceptions import WallapopError
 from .models import Listing
 from .parsers.search_url import SearchURLParseError, parse_search_url
 from .services.notifications import NotificationService
@@ -34,9 +36,11 @@ app = typer.Typer(no_args_is_help=True)
 search_app = typer.Typer(no_args_is_help=True)
 notifications_app = typer.Typer(no_args_is_help=True)
 listing_app = typer.Typer(no_args_is_help=True)
+metadata_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
 app.add_typer(listing_app, name="listing")
+app.add_typer(metadata_app, name="metadata")
 
 
 def _db() -> Database:
@@ -218,6 +222,87 @@ def schedule(
         typer.echo("Scheduler stopped")
     finally:
         database.close()
+
+
+@metadata_app.command("categories")
+def metadata_categories(context: str | None = typer.Option(None, "--context")) -> None:
+    """List the observed public Wallapop category catalog."""
+    async def fetch() -> list[Category]:
+        async with WallapopClient() as client:
+            return await client.categories(context=context)
+
+    try:
+        categories = asyncio.run(fetch())
+    except WallapopError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("ID\tName\tParent")
+    for category in categories:
+        _echo_category(category)
+
+
+def _echo_category(category: Category, parent: str | None = None) -> None:
+    typer.echo(f"{category.id}\t{category.name}\t{category.parent_id or parent or '-'}")
+    for child in category.children:
+        _echo_category(child, category.id)
+
+
+@metadata_app.command("filters")
+def metadata_filters(
+    query: str | None = typer.Option(None, "--query"),
+    category_id: str | None = typer.Option(None, "--category-id"),
+) -> None:
+    """List filters exposed for a search context."""
+    async def fetch() -> list[AvailableFilter]:
+        async with WallapopClient() as client:
+            return await client.available_filters(query=query, category_id=category_id)
+
+    try:
+        filters = asyncio.run(fetch())
+    except WallapopError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("ID\tType\tTitle\tParameters")
+    for item in filters:
+        typer.echo(
+            f"{item.id}\t{item.filter_type}\t{item.title}\t{','.join(item.parameter_keys) or '-'}"
+        )
+
+
+@metadata_app.command("brands")
+def metadata_brands(
+    query: str | None = typer.Option(None, "--query"),
+    category_id: str | None = typer.Option(None, "--category-id"),
+) -> None:
+    """List brand options exposed for a search context."""
+    async def fetch() -> list[Brand]:
+        async with WallapopClient() as client:
+            return await client.brands(query=query, category_id=category_id)
+
+    try:
+        brands = asyncio.run(fetch())
+    except WallapopError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("ID\tName")
+    for brand in brands:
+        typer.echo(f"{brand.id or '-'}\t{brand.name}")
+
+
+@metadata_app.command("models")
+def metadata_models(
+    query: str | None = typer.Option(None, "--query"),
+    category_id: str | None = typer.Option(None, "--category-id"),
+) -> None:
+    """List model options exposed for a search context."""
+    async def fetch() -> list[ProductModel]:
+        async with WallapopClient() as client:
+            return await client.models(query=query, category_id=category_id)
+
+    try:
+        models = asyncio.run(fetch())
+    except WallapopError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("ID\tName")
+    for model in models:
+        typer.echo(f"{model.id or '-'}\t{model.name}")
 
 
 @search_app.command("add")

@@ -213,6 +213,12 @@ TrackingEvent -> NotificationService -> NotificationDelivery
                                   -> Webhook / Discord / Telegram
 ```
 
+### Discovery de metadata
+
+`WallapopClient` expone APIs read-only para categorías, filtros, marcas y
+modelos. Cada respuesta pasa por un parser puro y produce modelos pequeños de
+`domain/metadata.py`; esta rama no conecta discovery con `SearchTracker`.
+
 El evento y el run se confirman antes de cualquier POST externo. Cada destino
 se procesa independientemente y sus reintentos están limitados por
 `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.

@@ -17,6 +17,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
 - Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
 - Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
+- Read-only metadata discovery for observed categories, filters, brands, and models.
 - Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
 - Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
 - Alembic migrations for the historical schema and alert-related tables.
@@ -110,6 +111,10 @@ wallapop-track schedule --once
 wallapop-track schedule --interval-hours 168
 wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
 wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato"
+wallapop-track metadata categories
+wallapop-track metadata filters --query iphone --category-id 24200
+wallapop-track metadata brands --category-id 24200
+wallapop-track metadata models --category-id 24200 --query iphone
 wallapop-track search list
 wallapop-track search show 1
 wallapop-track search run 1
@@ -130,6 +135,10 @@ wallapop-track listing remove camera --yes
 `add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
 The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
+
+Metadata commands are read-only and use only discovery endpoints validated by
+RAW fixtures. Suggestions/autocomplete remain pending because the observed
+endpoint did not return a reproducible public contract.
 
 ## Scheduling
 

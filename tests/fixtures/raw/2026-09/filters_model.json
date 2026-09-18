@@ -1,0 +1,11 @@
+{
+  "type": "list",
+  "id": "model",
+  "title": "filters_model_label",
+  "options": [
+    {"id": "iPhone 15", "title": "iPhone 15"},
+    {"id": "iPhone 15 Pro", "title": "iPhone 15 Pro"},
+    {"id": "Galaxy S24", "title": "Galaxy S24"}
+  ],
+  "pagination": {"options_page_size": 100}
+}
