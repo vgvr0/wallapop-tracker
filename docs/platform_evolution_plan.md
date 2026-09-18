@@ -217,7 +217,7 @@ se conserva un fixture RAW y se marca la investigación como pendiente.
 | 3 | Implementado: `SearchProvider` + `WallapopSearchProvider` | Contrato, provider testeable y documentación del endpoint |
 | 4 | Implementado: NotificationDelivery persistente | `0009_notification_deliveries`, canales mockeables y comandos `notifications retry/list` |
 | 5 | Implementado: `TrackedListing` y `get_item` validado | `0010_tracked_listings`, snapshots, eventos y comandos listing |
-| 6 | Importación pura de URLs de búsqueda | `search_url_parser.py` y tests de parámetros realmente observables |
+| 6 | Implementado: importación pura de URLs de búsqueda | `parsers/search_url.py`, CLI `search import` y tests de parámetros realmente observables |
 | 7 | Discovery de metadata | `docs/discovery_endpoints.md`, requests/respuestas RAW y parsers aislados |
 | 8 | Scheduler con concurrencia acotada | `TaskGroup`, `Semaphore`, orden determinista y aislamiento de fallos |
 | 9 | Baseline silencioso configurable | `notify_on_first_run=false` y tests de inventario inicial |

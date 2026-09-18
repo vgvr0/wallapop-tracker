@@ -11,6 +11,7 @@ import typer
 from .client import WallapopClient
 from .domain.listing_urls import parse_listing_reference
 from .models import Listing
+from .parsers.search_url import SearchURLParseError, parse_search_url
 from .services.notifications import NotificationService
 from .services.runner import (
     ListingTrackingRunner,
@@ -274,6 +275,62 @@ def search_list() -> None:
                 )
     finally:
         database.close()
+
+
+@search_app.command("import")
+def search_import(
+    url: str,
+    name: str | None = typer.Option(None, "--name"),
+    interval_seconds: int = typer.Option(600, "--interval-seconds", min=1),
+    disabled: bool = typer.Option(False, "--disabled"),
+) -> None:
+    """Create a tracked search from an observed Wallapop search URL."""
+    try:
+        imported = parse_search_url(url)
+        if imported.query is None:
+            raise SearchURLParseError(
+                "search URL has no query; category-only imports are not supported by TrackedSearch"
+            )
+        database = _db()
+        try:
+            with database.transaction() as session:
+                record = TrackedSearchRepository(session).create(
+                    imported.query,
+                    name=name,
+                    min_price=imported.min_price,
+                    max_price=imported.max_price,
+                    filters=imported.search_filters(),
+                    interval_seconds=interval_seconds,
+                )
+                if disabled:
+                    record.enabled = False
+        finally:
+            database.close()
+    except (SearchURLParseError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("Search created")
+    typer.echo(f"id: {record.id}")
+    typer.echo(f"name: {record.name or record.query}")
+    typer.echo(f"query: {record.query}")
+    if record.min_price is not None or record.max_price is not None:
+        typer.echo(f"price: {record.min_price or '-'}–{record.max_price or '-'} €")
+    if imported.category_id is not None:
+        typer.echo(f"category_id: {imported.category_id}")
+    if imported.latitude is not None or imported.longitude is not None:
+        typer.echo(f"location: {imported.latitude or '-'}, {imported.longitude or '-'}")
+    if imported.distance is not None:
+        typer.echo(f"distance: {imported.distance:g} km")
+    if imported.shipping_required is not None:
+        typer.echo(f"shipping: {'required' if imported.shipping_required else 'not required'}")
+    if imported.condition is not None:
+        typer.echo(f"condition: {imported.condition}")
+    if imported.brand is not None:
+        typer.echo(f"brand: {imported.brand}")
+    typer.echo(f"enabled: {record.enabled}")
+    if imported.unknown_params:
+        typer.echo("Ignored unsupported parameters:")
+        for parameter in sorted(imported.unknown_params):
+            typer.echo(f"- {parameter}")
 
 
 @search_app.command("show")

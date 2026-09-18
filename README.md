@@ -109,6 +109,7 @@ wallapop-track remove seller --yes
 wallapop-track schedule --once
 wallapop-track schedule --interval-hours 168
 wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
+wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato"
 wallapop-track search list
 wallapop-track search show 1
 wallapop-track search run 1
@@ -126,7 +127,7 @@ wallapop-track listing disable camera
 wallapop-track listing remove camera --yes
 ```
 
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
+`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
 The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
 
