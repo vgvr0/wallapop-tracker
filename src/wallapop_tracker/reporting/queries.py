@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.storage.models import (
@@ -12,10 +12,24 @@ from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
     PresenceState,
     ProfileSnapshotRecord,
+    SearchListingMatchRecord,
+    TrackingEventRecord,
     TrackingRunListingRecord,
     TrackingRunRecord,
     TrackingRunStatus,
 )
+
+
+@dataclass(frozen=True)
+class SearchTrackingMetrics:
+    search_id: int
+    runs: int
+    listings_discovered: int
+    matched_listings: int
+    new_listings: int
+    price_changes: int
+    alerts_generated: int
+    duplicates_suppressed: int
 
 
 @dataclass(frozen=True)
@@ -259,4 +273,43 @@ def get_approx_active_duration(session: Session, listing_id: int) -> ApproxActiv
     return ApproxActiveDuration(
         listing_id, first.run_id, first.observed_at, last.run_id, last.observed_at,
         last.observed_at - first.observed_at,
+    )
+
+
+def get_search_tracking_metrics(session: Session, search_id: int) -> SearchTrackingMetrics:
+    """Return persisted operational metrics for one tracked search."""
+    runs = list(
+        session.scalars(
+            select(TrackingRunRecord).where(TrackingRunRecord.tracked_search_id == search_id)
+        )
+    )
+    run_ids = [run.id for run in runs]
+    matched = session.scalar(
+        select(func.count())
+        .select_from(SearchListingMatchRecord)
+        .where(SearchListingMatchRecord.tracked_search_id == search_id)
+    ) or 0
+    alerts = session.scalar(
+        select(func.count())
+        .select_from(TrackingEventRecord)
+        .where(TrackingEventRecord.tracked_search_id == search_id)
+    ) or 0
+    discovered = (
+        session.scalar(
+            select(func.count(func.distinct(TrackingRunListingRecord.listing_id))).where(
+                TrackingRunListingRecord.tracking_run_id.in_(run_ids)
+            )
+        )
+        if run_ids
+        else 0
+    )
+    return SearchTrackingMetrics(
+        search_id,
+        len(runs),
+        int(discovered or 0),
+        int(matched),
+        sum(run.new_listings or 0 for run in runs),
+        sum(run.price_changes or 0 for run in runs),
+        int(alerts),
+        sum(run.duplicates_suppressed or 0 for run in runs),
     )

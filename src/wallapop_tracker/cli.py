@@ -3,19 +3,23 @@
 import asyncio
 import os
 from datetime import timedelta
+from decimal import Decimal
 from urllib.parse import urlparse
 
 import typer
 
 from .client import WallapopClient
-from .services.runner import ProfileTrackingRunner
+from .services.runner import ProfileTrackingRunner, SearchTrackingRunner
 from .services.scheduler import TrackingScheduler
+from .services.search_tracker import SearchTracker
 from .services.tracker import ProfileTracker
 from .storage.database import Database
 from .storage.models import TrackingRunStatus
-from .storage.repositories import TrackedProfileRepository
+from .storage.repositories import TrackedProfileRepository, TrackedSearchRepository
 
 app = typer.Typer(no_args_is_help=True)
+search_app = typer.Typer(no_args_is_help=True)
+app.add_typer(search_app, name="search")
 
 
 def _db() -> Database:
@@ -197,6 +201,160 @@ def schedule(
         typer.echo("Scheduler stopped")
     finally:
         database.close()
+
+
+@search_app.command("add")
+def search_add(
+    query: str = typer.Option(..., "--query"),
+    name: str | None = typer.Option(None, "--name"),
+    min_price: str | None = typer.Option(None, "--min-price"),
+    max_price: str | None = typer.Option(None, "--max-price"),
+    interval_seconds: int = typer.Option(600, "--interval-seconds", min=1),
+    include: list[str] = typer.Option([], "--include"),  # noqa: B008
+    exclude: list[str] = typer.Option([], "--exclude"),  # noqa: B008
+    include_all: bool = typer.Option(False, "--include-all"),
+    regex: str | None = typer.Option(None, "--regex"),
+    regex_target: str = typer.Option("both", "--regex-target"),
+) -> None:
+    """Create a persistent read-only Wallapop search tracker."""
+    filters = {
+        "include": include,
+        "exclude": exclude,
+        "include_mode": "all" if include_all else "any",
+        "regex": regex,
+        "regex_target": regex_target,
+    }
+    database = _db()
+    try:
+        with database.transaction() as session:
+            record = TrackedSearchRepository(session).create(
+                query,
+                name=name,
+                min_price=Decimal(min_price) if min_price is not None else None,
+                max_price=Decimal(max_price) if max_price is not None else None,
+                filters=filters,
+                interval_seconds=interval_seconds,
+            )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"id: {record.id}")
+    typer.echo(f"query: {record.query}")
+    typer.echo("enabled: true")
+
+
+@search_app.command("list")
+def search_list() -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for record in TrackedSearchRepository(session).list_all():
+                state = "enabled" if record.enabled else "disabled"
+                label = record.name or record.query
+                typer.echo(
+                    f"{record.id}\t{state}\t{label}\t{record.query}\t"
+                    f"{record.last_run_at or '-'}\t{record.last_run_status or '-'}"
+                )
+    finally:
+        database.close()
+
+
+@search_app.command("show")
+def search_show(search_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            record = TrackedSearchRepository(session).get(search_id)
+            if record is None:
+                raise typer.BadParameter(f"Unknown search: {search_id}")
+            typer.echo(f"id: {record.id}")
+            typer.echo(f"name: {record.name or '-'}")
+            typer.echo(f"query: {record.query}")
+            typer.echo(f"min_price: {record.min_price or '-'}")
+            typer.echo(f"max_price: {record.max_price or '-'}")
+            typer.echo(f"enabled: {record.enabled}")
+            typer.echo(f"interval_seconds: {record.interval_seconds}")
+            typer.echo(f"filters: {record.filters_json or '{}'}")
+    finally:
+        database.close()
+
+
+def _toggle_search(search_id: int, enabled: bool) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            repository = TrackedSearchRepository(session)
+            record = repository.enable(search_id) if enabled else repository.disable(search_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"{record.id}: {'enabled' if record.enabled else 'disabled'}")
+
+
+@search_app.command("enable")
+def search_enable(search_id: int) -> None:
+    _toggle_search(search_id, True)
+
+
+@search_app.command("disable")
+def search_disable(search_id: int) -> None:
+    _toggle_search(search_id, False)
+
+
+@search_app.command("delete")
+def search_delete(search_id: int, yes: bool = typer.Option(False, "--yes")) -> None:
+    if not yes and not typer.confirm(f"Remove tracking configuration for search {search_id}?"):
+        raise typer.Abort()
+    database = _db()
+    try:
+        with database.transaction() as session:
+            TrackedSearchRepository(session).remove(search_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"Removed: {search_id}")
+
+
+async def _run_search(search_id: int) -> None:
+    database = _db()
+    try:
+        result = await SearchTrackingRunner(
+            database,
+            client_factory=WallapopClient,
+            tracker_factory=SearchTracker,
+        ).run(search_id)
+        if result.status is None:
+            typer.echo(f"{search_id}\tdisabled")
+        elif result.status == TrackingRunStatus.FAILED:
+            typer.echo(f"{search_id}\tfailed\t{result.error or 'unknown error'}")
+        else:
+            typer.echo(
+                f"{search_id}\t{result.run_id}\t{result.status.value}\t"
+                f"matched={result.matched_listings} new={result.new_listings} "
+                f"price_changes={result.price_changes} duplicates={result.duplicates_suppressed}"
+            )
+    finally:
+        database.close()
+
+
+@search_app.command("run")
+def search_run(search_id: int) -> None:
+    asyncio.run(_run_search(search_id))
+
+
+@search_app.command("run-all")
+def search_run_all() -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            ids = [record.id for record in TrackedSearchRepository(session).list_enabled()]
+    finally:
+        database.close()
+    for search_id in ids:
+        asyncio.run(_run_search(search_id))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from .queries import (
     PresencePoint,
     PricePoint,
     ProfileMetricsPoint,
+    SearchTrackingMetrics,
     get_approx_active_duration,
     get_current_inventory,
     get_inventory_history,
@@ -16,11 +17,13 @@ from .queries import (
     get_price_history,
     get_profile_metrics_history,
     get_removed_listings_between_runs,
+    get_search_tracking_metrics,
 )
 
 __all__ = [
     "ApproxActiveDuration", "InventoryListing", "InventoryPoint", "PricePoint", "PresencePoint",
     "ProfileMetricsPoint", "WeeklyProfileSummary", "get_approx_active_duration",
+    "SearchTrackingMetrics", "get_search_tracking_metrics",
     "average_active_price", "get_average_active_price", "get_current_inventory",
     "get_inventory_history",
     "get_new_listings", "get_new_listings_between_runs", "get_price_history",
