@@ -225,3 +225,38 @@ def test_search_initial_baseline_migration_from_0010(tmp_path):
     assert run_count == 2
     assert column[0] == 1
     assert column[1] == "'0'"
+
+
+def test_possible_relisting_migration_from_0011(tmp_path):
+    database_path = tmp_path / "relisting.db"
+    config = _config(database_path)
+    command.upgrade(config, "0011_search_initial_baseline")
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.connect() as connection:
+        listing_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(listings)"))
+        }
+        relisting_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(possible_relistings)"))
+        }
+        indexes = {
+            row[1]
+            for row in connection.execute(text("PRAGMA index_list(possible_relistings)"))
+        }
+
+    assert "seller_user_id" in listing_columns
+    assert relisting_columns == {
+        "id",
+        "previous_listing_id",
+        "current_listing_id",
+        "score",
+        "reasons_json",
+        "detected_at",
+        "status",
+        "event_id",
+    }
+    assert "ix_possible_relistings_score_detected" in indexes

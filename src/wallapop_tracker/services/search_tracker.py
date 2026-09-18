@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -15,6 +16,7 @@ from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
 from wallapop_tracker.models import Listing
 from wallapop_tracker.providers.search import SearchProvider, SearchRequest
+from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
@@ -31,6 +33,8 @@ from wallapop_tracker.storage.repositories import (
     TrackingEventRepository,
     TrackingRunRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -139,7 +143,7 @@ class SearchTracker:
                     if existing is not None
                     else None
                 )
-                record, _ = listing_repo.get_or_create_global_listing(
+                record, created = listing_repo.get_or_create_global_listing(
                     listing,
                     None,
                     observed_at=started_at,
@@ -150,6 +154,28 @@ class SearchTracker:
                 snapshots.save_listing_snapshot(
                     record.id, run.id, listing, observed_at=started_at
                 )
+
+                if created:
+                    try:
+                        detection = RelistingDetectionService(session).detect_new_listing(
+                            record,
+                            listing,
+                            tracking_run_id=run.id,
+                            detected_at=started_at,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "relisting_detection_failed listing_id=%s run_id=%s",
+                            record.id,
+                            run.id,
+                        )
+                    else:
+                        if detection is not None:
+                            relisting_event = session.get(
+                                TrackingEventRecord, detection.event_id
+                            )
+                            if relisting_event is not None:
+                                alerts.append(self._alert(relisting_event, listing, search_id))
 
                 if previous_match is None and not initial_baseline:
                     new_key = self._event_key(AlertType.NEW_LISTING, listing.item_id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import Iterable, Mapping
@@ -24,6 +25,7 @@ from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
     NotificationDeliveryStatus,
+    PossibleRelistingRecord,
     TrackingEventRecord,
 )
 from wallapop_tracker.storage.repositories import NotificationDeliveryRepository
@@ -45,6 +47,7 @@ def _notification_payload(notification: Notification) -> dict[str, Any]:
         "old_price": _price(notification.old_price),
         "new_price": _price(notification.new_price),
         "created_at": notification.created_at.astimezone(UTC).isoformat(),
+        "details": notification.details,
     }
 
 
@@ -98,6 +101,8 @@ class DiscordWebhookChannel(WebhookNotificationChannel):
         content = f"{heading}\n{title}{prices}"
         if notification.url:
             content += f"\n{notification.url}"
+        if notification.details:
+            content += f"\n{notification.details}"
         return {"content": content}
 
 
@@ -126,6 +131,8 @@ class TelegramNotificationChannel:
             text += f"\n{_price(notification.old_price)} € → {_price(notification.new_price)} €"
         if notification.url:
             text += f"\n{notification.url}"
+        if notification.details:
+            text += f"\n{notification.details}"
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {"chat_id": destination, "text": text}
         try:
@@ -328,6 +335,43 @@ class NotificationService:
             if event.listing is not None
             else str(event.listing_id)
         )
+        details = None
+        if event.event_type == AlertType.POSSIBLE_RELISTING.value:
+            candidate = session.scalar(
+                select(PossibleRelistingRecord).where(
+                    PossibleRelistingRecord.event_id == event.id
+                )
+            )
+            if candidate is not None:
+                previous_snapshot = session.scalar(
+                    select(ListingSnapshotRecord)
+                    .where(ListingSnapshotRecord.listing_id == candidate.previous_listing_id)
+                    .order_by(
+                        ListingSnapshotRecord.observed_at.desc(),
+                        ListingSnapshotRecord.id.desc(),
+                    )
+                    .limit(1)
+                )
+                reasons = json.loads(candidate.reasons_json)
+                details = "Possible relisting\n"
+                previous_title = (
+                    previous_snapshot.title
+                    if previous_snapshot is not None and previous_snapshot.title
+                    else str(candidate.previous_listing_id)
+                )
+                current_title = snapshot.title if snapshot is not None and snapshot.title else str(
+                    candidate.current_listing_id
+                )
+                previous_price = (
+                    f"{previous_snapshot.price:.2f} €"
+                    if previous_snapshot is not None and previous_snapshot.price is not None
+                    else "?"
+                )
+                current_price = f"{event.new_price:.2f} €" if event.new_price is not None else "?"
+                details += f"Previous: {previous_title} — {previous_price}\n"
+                details += f"New: {current_title} — {current_price}\n"
+                details += f"Confidence: {float(candidate.score):.0%}\nReasons: "
+                details += ", ".join(str(reason["name"]) for reason in reasons)
         return Notification(
             event_id=event.id,
             event_type=AlertType(event.event_type),
@@ -337,4 +381,5 @@ class NotificationService:
             old_price=event.old_price,
             new_price=event.new_price,
             created_at=event.created_at,
+            details=details,
         )

@@ -18,6 +18,8 @@ from .models import (
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
     NotificationDeliveryStatus,
+    PossibleRelistingRecord,
+    PossibleRelistingStatus,
     PresenceState,
     ProfileRecord,
     ProfileSnapshotRecord,
@@ -605,6 +607,7 @@ class ListingRepository:
             record = ListingRecord(
                 wallapop_item_id=listing.item_id,
                 profile_id=profile_id,
+                seller_user_id=listing.user_id or None,
                 first_seen_at=now,
                 last_seen_at=now,
                 created_at=now,
@@ -621,6 +624,8 @@ class ListingRepository:
         if valid_observation:
             if record.profile_id is None:
                 record.profile_id = profile_id
+            if record.seller_user_id is None and listing.user_id:
+                record.seller_user_id = listing.user_id
             record.last_seen_at = now
             record.updated_at = now
         self.session.flush()
@@ -653,6 +658,7 @@ class ListingRepository:
             record = ListingRecord(
                 wallapop_item_id=listing.item_id,
                 profile_id=profile_id,
+                seller_user_id=listing.user_id or None,
                 first_seen_at=now,
                 last_seen_at=now,
                 created_at=now,
@@ -669,11 +675,77 @@ class ListingRepository:
                 record, created = existing, False
         if record.profile_id is None and profile_id is not None:
             record.profile_id = profile_id
+        if record.seller_user_id is None and listing.user_id:
+            record.seller_user_id = listing.user_id
         if valid_observation and record is not None:
             record.last_seen_at = now
             record.updated_at = now
             self.session.flush()
         return record, created
+
+
+class PossibleRelistingRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, relisting_id: int) -> PossibleRelistingRecord | None:
+        return self.session.get(PossibleRelistingRecord, relisting_id)
+
+    def get_by_pair(
+        self, previous_listing_id: int, current_listing_id: int
+    ) -> PossibleRelistingRecord | None:
+        return self.session.scalar(
+            select(PossibleRelistingRecord).where(
+                PossibleRelistingRecord.previous_listing_id == previous_listing_id,
+                PossibleRelistingRecord.current_listing_id == current_listing_id,
+            )
+        )
+
+    def create_once(
+        self,
+        *,
+        previous_listing_id: int,
+        current_listing_id: int,
+        score: Decimal,
+        reasons_json: str,
+        detected_at: datetime,
+    ) -> tuple[PossibleRelistingRecord, bool]:
+        existing = self.get_by_pair(previous_listing_id, current_listing_id)
+        if existing is not None:
+            return existing, False
+        record = PossibleRelistingRecord(
+            previous_listing_id=previous_listing_id,
+            current_listing_id=current_listing_id,
+            score=score,
+            reasons_json=reasons_json,
+            detected_at=detected_at,
+            status=PossibleRelistingStatus.CANDIDATE,
+        )
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.get_by_pair(previous_listing_id, current_listing_id)
+            if existing is None:
+                raise
+            return existing, False
+        return record, True
+
+    def list_all(
+        self, *, min_score: Decimal | None = None, listing_id: int | None = None
+    ) -> list[PossibleRelistingRecord]:
+        statement = select(PossibleRelistingRecord).order_by(
+            PossibleRelistingRecord.score.desc(), PossibleRelistingRecord.detected_at.desc()
+        )
+        if min_score is not None:
+            statement = statement.where(PossibleRelistingRecord.score >= min_score)
+        if listing_id is not None:
+            statement = statement.where(
+                (PossibleRelistingRecord.previous_listing_id == listing_id)
+                | (PossibleRelistingRecord.current_listing_id == listing_id)
+            )
+        return list(self.session.scalars(statement))
 
 
 class TrackingRunRepository:

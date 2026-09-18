@@ -183,6 +183,24 @@ perfil tiene `profile_id` y un run de búsqueda tiene `tracked_search_id`.
 Los anuncios observados exclusivamente desde búsquedas pueden tener
 `listings.profile_id = NULL`; no se crea un perfil sintético.
 
+### `possible_relistings`
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `id` | integer/bigint | PK |
+| `previous_listing_id` | FK a `listings.id` | NOT NULL, RESTRICT |
+| `current_listing_id` | FK a `listings.id` | NOT NULL, RESTRICT |
+| `score` | numeric(5,4) | NOT NULL, 0..1 heurístico |
+| `reasons_json` | text/JSON portable | NOT NULL |
+| `detected_at` | timestamp with timezone | NOT NULL |
+| `status` | varchar | `candidate`, `confirmed`, `rejected`; actualmente `candidate` |
+| `event_id` | FK a `tracking_events.id` | nullable, UNIQUE |
+
+La pareja `(previous_listing_id, current_listing_id)` es única. Existen
+índices por `(score, detected_at)` y `current_listing_id`. `listings` conserva
+también el `seller_user_id` observado, nullable, para acotar candidatos sin
+alterar la identidad por `wallapop_item_id`.
+
 ### `tracked_searches`
 
 Además de la configuración de consulta, filtros, enablement e intervalo, la

@@ -1,5 +1,6 @@
 from .diff import DiffService
 from .listing_tracker import ListingTrackingResult, TrackedListingTracker
+from .relisting import RelistingDetectionService, RelistingPolicy
 from .runner import (
     ListingTrackingRunner,
     ProfileTrackingResult,
@@ -24,4 +25,6 @@ __all__ = [
     "TrackingScheduler",
     "SearchTracker",
     "SearchTrackingResult",
+    "RelistingDetectionService",
+    "RelistingPolicy",
 ]

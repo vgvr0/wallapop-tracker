@@ -13,12 +13,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from wallapop_tracker.client import WallapopClient
+from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.models import Profile, ProfileStats, ReviewSummary
+from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
     PresenceState,
     ProfileRecord,
+    TrackingEventRecord,
     TrackingRunListingRecord,
     TrackingRunRecord,
     TrackingRunStatus,
@@ -43,6 +46,7 @@ class TrackingResult:
     items_fetched: int
     pages_fetched: int | None
     error: str | None = None
+    alerts: tuple[TrackingAlert, ...] = ()
 
 
 @dataclass
@@ -233,8 +237,11 @@ class ProfileTracker:
             )
             listing_repo = ListingRepository(session)
             snapshots = SnapshotRepository(session)
+            alerts: list[TrackingAlert] = []
+            new_listings: list[tuple[ListingRecord, Any]] = []
             current_ids: set[int] = set()
             for listing in listings:
+                existing = listing_repo.get_listing_by_wallapop_id(listing.item_id)
                 record = listing_repo.get_or_create_listing(
                     listing,
                     profile_record.id,
@@ -246,6 +253,8 @@ class ProfileTracker:
                 snapshots.save_listing_snapshot(
                     record.id, run.id, listing, observed_at=started_at
                 )
+                if existing is None:
+                    new_listings.append((record, listing))
             previous = self._previous_complete_run(session, profile_record.id, run.id)
             if previous is not None:
                 previous_ids = set(
@@ -265,12 +274,45 @@ class ProfileTracker:
                         observed_at=started_at,
                         presence_state=PresenceState.REMOVED,
                     )
+            for record, listing in new_listings:
+                try:
+                    detection = RelistingDetectionService(session).detect_new_listing(
+                        record,
+                        listing,
+                        tracking_run_id=run.id,
+                        detected_at=started_at,
+                    )
+                except Exception:
+                    logger.exception(
+                        "relisting_detection_failed listing_id=%s run_id=%s",
+                        record.id,
+                        run.id,
+                    )
+                else:
+                    if detection is not None:
+                        event = session.get(TrackingEventRecord, detection.event_id)
+                        if event is not None:
+                            alerts.append(
+                                TrackingAlert(
+                                    event.id,
+                                    AlertType.POSSIBLE_RELISTING,
+                                    started_at,
+                                    listing.item_id,
+                                    None,
+                                    event.old_price,
+                                    event.new_price,
+                                    listing.title,
+                                    listing.url,
+                                    event.idempotency_key,
+                                )
+                            )
             return TrackingResult(
                 run_id=run.id,
                 status=TrackingRunStatus.VALID,
                 profile_id=profile_record.id,
                 items_fetched=len(listings),
                 pages_fetched=None,
+                alerts=tuple(alerts),
             )
 
     @staticmethod

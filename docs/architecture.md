@@ -213,6 +213,18 @@ TrackingEvent -> NotificationService -> NotificationDelivery
                                   -> Webhook / Discord / Telegram
 ```
 
+Las nuevas identidades de anuncio pasan además por un análisis best-effort:
+
+```text
+new Listing + removed historical Listing
+              ↓
+RelistingDetectionService
+              ↓
+PossibleRelisting + POSSIBLE_RELISTING (si supera el threshold)
+```
+
+La relación es heurística y explicable; nunca fusiona listings.
+
 ### Discovery de metadata
 
 `WallapopClient` expone APIs read-only para categorías, filtros, marcas y

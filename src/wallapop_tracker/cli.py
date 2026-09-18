@@ -27,6 +27,7 @@ from .storage.database import Database
 from .storage.models import TrackingRunStatus
 from .storage.repositories import (
     ListingRepository,
+    PossibleRelistingRepository,
     TrackedListingRepository,
     TrackedProfileRepository,
     TrackedSearchRepository,
@@ -37,10 +38,12 @@ search_app = typer.Typer(no_args_is_help=True)
 notifications_app = typer.Typer(no_args_is_help=True)
 listing_app = typer.Typer(no_args_is_help=True)
 metadata_app = typer.Typer(no_args_is_help=True)
+relistings_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
 app.add_typer(listing_app, name="listing")
 app.add_typer(metadata_app, name="metadata")
+app.add_typer(relistings_app, name="relistings")
 
 
 def _db() -> Database:
@@ -65,6 +68,47 @@ def _alias(value: str) -> str:
     if not value:
         raise typer.BadParameter("alias is required")
     return value
+
+
+@relistings_app.command("list")
+def relistings_list(
+    min_score: float | None = typer.Option(None, "--min-score", min=0, max=1),
+    listing_id: int | None = typer.Option(None, "--listing-id", min=1),
+) -> None:
+    """List possible relistings without changing their candidate status."""
+    database = _db()
+    try:
+        with database.session() as session:
+            rows = PossibleRelistingRepository(session).list_all(
+                min_score=Decimal(str(min_score)) if min_score is not None else None,
+                listing_id=listing_id,
+            )
+            for row in rows:
+                typer.echo(
+                    f"{row.id}\t{row.status.value}\t{float(row.score):.4f}\t"
+                    f"{row.previous_listing_id}->{row.current_listing_id}"
+                )
+    finally:
+        database.close()
+
+
+@relistings_app.command("show")
+def relistings_show(relisting_id: int) -> None:
+    """Show one possible relisting and its explainable reasons."""
+    database = _db()
+    try:
+        with database.session() as session:
+            row = PossibleRelistingRepository(session).get(relisting_id)
+            if row is None:
+                raise typer.BadParameter(f"Unknown relisting candidate: {relisting_id}")
+            typer.echo(f"id: {row.id}")
+            typer.echo(f"status: {row.status.value}")
+            typer.echo(f"score: {float(row.score):.4f}")
+            typer.echo(f"previous_listing_id: {row.previous_listing_id}")
+            typer.echo(f"current_listing_id: {row.current_listing_id}")
+            typer.echo(f"reasons: {row.reasons_json}")
+    finally:
+        database.close()
 
 
 @app.command()

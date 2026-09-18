@@ -48,10 +48,12 @@ class ProfileTrackingRunner:
         *,
         client_factory: ClientFactory = WallapopClient,
         tracker_factory: TrackerFactory = ProfileTracker,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self.database = database
         self.client_factory = client_factory
         self.tracker_factory = tracker_factory
+        self.notification_service = notification_service
 
     async def run(self, alias: str, *, now: datetime | None = None) -> ProfileTrackingResult:
         attempted_at = now or datetime.now(UTC)
@@ -76,6 +78,13 @@ class ProfileTrackingRunner:
             )
 
         self._record_run(alias, attempted_at, result.status, result.profile_id)
+        if self.notification_service is not None and result.alerts:
+            try:
+                self.notification_service.enqueue_events(
+                    alert.event_id for alert in result.alerts
+                )
+            except Exception:
+                logger.exception("notification_enqueue_failed profile_alias=%s", alias)
         return ProfileTrackingResult(
             alias=alias,
             attempted_at=attempted_at,
@@ -118,8 +127,8 @@ class SearchTrackingRunner:
         self.database = database
         self.client_factory = client_factory
         self.tracker_factory = tracker_factory
-        self.provider_factory = provider_factory
         self.notification_service = notification_service
+        self.provider_factory = provider_factory
 
     async def run(self, search_id: int) -> SearchTrackingResult:
         with self.database.session() as session:

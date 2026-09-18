@@ -327,17 +327,60 @@ class TrackingRunRecord(Base):
 
 class ListingRecord(Base):
     __tablename__ = "listings"
-    __table_args__ = (Index("ix_listings_profile_last_seen", "profile_id", "last_seen_at"),)
+    __table_args__ = (
+        Index("ix_listings_profile_last_seen", "profile_id", "last_seen_at"),
+        Index("ix_listings_seller_last_seen", "seller_user_id", "last_seen_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     wallapop_item_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
+    seller_user_id: Mapped[str | None] = mapped_column(String(100))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     profile: Mapped[ProfileRecord | None] = relationship(back_populates="listings")
     snapshots: Mapped[list["ListingSnapshotRecord"]] = relationship(back_populates="listing")
+
+
+class PossibleRelistingStatus(StrEnum):
+    CANDIDATE = "candidate"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
+class PossibleRelistingRecord(Base):
+    """Explainable relation between two independent listing identities."""
+
+    __tablename__ = "possible_relistings"
+    __table_args__ = (
+        UniqueConstraint(
+            "previous_listing_id", "current_listing_id", name="uq_possible_relisting_pair"
+        ),
+        Index("ix_possible_relistings_score_detected", "score", "detected_at"),
+        Index("ix_possible_relistings_current", "current_listing_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    previous_listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    current_listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    reasons_json: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[PossibleRelistingStatus] = mapped_column(
+        String(20), nullable=False, default=PossibleRelistingStatus.CANDIDATE,
+        server_default="candidate",
+    )
+    event_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tracking_events.id", ondelete="SET NULL"), unique=True
+    )
+    previous_listing: Mapped["ListingRecord"] = relationship(foreign_keys=[previous_listing_id])
+    current_listing: Mapped["ListingRecord"] = relationship(foreign_keys=[current_listing_id])
 
 
 class ProfileSnapshotRecord(Base):

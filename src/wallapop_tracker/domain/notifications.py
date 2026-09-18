@@ -20,6 +20,7 @@ class Notification:
     old_price: Decimal | None
     new_price: Decimal | None
     created_at: datetime
+    details: str | None = None
 
 
 @dataclass(frozen=True)
@@ -34,4 +35,3 @@ class DeliveryResult:
 class NotificationChannel(Protocol):
     async def send(self, notification: Notification, destination: str) -> DeliveryResult:
         """Send one notification to one configured destination."""
-

@@ -125,6 +125,8 @@ wallapop-track search disable 1
 wallapop-track search delete 1 --yes
 wallapop-track notifications list
 wallapop-track notifications retry
+wallapop-track relistings list --min-score 0.75
+wallapop-track relistings show 1
 wallapop-track listing add https://es.wallapop.com/item/<slug>-<id> --alias camera
 wallapop-track listing list
 wallapop-track listing show camera
@@ -166,10 +168,11 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Search matches** associate each global listing with every search that detected it, including first/last seen timestamps and detection count.
 - **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
 - **Tracked listings** monitor one global listing by alias and interval, including price, title, reservation, shipping, status, removal, and reappearance changes.
+- **Possible relistings** are explainable candidate links between a recently removed listing and a new listing from the same known seller. They never merge identities.
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0011`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, and `0011_search_initial_baseline` adding the per-search baseline policy. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
+The repository contains Alembic revisions `0001` through `0012`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, `0011_search_initial_baseline` adding the per-search baseline policy, and `0012_possible_relistings` adding heuristic candidate persistence. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 

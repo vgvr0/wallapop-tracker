@@ -1,5 +1,6 @@
 """Read-only historical queries for the persisted tracking history."""
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -7,9 +8,11 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from wallapop_tracker.domain.relisting import RelistingCandidate, RelistingReason
 from wallapop_tracker.storage.models import (
     ListingRecord,
     ListingSnapshotRecord,
+    PossibleRelistingRecord,
     PresenceState,
     ProfileSnapshotRecord,
     SearchListingMatchRecord,
@@ -313,3 +316,49 @@ def get_search_tracking_metrics(session: Session, search_id: int) -> SearchTrack
         int(alerts),
         sum(run.duplicates_suppressed or 0 for run in runs),
     )
+
+
+def _relisting_candidate(record: PossibleRelistingRecord) -> RelistingCandidate:
+    values = json.loads(record.reasons_json)
+    reasons = tuple(
+        RelistingReason(
+            name=value["name"],
+            value=value["value"],
+            contribution=float(value["contribution"]),
+        )
+        for value in values
+    )
+    return RelistingCandidate(
+        previous_listing_id=record.previous_listing_id,
+        current_listing_id=record.current_listing_id,
+        score=float(record.score),
+        reasons=reasons,
+    )
+
+
+def get_possible_relistings(
+    session: Session,
+    *,
+    min_score: Decimal | None = None,
+    listing_id: int | None = None,
+) -> list[RelistingCandidate]:
+    statement = select(PossibleRelistingRecord)
+    if min_score is not None:
+        statement = statement.where(PossibleRelistingRecord.score >= min_score)
+    if listing_id is not None:
+        statement = statement.where(
+            (PossibleRelistingRecord.previous_listing_id == listing_id)
+            | (PossibleRelistingRecord.current_listing_id == listing_id)
+        )
+    rows = session.scalars(
+        statement.order_by(
+            PossibleRelistingRecord.score.desc(), PossibleRelistingRecord.detected_at.desc()
+        )
+    ).all()
+    return [_relisting_candidate(row) for row in rows]
+
+
+def get_relisting_candidates_for_listing(
+    session: Session, listing_id: int
+) -> list[RelistingCandidate]:
+    return get_possible_relistings(session, listing_id=listing_id)
