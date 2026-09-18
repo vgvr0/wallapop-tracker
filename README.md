@@ -127,6 +127,12 @@ wallapop-track notifications list
 wallapop-track notifications retry
 wallapop-track relistings list --min-score 0.75
 wallapop-track relistings show 1
+wallapop-track analytics market 1
+wallapop-track analytics market 1 --json
+wallapop-track analytics prices 1
+wallapop-track analytics activity 1 --weekly
+wallapop-track analytics sellers 1
+wallapop-track analytics brands 1
 wallapop-track listing add https://es.wallapop.com/item/<slug>-<id> --alias camera
 wallapop-track listing list
 wallapop-track listing show camera
@@ -169,6 +175,7 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
 - **Tracked listings** monitor one global listing by alias and interval, including price, title, reservation, shipping, status, removal, and reappearance changes.
 - **Possible relistings** are explainable candidate links between a recently removed listing and a new listing from the same known seller. They never merge identities.
+- **Market analytics** provide read-only search summaries, price distributions, daily/weekly activity series, and objective seller/brand/category aggregations. Removed listings are not treated as sold.
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 

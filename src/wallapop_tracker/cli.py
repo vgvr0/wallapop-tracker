@@ -1,8 +1,9 @@
 """Manual CLI for configuring and running tracked profiles."""
 
 import asyncio
+import json
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -14,6 +15,13 @@ from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import WallapopError
 from .models import Listing
 from .parsers.search_url import SearchURLParseError, parse_search_url
+from .reporting import (
+    get_activity_time_series,
+    get_brand_market_stats,
+    get_market_summary,
+    get_price_time_series,
+    get_seller_market_stats,
+)
 from .services.notifications import NotificationService
 from .services.runner import (
     ListingTrackingRunner,
@@ -39,11 +47,13 @@ notifications_app = typer.Typer(no_args_is_help=True)
 listing_app = typer.Typer(no_args_is_help=True)
 metadata_app = typer.Typer(no_args_is_help=True)
 relistings_app = typer.Typer(no_args_is_help=True)
+analytics_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
 app.add_typer(listing_app, name="listing")
 app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
+app.add_typer(analytics_app, name="analytics")
 
 
 def _db() -> Database:
@@ -68,6 +78,110 @@ def _alias(value: str) -> str:
     if not value:
         raise typer.BadParameter("alias is required")
     return value
+
+
+def _json_default(value: object) -> str:
+    if isinstance(value, Decimal):
+        return f"{value:.2f}"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, timedelta):
+        return str(value)
+    raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
+
+@analytics_app.command("market")
+def analytics_market(
+    search_id: int,
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Show a read-only market summary for one tracked search."""
+    database = _db()
+    try:
+        with database.session() as session:
+            summary = get_market_summary(session, search_id)
+            if as_json:
+                typer.echo(json.dumps(summary.__dict__, default=_json_default, sort_keys=True))
+                return
+            typer.echo(f"Market summary — search {search_id}")
+            typer.echo(f"Active listings: {summary.active_listings}")
+            typer.echo(f"Unique observed: {summary.unique_listings}")
+            typer.echo(f"Median price: {_money(summary.median_price)}")
+            typer.echo(f"Average price: {_money(summary.average_price)}")
+            typer.echo(f"P25: {_money(summary.p25_price)}")
+            typer.echo(f"P75: {_money(summary.p75_price)}")
+            typer.echo(f"New listings (period): {summary.new_listings}")
+            typer.echo(f"Removed listings: {summary.removed_listings}")
+            typer.echo(f"Price drops: {summary.price_drops}")
+            typer.echo(f"Price increases: {summary.price_increases}")
+            typer.echo(f"Median observed active duration: {summary.median_active_duration or '-'}")
+    finally:
+        database.close()
+
+
+@analytics_app.command("prices")
+def analytics_prices(search_id: int, weekly: bool = typer.Option(False, "--weekly")) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for point in get_price_time_series(
+                session, search_id, granularity="weekly" if weekly else "daily"
+            ):
+                typer.echo(
+                    f"{point.date.isoformat()}\t{_money(point.median_price)}\t"
+                    f"{_money(point.average_price)}\t{point.active_listings}"
+                )
+    finally:
+        database.close()
+
+
+@analytics_app.command("activity")
+def analytics_activity(search_id: int, weekly: bool = typer.Option(False, "--weekly")) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for point in get_activity_time_series(
+                session, search_id, granularity="weekly" if weekly else "daily"
+            ):
+                typer.echo(
+                    f"{point.date.isoformat()}\t{point.new_listings}\t"
+                    f"{point.removed_listings}\t{point.price_drops}"
+                )
+    finally:
+        database.close()
+
+
+@analytics_app.command("sellers")
+def analytics_sellers(search_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for seller in get_seller_market_stats(session, search_id):
+                typer.echo(
+                    f"{seller.seller_external_id or '-'}\t{seller.listing_count}\t"
+                    f"{seller.active_count}\t{_money(seller.median_price)}\t"
+                    f"{seller.price_drop_count}"
+                )
+    finally:
+        database.close()
+
+
+@analytics_app.command("brands")
+def analytics_brands(search_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            for brand in get_brand_market_stats(session, search_id):
+                typer.echo(
+                    f"{brand.brand}\t{brand.listing_count}\t{brand.active_count}\t"
+                    f"{_money(brand.median_price)}"
+                )
+    finally:
+        database.close()
+
+
+def _money(value: Decimal | None) -> str:
+    return f"{value:.2f} €" if value is not None else "-"
 
 
 @relistings_app.command("list")
@@ -199,7 +313,9 @@ async def _run(alias: str) -> TrackingRunStatus:
         ).run(alias)
         if result.tracking_result is not None:
             tracking = result.tracking_result
-            typer.echo(f"{alias}\t{tracking.run_id}\t{result.status.value}\t{tracking.items_fetched}")
+            typer.echo(
+                f"{alias}\t{tracking.run_id}\t{result.status.value}\t{tracking.items_fetched}"
+            )
         else:
             typer.echo(f"{alias}\tfailed\t{result.error or 'unknown error'}")
         return result.status
@@ -273,6 +389,7 @@ def schedule(
 @metadata_app.command("categories")
 def metadata_categories(context: str | None = typer.Option(None, "--context")) -> None:
     """List the observed public Wallapop category catalog."""
+
     async def fetch() -> list[Category]:
         async with WallapopClient() as client:
             return await client.categories(context=context)
@@ -298,6 +415,7 @@ def metadata_filters(
     category_id: str | None = typer.Option(None, "--category-id"),
 ) -> None:
     """List filters exposed for a search context."""
+
     async def fetch() -> list[AvailableFilter]:
         async with WallapopClient() as client:
             return await client.available_filters(query=query, category_id=category_id)
@@ -319,6 +437,7 @@ def metadata_brands(
     category_id: str | None = typer.Option(None, "--category-id"),
 ) -> None:
     """List brand options exposed for a search context."""
+
     async def fetch() -> list[Brand]:
         async with WallapopClient() as client:
             return await client.brands(query=query, category_id=category_id)
@@ -338,6 +457,7 @@ def metadata_models(
     category_id: str | None = typer.Option(None, "--category-id"),
 ) -> None:
     """List model options exposed for a search context."""
+
     async def fetch() -> list[ProductModel]:
         async with WallapopClient() as client:
             return await client.models(query=query, category_id=category_id)
@@ -391,9 +511,7 @@ def search_add(
         database.close()
     typer.echo(f"id: {record.id}")
     typer.echo(f"query: {record.query}")
-    typer.echo(
-        f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}"
-    )
+    typer.echo(f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}")
     typer.echo("enabled: true")
 
 
@@ -451,9 +569,7 @@ def search_import(
     typer.echo(f"id: {record.id}")
     typer.echo(f"name: {record.name or record.query}")
     typer.echo(f"query: {record.query}")
-    typer.echo(
-        f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}"
-    )
+    typer.echo(f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}")
     if record.min_price is not None or record.max_price is not None:
         typer.echo(f"price: {record.min_price or '-'}–{record.max_price or '-'} €")
     if imported.category_id is not None:
@@ -616,9 +732,7 @@ def listing_add(
         database = _db()
         try:
             with database.transaction() as session:
-                record, _ = ListingRepository(session).get_or_create_global_listing(
-                    listing, None
-                )
+                record, _ = ListingRepository(session).get_or_create_global_listing(listing, None)
                 tracked = TrackedListingRepository(session).create(
                     record.id,
                     alias or item_id,
@@ -742,9 +856,7 @@ def listing_run_all() -> None:
     database = _db()
     try:
         with database.session() as session:
-            values = [
-                record.alias for record in TrackedListingRepository(session).list_enabled()
-            ]
+            values = [record.alias for record in TrackedListingRepository(session).list_enabled()]
     finally:
         database.close()
     for value in values:

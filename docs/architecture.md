@@ -225,6 +225,19 @@ PossibleRelisting + POSSIBLE_RELISTING (si supera el threshold)
 
 La relación es heurística y explicable; nunca fusiona listings.
 
+Los analytics de mercado son una capa read-only sobre `SearchMatch`, runs
+válidos, presence, snapshots y eventos:
+
+```text
+SearchMatch + valid runs + snapshots + TrackingEvent
+                         ↓
+                 reporting.market
+                         ↓
+              summary / series / aggregations
+```
+
+Una ausencia observada se denomina `removed`; no se interpreta como venta.
+
 ### Discovery de metadata
 
 `WallapopClient` expone APIs read-only para categorías, filtros, marcas y
