@@ -83,12 +83,12 @@ class SearchAlertService:
 
 
 class PriceAlertService:
-    """Legacy price-watch reader retained until ``TrackedListing`` exists.
+    """Deprecated price-watch reader retained for historical compatibility.
 
     .. deprecated::
        New search alerts are emitted by ``SearchTracker``. Direct listing
-       watches remain available temporarily because they are a distinct use
-       case and will migrate to ``TrackedListing`` in a later phase.
+       watches are superseded by ``TrackedListing`` and are not used by the
+       CLI or scheduler.
     """
 
     def __init__(self, session: Session) -> None:

@@ -5,7 +5,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 ## Key features
 
 - Asynchronous HTTP client for public profile, statistics, review-summary, listing, and search data.
-- Search tracking with configurable query, price range, filters, enable/disable state, and per-search interval.
+- Tracked-search monitoring with configurable query, price range, filters, enable/disable state, and per-search interval.
 - Pure filters for price, case-insensitive include ANY/ALL, exclusions, and regular expressions.
 - Profile URL resolution through the public profile page or a locally recognizable canonical ID.
 - Cursor-based listing pagination with duplicate and repeated-cursor protection.
@@ -13,7 +13,8 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Valid, partial, and failed tracking-run outcomes with component-level capture flags.
 - Deterministic diffing for new, removed, and reappeared listings; prices; titles; reservation; shipping; brand; rating; review count; and sold count.
 - Read-only reporting queries for current inventory, inventory history, price history, presence history, profile metrics, active duration, and weekly summaries.
-- Internal alert services for new saved-search matches and listing price drops.
+- Backward-compatible legacy alert tables remain readable, but new alerts use
+  `TrackingEvent` and `NotificationDelivery` exclusively.
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
 - Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
 - Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
@@ -42,11 +43,21 @@ flowchart LR
     ListingTracker --> DB
     DB --> Diff[DiffService]
     DB --> Reporting[Reporting queries and metrics]
-    DB --> Alerts[Search and price alert services]
+    DB --> Alerts[Legacy alert tables, read-only compatibility]
     Migrations[Alembic migrations] -. schema evolution .-> DB
 ```
 
 The client performs extraction asynchronously. Profile and search trackers persist valid captures atomically. The shared scheduler selects due profiles and searches, while the event ledger makes global alerts idempotent.
+
+The active path is:
+
+```text
+Wallapop adapters/client
+  -> ProfileTracker / SearchTracker / TrackedListingTracker
+  -> SQLAlchemy + Alembic persistence
+  -> snapshots / presence / TrackingEvent
+  -> NotificationDelivery, analytics, scoring
+```
 
 ```text
                ┌── Profile Tracker
@@ -91,6 +102,12 @@ git clone <repository-url>
 cd wallapop-tracker
 python -m venv .venv
 pip install -e ".[dev]"
+```
+
+For an existing database, apply migrations before starting the API or CLI:
+
+```bash
+alembic upgrade head
 ```
 
 The package requires Python 3.12 or newer. The default database URL is `sqlite:///data/wallapop_tracker.db`; the `data/` directory is created when the CLI initializes the database.
@@ -271,6 +288,28 @@ analysis, not purchase advice.
 Run the local API with `uvicorn wallapop_tracker.api.app:app --reload`.
 It is documented in [`docs/api.md`](docs/api.md), uses `/api/v1`, and has no
 authentication in this phase; keep it private.
+
+The API exposes `/health`, `/ready`, `/metrics` and the versioned resources
+under `/api/v1`. It is intentionally local/private and performs no external
+Wallapop calls while serving read queries.
+
+## Notifications, analytics and scoring
+
+Notification destinations are configured with environment variables documented
+below. Delivery is persistent and idempotent; failed channels do not invalidate
+tracking runs. Market analytics are available with `analytics market`,
+`analytics prices`, `analytics activity`, `analytics sellers` and
+`analytics brands`. Deal scoring is deterministic and contextual to a tracked
+search; it is not purchase advice.
+
+## Engineering highlights
+
+- Async HTTP with bounded retries, rate limiting and `Retry-After` handling.
+- Bounded scheduler concurrency with isolated SQLAlchemy sessions.
+- SQLAlchemy/Alembic historical modeling and idempotent event persistence.
+- Persistent notification delivery with offline channel tests.
+- Deterministic diffing, analytics, relisting detection and deal scoring.
+- FastAPI, Prometheus-compatible metrics, Docker and CI contract tests.
 
 Operational logging and metrics are documented in
 [`docs/observability.md`](docs/observability.md). Use `/health`, `/ready` and

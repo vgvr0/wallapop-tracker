@@ -41,6 +41,7 @@ class Base(DeclarativeBase):
 
 
 class SavedSearchRecord(Base):
+    """Deprecated pre-TrackedSearch persistence kept for old databases."""
     __tablename__ = "saved_searches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -59,6 +60,7 @@ class SavedSearchRecord(Base):
 
 
 class SavedSearchItemRecord(Base):
+    """Deprecated child rows for :class:`SavedSearchRecord`."""
     __tablename__ = "saved_search_items"
     __table_args__ = (
         UniqueConstraint("saved_search_id", "wallapop_item_id", name="uq_saved_search_item"),
@@ -173,6 +175,7 @@ class TrackingEventRecord(Base):
     old_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     new_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Deprecated compatibility flag; notification_deliveries is authoritative.
     alert_delivered: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     listing: Mapped["ListingRecord"] = relationship()
     tracking_run: Mapped["TrackingRunRecord"] = relationship()
@@ -220,6 +223,7 @@ class NotificationDeliveryRecord(Base):
 
 
 class PriceWatchRecord(Base):
+    """Deprecated pre-TrackedListing watch retained for historical data."""
     __tablename__ = "price_watches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), unique=True, nullable=False)

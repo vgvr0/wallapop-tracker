@@ -289,3 +289,31 @@ input to existing repositories, reporting functions, and services.
 Operational observability is centralized in `observability.py` and consumed by
 the HTTP client, persistence boundaries, scheduler, notifications and FastAPI
 middleware. It does not alter business analytics or tracking semantics.
+
+## Arquitectura final
+
+```text
+                         Wallapop
+                            │
+                       adapters/client
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+   ProfileTracker    SearchTracker    ListingTracker
+          └─────────────────┼─────────────────┘
+                            │
+                     persistence
+                            │
+           snapshots / presence / TrackingEvent
+                    ┌───────┼────────┐
+                    │       │        │
+             notifications analytics scoring
+                    │
+                 scheduler
+
+FastAPI and CLI are local/private operator transports.
+```
+
+The active alert path is `TrackingEvent -> NotificationDelivery`. The old
+saved-search and price-watch services remain deprecated compatibility code and
+are outside the scheduler.

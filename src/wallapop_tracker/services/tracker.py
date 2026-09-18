@@ -251,7 +251,7 @@ class ProfileTracker:
             new_listings: list[tuple[ListingRecord, Any]] = []
             current_ids: set[int] = set()
             for listing in listings:
-                existing = listing_repo.get_listing_by_wallapop_id(listing.item_id)
+                existing = listing_repo.get_listing(listing.marketplace, listing.external_id)
                 record = listing_repo.get_or_create_listing(
                     listing,
                     profile_record.id,

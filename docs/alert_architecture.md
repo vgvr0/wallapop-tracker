@@ -10,7 +10,7 @@ SearchMatch
      ↓
 TrackingEvent
      ↓
-future NotificationDelivery
+NotificationDelivery
 ```
 
 `SearchTracker` obtiene resultados, persiste la identidad global del anuncio,
@@ -45,8 +45,7 @@ conservan temporalmente para no invalidar bases existentes ni borrar datos sin
 migración. Están fuera del CLI, scheduler y flujo de nuevas alertas, y se
 consideran deprecated.
 
-`PriceWatchRecord` y `PriceAlertService` también se conservan temporalmente:
-representan una vigilancia directa de un anuncio, que no es equivalente a una
-búsqueda. Se migrarán a `TrackedListing` en la Fase 5. No se añade todavía una
-tabla de notificaciones ni se envían webhooks, Telegram o Discord.
-
+`PriceWatchRecord` y `PriceAlertService` también se conservan como deprecated:
+representan una vigilancia directa de un anuncio, que fue sustituida por
+`TrackedListing`. No participan en el scheduler ni en el flujo de nuevas
+notificaciones; sus tablas no se eliminan para preservar histórico.

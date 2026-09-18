@@ -339,7 +339,9 @@ class NotificationService:
             .limit(1)
         )
         listing_id = (
-            event.listing.wallapop_item_id if event.listing is not None else str(event.listing_id)
+            event.listing.external_id or event.listing.wallapop_item_id
+            if event.listing is not None
+            else str(event.listing_id)
         )
         details = None
         if event.event_type == AlertType.POSSIBLE_RELISTING.value:

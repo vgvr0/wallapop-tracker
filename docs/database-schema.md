@@ -109,7 +109,7 @@ Los snapshots de perfil son change-based: solo se inserta una fila si cambia alg
 | `id` | integer/bigint | PK |
 | `marketplace` | varchar(32) | NOT NULL, default `wallapop` |
 | `external_id` | varchar | parte de UNIQUE con `marketplace` |
-| `wallapop_item_id` | varchar | nullable, bridge legacy |
+| `wallapop_item_id` | varchar | nullable, deprecated bridge legacy |
 | `profile_id` | FK a `profiles.id` | nullable; NULL para listings observados solo por búsquedas |
 | `first_seen_at` | timestamp with timezone | NOT NULL |
 | `last_seen_at` | timestamp with timezone | NOT NULL |
@@ -201,7 +201,7 @@ Los anuncios observados exclusivamente desde búsquedas pueden tener
 La pareja `(previous_listing_id, current_listing_id)` es única. Existen
 índices por `(score, detected_at)` y `current_listing_id`. `listings` conserva
 también el `seller_user_id` observado, nullable, para acotar candidatos sin
-alterar la identidad por `wallapop_item_id`.
+alterar la identidad por `(marketplace, external_id)`.
 
 ### `tracked_searches`
 

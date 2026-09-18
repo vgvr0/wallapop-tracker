@@ -62,7 +62,9 @@ class TrackedListingTracker:
                 raise ValueError(f"Unknown tracked listing: {tracked_listing_id}")
             if not tracked.enabled:
                 return ListingTrackingResult(tracked_listing_id, None, None)
-            item_id = tracked.listing.wallapop_item_id
+            item_id = tracked.listing.external_id or tracked.listing.wallapop_item_id
+            if item_id is None:
+                raise ValueError(f"Listing {tracked.listing_id} has no external identity")
 
         try:
             listing = await self.provider.get(item_id)
@@ -87,7 +89,9 @@ class TrackedListingTracker:
             tracked = TrackedListingRepository(session).get(tracked_listing_id)
             if tracked is None:
                 raise ValueError(f"Unknown tracked listing: {tracked_listing_id}")
-            current = ListingRepository(session).get_listing_by_wallapop_id(listing.item_id)
+            current = ListingRepository(session).get_listing(
+                listing.marketplace, listing.external_id
+            )
             if current is None or current.id != tracked.listing_id:
                 raise ValueError("Listing provider returned a different item")
             previous = self._latest_snapshot(session, current.id)
@@ -292,7 +296,7 @@ class TrackedListingTracker:
         transition: dict[str, object],
     ) -> TrackingAlert:
         key = json.dumps(
-            {"event": event_type.value, "listing_id": listing.wallapop_item_id, **transition},
+            {"event": event_type.value, "listing_id": listing.external_id, **transition},
             sort_keys=True,
             separators=(",", ":"),
             default=str,

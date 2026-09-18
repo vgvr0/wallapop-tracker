@@ -140,7 +140,7 @@ class SearchTracker:
                 if listing.item_id in seen_ids:
                     continue
                 seen_ids.add(listing.item_id)
-                existing = listing_repo.get_listing_by_wallapop_id(listing.item_id)
+                existing = listing_repo.get_listing(listing.marketplace, listing.external_id)
                 previous_snapshot = self._latest_snapshot(session, existing)
                 previous_match = (
                     matches.get(search_id, existing.id)

@@ -7,7 +7,7 @@ repositorio. La auditoría se realizó sobre la rama `feature/platform-evolution
 partiendo de `master`, sin cambiar el comportamiento de producción. El estado
 inicial validado es:
 
-- 100 tests pasan y 1 test marcado `live` queda excluido por la configuración
+- El baseline histórico tenía 100 tests y 1 test marcado `live` quedaba excluido por la configuración
   habitual de pytest.
 - `ruff check .` pasa.
 - `mypy src` pasa en modo estricto.
@@ -73,7 +73,7 @@ observados solo por búsquedas pueden conservar `profile_id = NULL`.
 
 ### Migraciones y documentación
 
-Las migraciones `0001` a `0010` evolucionan el esquema histórico, perfiles
+Las migraciones `0001` a `0013` evolucionan el esquema histórico, perfiles
 monitorizados, alertas legacy y búsquedas integradas. La `0007` añade
 `tracking_runs.tracked_search_id` como entero sin FK para evitar una
 dependencia circular durante la creación histórica de tablas; el ORM expone
@@ -325,7 +325,7 @@ external writes remain out of scope.
 Completed with structured human/JSON logging, Prometheus-compatible local
 metrics, health/readiness checks and low-cardinality instrumentation for HTTP,
 tracking, scheduler and notifications. No external monitoring infrastructure
-or Phase 15 work is included.
+was introduced.
 
 ## Phase 15 — Preparación multi-marketplace
 
@@ -335,4 +335,23 @@ searches, same-market relisting checks, API response fields and migration
 `0013_marketplace_identity` are in place. Providers remain small contracts
 with only Wallapop adapters. Profile identity, metadata taxonomy, URLs and
 additional providers are intentionally deferred; this phase does not
-implement Vinted or Phase 16.
+implement Vinted or any additional marketplace.
+
+## Phase 16 — Final technical cleanup
+
+Completed. The active architecture is consolidated around tracking runs,
+tracking events, persistent notification deliveries, analytics, scoring and
+small marketplace providers. Legacy alert tables and `alert_delivered` remain
+deprecated compatibility surfaces; they are not used by the CLI or scheduler.
+The README, schema documentation, migration chain, CI checks and portfolio
+summary now describe the implemented state through revision `0013`.
+
+## Roadmap status
+
+Phases 0–16 are complete. No additional roadmap phase is defined.
+
+### Possible future work
+
+Future work, outside this roadmap, could include a Vinted adapter, a private
+frontend, authentication, score calibration, image hashing and distributed
+scheduler locking. None is implemented here.
