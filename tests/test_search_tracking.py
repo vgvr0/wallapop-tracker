@@ -57,7 +57,9 @@ class FailingSearchProvider:
 
 def create_search(database: Database, query: str) -> int:
     with database.transaction() as session:
-        return TrackedSearchRepository(session).create(query, name=query).id
+        return TrackedSearchRepository(session).create(
+            query, name=query, notify_on_first_run=True
+        ).id
 
 
 @pytest.mark.asyncio

@@ -183,6 +183,19 @@ perfil tiene `profile_id` y un run de búsqueda tiene `tracked_search_id`.
 Los anuncios observados exclusivamente desde búsquedas pueden tener
 `listings.profile_id = NULL`; no se crea un perfil sintético.
 
+### `tracked_searches`
+
+Además de la configuración de consulta, filtros, enablement e intervalo, la
+tabla contiene:
+
+| Campo | Tipo lógico | Reglas |
+|---|---|---|
+| `notify_on_first_run` | boolean | NOT NULL, default `false` para búsquedas nuevas |
+
+La migración `0011_search_initial_baseline` establece temporalmente `true` en
+las filas existentes para conservar las notificaciones históricas de la
+primera ejecución. Las filas nuevas usan el default `false`.
+
 ## Índices
 
 Índices iniciales, evitando indexar cada campo:

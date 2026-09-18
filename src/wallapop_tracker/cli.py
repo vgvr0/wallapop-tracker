@@ -319,6 +319,7 @@ def search_add(
     include_all: bool = typer.Option(False, "--include-all"),
     regex: str | None = typer.Option(None, "--regex"),
     regex_target: str = typer.Option("both", "--regex-target"),
+    notify_on_first_run: bool = typer.Option(False, "--notify-on-first-run"),
 ) -> None:
     """Create a persistent read-only Wallapop search tracker."""
     filters = {
@@ -338,6 +339,7 @@ def search_add(
                 max_price=Decimal(max_price) if max_price is not None else None,
                 filters=filters,
                 interval_seconds=interval_seconds,
+                notify_on_first_run=notify_on_first_run,
             )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -345,6 +347,9 @@ def search_add(
         database.close()
     typer.echo(f"id: {record.id}")
     typer.echo(f"query: {record.query}")
+    typer.echo(
+        f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}"
+    )
     typer.echo("enabled: true")
 
 
@@ -358,7 +363,8 @@ def search_list() -> None:
                 label = record.name or record.query
                 typer.echo(
                     f"{record.id}\t{state}\t{label}\t{record.query}\t"
-                    f"{record.last_run_at or '-'}\t{record.last_run_status or '-'}"
+                    f"{record.last_run_at or '-'}\t{record.last_run_status or '-'}\t"
+                    f"initial-notifications={'on' if record.notify_on_first_run else 'off'}"
                 )
     finally:
         database.close()
@@ -370,6 +376,7 @@ def search_import(
     name: str | None = typer.Option(None, "--name"),
     interval_seconds: int = typer.Option(600, "--interval-seconds", min=1),
     disabled: bool = typer.Option(False, "--disabled"),
+    notify_on_first_run: bool = typer.Option(False, "--notify-on-first-run"),
 ) -> None:
     """Create a tracked search from an observed Wallapop search URL."""
     try:
@@ -388,6 +395,7 @@ def search_import(
                     max_price=imported.max_price,
                     filters=imported.search_filters(),
                     interval_seconds=interval_seconds,
+                    notify_on_first_run=notify_on_first_run,
                 )
                 if disabled:
                     record.enabled = False
@@ -399,6 +407,9 @@ def search_import(
     typer.echo(f"id: {record.id}")
     typer.echo(f"name: {record.name or record.query}")
     typer.echo(f"query: {record.query}")
+    typer.echo(
+        f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}"
+    )
     if record.min_price is not None or record.max_price is not None:
         typer.echo(f"price: {record.min_price or '-'}–{record.max_price or '-'} €")
     if imported.category_id is not None:
@@ -435,6 +446,9 @@ def search_show(search_id: int) -> None:
             typer.echo(f"max_price: {record.max_price or '-'}")
             typer.echo(f"enabled: {record.enabled}")
             typer.echo(f"interval_seconds: {record.interval_seconds}")
+            typer.echo(
+                f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}"
+            )
             typer.echo(f"filters: {record.filters_json or '{}'}")
     finally:
         database.close()

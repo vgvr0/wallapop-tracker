@@ -111,7 +111,8 @@ wallapop-track schedule --once
 wallapop-track schedule --interval-hours 168
 wallapop-track schedule --once --max-concurrency 4
 wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
-wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato"
+wallapop-track search add --name "iphone con avisos iniciales" --query "iphone 15 pro" --notify-on-first-run
+wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato" --notify-on-first-run
 wallapop-track metadata categories
 wallapop-track metadata filters --query iphone --category-id 24200
 wallapop-track metadata brands --category-id 24200
@@ -133,7 +134,7 @@ wallapop-track listing disable camera
 wallapop-track listing remove camera --yes
 ```
 
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
+`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
 The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
 
@@ -161,14 +162,14 @@ Profiles are executed sequentially. A failure is recorded for the affected profi
 - **Profile snapshots** store change-based profile metrics such as rating, review count, published count, purchases, sales, sold count, reports, and rating distribution.
 - **Listing snapshots** store change-based listing fields such as title, price, status, reservation, shipping, brand, condition, and source timestamps.
 - **Presence rows** associate listings with valid runs. Listing snapshots use `ACTIVE` or `REMOVED` to preserve lifecycle state.
-- **Tracked searches** store query, price bounds, structured filters, enablement and interval metadata.
+- **Tracked searches** store query, price bounds, structured filters, enablement, interval metadata and the configurable first-run notification policy. A silent first valid run establishes inventory without `NEW_LISTING` alerts.
 - **Search matches** associate each global listing with every search that detected it, including first/last seen timestamps and detection count.
 - **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
 - **Tracked listings** monitor one global listing by alias and interval, including price, title, reservation, shipping, status, removal, and reappearance changes.
 
 Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
 
-The repository contains Alembic revisions `0001` through `0010`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, and `0010_tracked_listings` adding direct listing monitoring. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
+The repository contains Alembic revisions `0001` through `0011`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, and `0011_search_initial_baseline` adding the per-search baseline policy. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
 
 ## Change detection
 

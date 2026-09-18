@@ -115,6 +115,9 @@ class SearchTracker:
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
             runs = TrackingRunRepository(session)
+            initial_baseline = (
+                not search_repo.has_valid_run(search_id) and not search.notify_on_first_run
+            )
             run = runs.start_search_run(search_id, started_at=started_at)
             runs.mark_valid(run.id, items_fetched=len(fetched), items_ok=True)
             listing_repo = ListingRepository(session)
@@ -131,6 +134,11 @@ class SearchTracker:
                 seen_ids.add(listing.item_id)
                 existing = listing_repo.get_listing_by_wallapop_id(listing.item_id)
                 previous_snapshot = self._latest_snapshot(session, existing)
+                previous_match = (
+                    matches.get(search_id, existing.id)
+                    if existing is not None
+                    else None
+                )
                 record, _ = listing_repo.get_or_create_global_listing(
                     listing,
                     None,
@@ -143,22 +151,23 @@ class SearchTracker:
                     record.id, run.id, listing, observed_at=started_at
                 )
 
-                new_key = self._event_key(AlertType.NEW_LISTING, listing.item_id)
-                new_event, created = events.create_once(
-                    event_type=AlertType.NEW_LISTING.value,
-                    idempotency_key=new_key,
-                    listing_id=record.id,
-                    tracking_run_id=run.id,
-                    tracked_search_id=search_id,
-                    old_price=None,
-                    new_price=listing.price,
-                    created_at=started_at,
-                )
-                if created:
-                    new_count += 1
-                    alerts.append(self._alert(new_event, listing, search_id))
-                else:
-                    duplicate_count += 1
+                if previous_match is None and not initial_baseline:
+                    new_key = self._event_key(AlertType.NEW_LISTING, listing.item_id)
+                    new_event, created = events.create_once(
+                        event_type=AlertType.NEW_LISTING.value,
+                        idempotency_key=new_key,
+                        listing_id=record.id,
+                        tracking_run_id=run.id,
+                        tracked_search_id=search_id,
+                        old_price=None,
+                        new_price=listing.price,
+                        created_at=started_at,
+                    )
+                    if created:
+                        new_count += 1
+                        alerts.append(self._alert(new_event, listing, search_id))
+                    else:
+                        duplicate_count += 1
 
                 if (
                     previous_snapshot is not None

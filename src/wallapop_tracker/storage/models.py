@@ -87,6 +87,9 @@ class TrackedSearchRecord(Base):
     max_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     filters_json: Mapped[str | None] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    notify_on_first_run: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

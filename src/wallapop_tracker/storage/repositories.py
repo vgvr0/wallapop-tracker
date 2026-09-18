@@ -62,6 +62,7 @@ class TrackedSearchRepository:
         max_price: Decimal | None = None,
         filters: dict[str, Any] | None = None,
         interval_seconds: int = 600,
+        notify_on_first_run: bool = False,
     ) -> TrackedSearchRecord:
         query = query.strip()
         if not query:
@@ -78,12 +79,23 @@ class TrackedSearchRepository:
             max_price=max_price,
             filters_json=_json_text(filters),
             interval_seconds=interval_seconds,
+            notify_on_first_run=notify_on_first_run,
             created_at=now,
             updated_at=now,
         )
         self.session.add(record)
         self.session.flush()
         return record
+
+    def has_valid_run(self, search_id: int) -> bool:
+        return self.session.scalar(
+            select(TrackingRunRecord.id)
+            .where(
+                TrackingRunRecord.tracked_search_id == search_id,
+                TrackingRunRecord.status == TrackingRunStatus.VALID,
+            )
+            .limit(1)
+        ) is not None
 
     def enable(self, search_id: int) -> TrackedSearchRecord:
         return self._set_enabled(search_id, True)
@@ -268,6 +280,9 @@ class SearchMatchRepository:
             record.detection_count += 1
         self.session.flush()
         return record
+
+    def get(self, search_id: int, listing_id: int) -> SearchListingMatchRecord | None:
+        return self.session.get(SearchListingMatchRecord, (search_id, listing_id))
 
 
 class TrackingEventRepository:

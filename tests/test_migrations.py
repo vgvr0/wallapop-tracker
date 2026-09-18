@@ -178,3 +178,50 @@ def test_tracked_listing_migration_from_0009(tmp_path):
     } == tracked_columns
     assert "tracked_listing_id" in run_columns
     assert "tracked_listings" in run_foreign_keys
+
+
+def test_search_initial_baseline_migration_from_0010(tmp_path):
+    database_path = tmp_path / "search-baseline.db"
+    config = _config(database_path)
+    command.upgrade(config, "0010_tracked_listings")
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO tracked_searches "
+                "(query, enabled, interval_seconds, created_at, updated_at) "
+                "VALUES ('no-run', 1, 600, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                "('valid-run', 1, 600, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                "('failed-run', 1, 600, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO tracking_runs "
+                "(tracked_search_id, started_at, finished_at, status, "
+                "profile_ok, stats_ok, reviews_ok, items_ok) VALUES "
+                "(2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'valid', 0, 0, 0, 1), "
+                "(3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'failed', 0, 0, 0, 0)"
+            )
+        )
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        searches = connection.execute(
+            text(
+                "SELECT id, notify_on_first_run FROM tracked_searches ORDER BY id"
+            )
+        ).all()
+        run_count = connection.execute(text("SELECT COUNT(*) FROM tracking_runs")).scalar_one()
+        column = connection.execute(
+            text(
+                'SELECT "notnull", dflt_value FROM pragma_table_info(\'tracked_searches\') '
+                "WHERE name = 'notify_on_first_run'"
+            )
+        ).one()
+
+    assert [(row[0], row[1]) for row in searches] == [(1, 1), (2, 1), (3, 1)]
+    assert run_count == 2
+    assert column[0] == 1
+    assert column[1] == "'0'"

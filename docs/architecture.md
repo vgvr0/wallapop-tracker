@@ -230,6 +230,11 @@ El evento y el run se confirman antes de cualquier POST externo. Cada destino
 se procesa independientemente y sus reintentos están limitados por
 `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`.
 
+Las búsquedas nuevas comienzan con un baseline silencioso: la primera
+ejecución válida persiste anuncios, snapshots y matches sin emitir
+`NEW_LISTING`, salvo que la búsqueda se cree con `notify_on_first_run=true`.
+Los cambios de precio con histórico previo siguen generando eventos.
+
 El tercer origen monitorizable reutiliza el mismo listing global:
 
 ```text

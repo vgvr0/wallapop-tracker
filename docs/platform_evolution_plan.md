@@ -220,7 +220,7 @@ se conserva un fixture RAW y se marca la investigación como pendiente.
 | 6 | Implementado: importación pura de URLs de búsqueda | `parsers/search_url.py`, CLI `search import` y tests de parámetros realmente observables |
 | 7 | Implementado: discovery de metadata validado | `docs/discovery_endpoints.md`, fixtures RAW, parsers y CLI read-only |
 | 8 | Implementado: scheduler con concurrencia acotada | `TaskGroup`, `Semaphore`, limiter compartido, WAL y orden determinista |
-| 9 | Baseline silencioso configurable | `notify_on_first_run=false` y tests de inventario inicial |
+| 9 | Implementado: baseline silencioso configurable | `0011_search_initial_baseline`, `docs/search_baseline.md`, tests de inventario inicial |
 | 10 | Relisting heurístico explicable | `PossibleRelisting`, score y razones sin identidad automática |
 | 11 | Analytics de mercado | `reporting/market.py`, términos `removed/inactive/not_seen`, sin inferir ventas |
 | 12 | Deal scoring determinista | `ListingAnalyzer` como interfaz futura y `insufficient_data` |

@@ -65,7 +65,9 @@ class SearchProvider:
 
 def create_search(database: Database) -> int:
     with database.transaction() as session:
-        return TrackedSearchRepository(session).create("cámara").id
+        return TrackedSearchRepository(session).create(
+            "cámara", notify_on_first_run=True
+        ).id
 
 
 async def create_event(database: Database) -> int:

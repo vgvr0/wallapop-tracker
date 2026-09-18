@@ -148,6 +148,7 @@ def test_search_import_cli_creates_record_and_warns_unknown(tmp_path, monkeypatc
             "--interval-seconds",
             "900",
             "--disabled",
+            "--notify-on-first-run",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -161,4 +162,5 @@ def test_search_import_cli_creates_record_and_warns_unknown(tmp_path, monkeypatc
         assert record.name == "iPhone barato"
         assert record.interval_seconds == 900
         assert record.enabled is False
+        assert record.notify_on_first_run is True
         assert record.min_price == Decimal("300")
