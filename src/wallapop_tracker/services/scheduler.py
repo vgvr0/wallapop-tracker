@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from ..observability import get_metrics
 from ..storage.database import Database
 from ..storage.models import TrackingRunStatus
 from ..storage.repositories import (
@@ -77,6 +78,8 @@ class TrackingScheduler:
         self.max_concurrency = max_concurrency
 
     async def run_once(self, *, now: datetime | None = None) -> SchedulerResult:
+        metrics = get_metrics()
+        metrics.scheduler_polls_total.inc()
         current = _as_utc(now or self.clock())
         with self.database.session() as session:
             records = TrackedProfileRepository(session).list_enabled()
@@ -108,6 +111,7 @@ class TrackingScheduler:
 
         async def run_profile(index: int, alias: str) -> None:
             async with semaphore:
+                metrics.scheduler_active_jobs.inc()
                 try:
                     result = await self.runner.run(alias, now=current)
                 except Exception as exc:
@@ -117,26 +121,34 @@ class TrackingScheduler:
                         status=TrackingRunStatus.FAILED,
                         error=str(exc),
                     )
+                finally:
+                    metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
         async def run_search(index: int, search_id: int) -> None:
             async with semaphore:
+                metrics.scheduler_active_jobs.inc()
                 try:
                     result = await self.search_runner.run(search_id)
                 except Exception as exc:
                     result = SearchTrackingResult(
                         search_id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
                     )
+                finally:
+                    metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
         async def run_listing(index: int, listing_id: int) -> None:
             async with semaphore:
+                metrics.scheduler_active_jobs.inc()
                 try:
                     result = await self.listing_runner.run(listing_id)
                 except Exception as exc:
                     result = ListingTrackingResult(
                         listing_id, None, TrackingRunStatus.FAILED, error=str(exc)
                     )
+                finally:
+                    metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
         async with asyncio.TaskGroup() as task_group:
@@ -160,6 +172,17 @@ class TrackingScheduler:
             result for result in ordered_results if isinstance(result, ListingTrackingResult)
         ]
         failed = sum(result.status == TrackingRunStatus.FAILED for result in ordered_results)
+        for result in ordered_results:
+            source = (
+                "profile"
+                if isinstance(result, ProfileTrackingResult)
+                else "search"
+                if isinstance(result, SearchTrackingResult)
+                else "listing"
+            )
+            metrics.scheduler_jobs_executed_total.labels(source).inc()
+            if result.status == TrackingRunStatus.FAILED:
+                metrics.scheduler_jobs_failed_total.labels(source).inc()
         for result in search_results:
             if result.alerts:
                 try:

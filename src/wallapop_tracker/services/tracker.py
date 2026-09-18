@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from wallapop_tracker.client import WallapopClient
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
+from wallapop_tracker.exceptions import WallapopParseError
 from wallapop_tracker.models import Profile, ProfileStats, ReviewSummary
+from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
@@ -143,23 +145,31 @@ class ProfileTracker:
             capture.stats = await self.client.get_profile_stats(user_id)
             capture.stats_ok = True
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("stats").inc()
             capture.error, capture.error_component = exc, "stats"
         try:
             capture.reviews = await self.client.get_review_summary(user_id)
             capture.reviews_ok = True
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("reviews").inc()
             if capture.error is None:
                 capture.error, capture.error_component = exc, "reviews"
         try:
             capture.listings = await self.client.get_all_items(user_id)
             capture.items_ok = True
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("items").inc()
             if capture.error is None:
                 capture.error, capture.error_component = exc, "items"
         return capture
 
     @staticmethod
     def _failed_capture(capture: _Capture, component: str, exc: BaseException) -> _Capture:
+        if isinstance(exc, WallapopParseError):
+            get_metrics().wallapop_parse_errors_total.labels(component).inc()
         capture.error, capture.error_component = exc, component
         return capture
 

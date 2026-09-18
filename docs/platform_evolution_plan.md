@@ -319,3 +319,10 @@ Completed as a local/private `/api/v1` transport layer over the existing
 domain services, reporting, repositories, analytics, scoring, relisting and
 notification state. Authentication, users, subscriptions, frontend and
 external writes remain out of scope.
+
+## Phase 14 — Observabilidad
+
+Completed with structured human/JSON logging, Prometheus-compatible local
+metrics, health/readiness checks and low-cardinality instrumentation for HTTP,
+tracking, scheduler and notifications. No external monitoring infrastructure
+or Phase 15 work is included.

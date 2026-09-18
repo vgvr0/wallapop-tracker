@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
+from wallapop_tracker.exceptions import WallapopParseError
 from wallapop_tracker.models import Listing
+from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.providers.search import SearchProvider, SearchRequest
 from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
@@ -104,6 +106,8 @@ class SearchTracker:
             ).apply(listings)
             return self._persist_success(search_id, started_at, listings, filtered)
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("search").inc()
             return self._persist_failure(search_id, started_at, exc)
 
     def _persist_success(

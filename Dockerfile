@@ -13,6 +13,8 @@ RUN addgroup --system app \
 
 COPY pyproject.toml ./
 COPY src ./src
+COPY alembic.ini ./
+COPY alembic ./alembic
 
 RUN pip install .
 

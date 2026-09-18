@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
-from wallapop_tracker.exceptions import WallapopNotFoundError
+from wallapop_tracker.exceptions import WallapopNotFoundError, WallapopParseError
 from wallapop_tracker.models import Listing
+from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.providers.listing import ListingProvider
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
@@ -68,6 +69,8 @@ class TrackedListingTracker:
         except WallapopNotFoundError:
             return self._persist_removed(tracked_listing_id, started_at)
         except Exception as exc:
+            if isinstance(exc, WallapopParseError):
+                get_metrics().wallapop_parse_errors_total.labels("get_item").inc()
             return self._persist_failure(tracked_listing_id, started_at, exc)
         if listing.status is not None and listing.status.lower() in {
             "removed",

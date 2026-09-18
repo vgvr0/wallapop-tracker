@@ -7,15 +7,21 @@ import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field, field_serializer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.domain.deal_scoring import DealScore
+from wallapop_tracker.observability import Metrics, configure_logging, get_metrics
 from wallapop_tracker.parsers.search_url import SearchURLParseError, parse_search_url
 from wallapop_tracker.reporting.market import (
     get_activity_time_series,
@@ -314,13 +320,45 @@ def _page(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) ->
     return limit, offset
 
 
-def create_app(database: Database | None = None) -> FastAPI:
+def _schema_is_ready(database: Database) -> bool:
+    try:
+        project_root = Path(__file__).resolve().parents[3]
+        config_path = project_root / "alembic.ini"
+        config = Config(str(config_path if config_path.exists() else Path("alembic.ini")))
+        config.set_main_option("script_location", str(project_root / "alembic"))
+        script = ScriptDirectory.from_config(config)
+        expected = script.get_current_head()
+        with database.engine.connect() as connection:
+            current = MigrationContext.configure(connection).get_current_revision()
+        return current == expected
+    except Exception:
+        return False
+
+
+def create_app(
+    database: Database | None = None,
+    *,
+    metrics: Metrics | None = None,
+) -> FastAPI:
+    configure_logging()
     owned_database = database is None
     database = database or Database(
         os.getenv("WALLAPOP_TRACKER_DB_URL", "sqlite:///data/wallapop_tracker.db")
     )
-    database.create_all()
+    app_metrics = metrics or get_metrics()
+    metrics_enabled = os.getenv("WALLAPOP_METRICS_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    try:
+        database.create_all()
+    except Exception:
+        # /health must remain available while /ready reports the outage.
+        pass
     api = FastAPI(title="Wallapop Tracker API", version="1.0", description="Local/private API")
+    api.state.metrics = app_metrics
 
     def get_session() -> Iterator[Session]:
         with database.session() as session:
@@ -333,6 +371,46 @@ def create_app(database: Database | None = None) -> FastAPI:
     @api.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @api.get("/ready", tags=["health"])
+    def ready() -> dict[str, str]:
+        try:
+            with database.engine.connect() as connection:
+                connection.exec_driver_sql("SELECT 1")
+                connection.exec_driver_sql("SELECT 1 FROM tracking_runs LIMIT 1")
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        if not _schema_is_ready(database):
+            raise HTTPException(status_code=503, detail="schema is not at Alembic head")
+        return {"status": "ready", "database": "ok", "schema": "ok"}
+
+    @api.get("/metrics", tags=["health"])
+    def metrics_endpoint() -> Response:
+        if not metrics_enabled:
+            raise HTTPException(status_code=404, detail="metrics disabled")
+        return Response(generate_latest(app_metrics.registry), media_type=CONTENT_TYPE_LATEST)
+
+    @api.middleware("http")
+    async def observe_requests(request: Request, call_next: Any) -> Response:
+        import time
+
+        if not metrics_enabled:
+            return cast(Response, await call_next(request))
+        started = time.perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return cast(Response, response)
+        finally:
+            route = request.scope.get("route")
+            route_template = getattr(route, "path", request.url.path)
+            app_metrics.http_requests_total.labels(
+                request.method, route_template, f"{status_code // 100}xx"
+            ).inc()
+            app_metrics.http_request_duration_seconds.labels(
+                request.method, route_template
+            ).observe(time.perf_counter() - started)
 
     @api.get("/api/v1/profiles", response_model=list[ProfileResponse], tags=["profiles"])
     def profiles(

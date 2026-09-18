@@ -24,6 +24,7 @@ from .exceptions import (
     WallapopRateLimitError,
 )
 from .models import ItemsPage, Listing, Profile, ProfileStats, ReviewSummary
+from .observability import get_metrics, log_event, operation_for_url, status_class
 from .parsers.brands import parse_brands
 from .parsers.categories import parse_categories
 from .parsers.filters import parse_available_filters
@@ -142,18 +143,26 @@ class WallapopClient:
             "Accept": "application/json" if expect_json else "text/html",
             "User-Agent": self.user_agent,
         }
+        operation = operation_for_url(url)
+        self._observability_operation = operation
+        metrics = get_metrics()
         for attempt in range(self.max_retries + 1):
             await self._wait_for_rate_limit()
             try:
                 response = await self._http.request(method, url, params=params, headers=headers)
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                metrics.wallapop_http_requests_total.labels(operation, method, "error").inc()
                 if attempt >= self.max_retries:
                     raise WallapopHTTPError(f"Transient request failed: {url}") from exc
                 await self._backoff(attempt, None)
                 continue
+            metrics.wallapop_http_requests_total.labels(
+                operation, method, status_class(response.status_code)
+            ).inc()
             if response.status_code == 404:
                 raise WallapopNotFoundError(f"Resource not found: {url}")
             if response.status_code == 429:
+                metrics.wallapop_http_429_total.labels(operation).inc()
                 if attempt >= self.max_retries:
                     raise WallapopRateLimitError(f"Rate limited: {url}")
                 await self._backoff(attempt, response.headers.get("Retry-After"))
@@ -170,6 +179,7 @@ class WallapopClient:
                     raw_value = json.loads(response.text)
                     value = json.loads(response.text, parse_float=Decimal)
                 except json.JSONDecodeError as exc:
+                    metrics.wallapop_parse_errors_total.labels(operation).inc()
                     raise WallapopParseError(f"Invalid JSON response: {url}") from exc
             else:
                 raw_value = response.text
@@ -193,9 +203,23 @@ class WallapopClient:
                     retry_delay = (retry_at - datetime.now(UTC)).total_seconds()
                     delay = max(delay, min(retry_delay, self.max_retry_after))
                 except (TypeError, ValueError, OverflowError):
-                    logger.warning("invalid_retry_after value=%s", retry_after)
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "invalid_retry_after",
+                        operation=getattr(self, "_observability_operation", "request"),
+                    )
         delay = max(0.0, delay)
-        logger.warning("retrying_wallapop_request attempt=%s delay=%.2f", attempt + 1, delay)
+        get_metrics().wallapop_http_retries_total.labels(
+            getattr(self, "_observability_operation", "request")
+        ).inc()
+        log_event(
+            logger,
+            logging.WARNING,
+            "retrying_wallapop_request",
+            operation=getattr(self, "_observability_operation", "request"),
+            attempt=attempt + 1,
+        )
         deadline = await self._rate_limiter.block(delay)
         try:
             await asyncio.sleep(delay)

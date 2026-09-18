@@ -42,3 +42,6 @@ Example:
 curl http://localhost:8000/api/v1/searches?limit=20
 curl "http://localhost:8000/api/v1/scores/listing/123?search_id=7"
 ```
+
+Operational endpoints are documented separately in
+[`observability.md`](observability.md): `/health`, `/ready` and `/metrics`.

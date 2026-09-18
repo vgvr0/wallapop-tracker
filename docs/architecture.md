@@ -279,3 +279,7 @@ analysis.
 `wallapop_tracker.api.app.create_app` creates the HTTP transport layer. Each
 request gets its own synchronous SQLAlchemy session; routers map validated
 input to existing repositories, reporting functions, and services.
+
+Operational observability is centralized in `observability.py` and consumed by
+the HTTP client, persistence boundaries, scheduler, notifications and FastAPI
+middleware. It does not alter business analytics or tracking semantics.

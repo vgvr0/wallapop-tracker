@@ -14,6 +14,7 @@ from .domain.listing_urls import parse_listing_reference
 from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import WallapopError
 from .models import Listing
+from .observability import configure_logging
 from .parsers.search_url import SearchURLParseError, parse_search_url
 from .reporting import (
     get_activity_time_series,
@@ -60,6 +61,7 @@ app.add_typer(score_app, name="score")
 
 
 def _db() -> Database:
+    configure_logging()
     database = Database(os.getenv("WALLAPOP_TRACKER_DB_URL", "sqlite:///data/wallapop_tracker.db"))
     database.create_all()
     return database

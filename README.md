@@ -268,3 +268,7 @@ analysis, not purchase advice.
 Run the local API with `uvicorn wallapop_tracker.api.app:app --reload`.
 It is documented in [`docs/api.md`](docs/api.md), uses `/api/v1`, and has no
 authentication in this phase; keep it private.
+
+Operational logging and metrics are documented in
+[`docs/observability.md`](docs/observability.md). Use `/health`, `/ready` and
+`/metrics` only on a protected private deployment.

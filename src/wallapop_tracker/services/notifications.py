@@ -20,6 +20,7 @@ from wallapop_tracker.domain.notifications import (
     Notification,
     NotificationChannel,
 )
+from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
@@ -267,6 +268,7 @@ class NotificationService:
             return record.id if record is not None else None
 
     async def _deliver_one(self, delivery_id: int) -> bool:
+        metrics = get_metrics()
         with self.database.transaction() as session:
             delivery = session.get(NotificationDeliveryRecord, delivery_id)
             if delivery is None or delivery.status == NotificationDeliveryStatus.DELIVERED:
@@ -278,6 +280,8 @@ class NotificationService:
             if channel is None or event is None:
                 delivery.status = NotificationDeliveryStatus.FAILED
                 delivery.last_error = "Channel or event is not configured"
+                metrics.notification_deliveries_total.labels(delivery.channel, "failed").inc()
+                metrics.notification_failures_total.labels(delivery.channel).inc()
                 return False
             notification = self._notification(session, event)
             destination = delivery.destination
@@ -289,6 +293,7 @@ class NotificationService:
             delivery.channel,
             delivery.attempts,
         )
+        metrics.notification_deliveries_total.labels(delivery.channel, "attempted").inc()
         try:
             result = await channel.send(notification, destination)
         except Exception as exc:
@@ -310,6 +315,7 @@ class NotificationService:
                     delivery.channel,
                     delivery.attempts,
                 )
+                metrics.notification_deliveries_total.labels(delivery.channel, "delivered").inc()
                 return True
             delivery.status = NotificationDeliveryStatus.FAILED
             delivery.last_error = result.error or "notification channel failed"
@@ -320,6 +326,8 @@ class NotificationService:
                 delivery.channel,
                 delivery.attempts,
             )
+            metrics.notification_deliveries_total.labels(delivery.channel, "failed").inc()
+            metrics.notification_failures_total.labels(delivery.channel).inc()
             return False
 
     @staticmethod
@@ -331,16 +339,12 @@ class NotificationService:
             .limit(1)
         )
         listing_id = (
-            event.listing.wallapop_item_id
-            if event.listing is not None
-            else str(event.listing_id)
+            event.listing.wallapop_item_id if event.listing is not None else str(event.listing_id)
         )
         details = None
         if event.event_type == AlertType.POSSIBLE_RELISTING.value:
             candidate = session.scalar(
-                select(PossibleRelistingRecord).where(
-                    PossibleRelistingRecord.event_id == event.id
-                )
+                select(PossibleRelistingRecord).where(PossibleRelistingRecord.event_id == event.id)
             )
             if candidate is not None:
                 previous_snapshot = session.scalar(
@@ -359,8 +363,10 @@ class NotificationService:
                     if previous_snapshot is not None and previous_snapshot.title
                     else str(candidate.previous_listing_id)
                 )
-                current_title = snapshot.title if snapshot is not None and snapshot.title else str(
-                    candidate.current_listing_id
+                current_title = (
+                    snapshot.title
+                    if snapshot is not None and snapshot.title
+                    else str(candidate.current_listing_id)
                 )
                 previous_price = (
                     f"{previous_snapshot.price:.2f} €"

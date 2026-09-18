@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from wallapop_tracker.exceptions import WallapopError
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
+from wallapop_tracker.observability import get_metrics
 
 from .models import (
     ListingRecord,
@@ -408,6 +409,7 @@ class TrackingEventRepository:
             if existing is None:
                 raise
             return existing, False
+        get_metrics().tracking_events_created_total.labels(event_type).inc()
         return record, True
 
 
@@ -938,6 +940,32 @@ class TrackingRunRepository:
         record.price_changes = price_changes
         record.duplicates_suppressed = duplicates_suppressed
         self.session.flush()
+        source = (
+            "profile"
+            if record.profile_id is not None
+            else "search"
+            if record.tracked_search_id is not None
+            else "listing"
+        )
+        get_metrics().tracking_runs_total.labels(source, record.status.value).inc()
+        if record.status == TrackingRunStatus.FAILED:
+            get_metrics().tracking_runs_failed_total.labels(source).inc()
+        if record.started_at is not None and record.finished_at is not None:
+            started = (
+                record.started_at.replace(tzinfo=UTC)
+                if record.started_at.tzinfo is None
+                else record.started_at
+            )
+            finished = (
+                record.finished_at.replace(tzinfo=UTC)
+                if record.finished_at.tzinfo is None
+                else record.finished_at
+            )
+            get_metrics().tracking_run_duration_seconds.labels(source).observe(
+                max(0.0, (finished - started).total_seconds())
+            )
+        if items_fetched is not None:
+            get_metrics().listings_fetched_total.labels(source).inc(max(0, items_fetched))
         return record
 
     def mark_valid(self, run_id: int, **kwargs: Any) -> TrackingRunRecord:
