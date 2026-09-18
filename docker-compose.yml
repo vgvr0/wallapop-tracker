@@ -1,0 +1,8 @@
+services:
+  tracker:
+    build:
+      context: .
+    environment:
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-sqlite:///data/wallapop_tracker.db}
+    volumes:
+      - ./data:/app/data
