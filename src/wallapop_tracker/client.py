@@ -27,6 +27,7 @@ from .models import ItemsPage, Listing, Profile, ProfileStats, ReviewSummary
 from .observability import get_metrics, log_event, operation_for_url, status_class
 from .parsers.brands import parse_brands
 from .parsers.categories import parse_categories
+from .parsers.common import parse_condition
 from .parsers.filters import parse_available_filters
 from .parsers.items import parse_item, parse_items_page
 from .parsers.models import parse_models
@@ -482,6 +483,9 @@ class WallapopClient:
                 if isinstance(seller, Mapping):
                     seller = seller.get("id")
                 shipping = raw.get("shipping")
+                condition_code, condition_label = parse_condition(
+                    raw.get("condition"), raw.get("type_attributes") or raw.get("attributes")
+                )
                 item = Listing(
                     item_id=item_id,
                     user_id=str(seller or ""),
@@ -494,7 +498,9 @@ class WallapopClient:
                     else None,
                     category_name=raw.get("category_name"),
                     brand=raw.get("brand"),
-                    condition=raw.get("condition"),
+                    condition=condition_code or condition_label,
+                    condition_code=condition_code,
+                    condition_label=condition_label,
                     status=raw.get("status"),
                     reserved=raw.get("reserved"),
                     shipping_available=(shipping or {}).get("item_is_shippable")

@@ -362,6 +362,8 @@ class ListingRecord(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    condition_code: Mapped[str | None] = mapped_column(String(100))
+    condition_label: Mapped[str | None] = mapped_column(String(255))
     profile: Mapped[ProfileRecord | None] = relationship(back_populates="listings")
     snapshots: Mapped[list["ListingSnapshotRecord"]] = relationship(back_populates="listing")
 
@@ -467,6 +469,8 @@ class ListingSnapshotRecord(Base):
     shipping_available: Mapped[bool | None] = mapped_column()
     seller_allows_shipping: Mapped[bool | None] = mapped_column()
     condition: Mapped[str | None] = mapped_column(String(100))
+    condition_code: Mapped[str | None] = mapped_column(String(100))
+    condition_label: Mapped[str | None] = mapped_column(String(255))
     brand: Mapped[str | None] = mapped_column(String(255))
     has_warranty: Mapped[bool | None] = mapped_column()
     is_refurbished: Mapped[bool | None] = mapped_column()

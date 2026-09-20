@@ -7,7 +7,7 @@ from typing import Any
 from wallapop_tracker.exceptions import WallapopParseError
 from wallapop_tracker.models import ItemsPage, Listing
 
-from .common import first_value, parse_timestamp
+from .common import first_value, parse_condition, parse_timestamp
 
 
 def _image_url(raw: Any) -> str | None:
@@ -69,6 +69,7 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
         url = f"https://www.wallapop.com/item/{slug}" if isinstance(slug, str) else None
     type_attributes = raw.get("type_attributes")
     attributes = dict(type_attributes) if isinstance(type_attributes, Mapping) else None
+    condition_code, condition_label = parse_condition(raw.get("condition"), type_attributes)
     raw_images = raw.get("images")
     images = (
         [_image_values(image) for image in raw_images if isinstance(image, Mapping)]
@@ -100,7 +101,11 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
             and isinstance(shipping.get("user_allows_shipping"), bool)
             else None
         ),
-        condition=_attribute_value(type_attributes, "condition"),
+        # Legacy ``condition`` exposed the raw Wallapop value; keep that
+        # contract while the explicit fields carry code and localized label.
+        condition=condition_code or condition_label,
+        condition_code=condition_code,
+        condition_label=condition_label,
         brand=_attribute_value(type_attributes, "brand"),
         has_warranty=(
             raw.get("has_warranty") if isinstance(raw.get("has_warranty"), bool) else None

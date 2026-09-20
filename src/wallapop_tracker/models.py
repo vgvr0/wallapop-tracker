@@ -63,6 +63,8 @@ class Listing(BaseModel):
     shipping_available: bool | None = None
     seller_allows_shipping: bool | None = None
     condition: str | None = None
+    condition_code: str | None = None
+    condition_label: str | None = None
     brand: str | None = None
     has_warranty: bool | None = None
     is_refurbished: bool | None = None

@@ -261,6 +261,19 @@ class DiffService:
                     new.brand,
                 )
             )
+        if old.condition_code != new.condition_code and (
+            old.condition_code is not None or new.condition_code is not None
+        ):
+            result.append(
+                self._change(
+                    ChangeType.CONDITION_CHANGED,
+                    current,
+                    previous,
+                    listing_id,
+                    old.condition_code,
+                    new.condition_code,
+                )
+            )
         return result
 
     @staticmethod
@@ -298,6 +311,7 @@ class DiffService:
             ChangeType.UNRESERVED: 7,
             ChangeType.SHIPPING_AVAILABLE_CHANGED: 8,
             ChangeType.BRAND_CHANGED: 9,
+            ChangeType.CONDITION_CHANGED: 10,
             ChangeType.REMOVED: 10,
         }
         return order[change.change_type], change.listing_id or -1

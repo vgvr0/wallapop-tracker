@@ -314,3 +314,10 @@ search; it is not purchase advice.
 Operational logging and metrics are documented in
 [`docs/observability.md`](docs/observability.md). Use `/health`, `/ready` and
 `/metrics` only on a protected private deployment.
+### Product condition tracking
+
+Wallapop Tracker captures the physical condition of listings when Wallapop exposes it.
+
+The tracker stores the internal condition code separately from its localized label. Condition
+is optional because not every listing or category necessarily exposes it. The internal code is
+preferred for filtering and historical comparisons; the localized label is retained for display.

@@ -48,6 +48,17 @@ class PriceFilter:
 
 
 @dataclass(frozen=True)
+class ConditionFilter:
+    codes: frozenset[str]
+
+    def __init__(self, codes: Iterable[str]) -> None:
+        object.__setattr__(self, "codes", frozenset(code for code in codes if code))
+
+    def matches(self, listing: Listing) -> bool:
+        return not self.codes or listing.condition_code in self.codes
+
+
+@dataclass(frozen=True)
 class IncludeTextFilter:
     terms: tuple[str, ...]
     mode: IncludeMode = IncludeMode.ANY
@@ -133,6 +144,11 @@ def filters_from_config(config: Mapping[str, object]) -> FilterEngine:
                 Decimal(str(maximum)) if maximum is not None else None,
             )
         )
+    conditions = config.get("conditions")
+    if isinstance(conditions, str):
+        conditions = (conditions,)
+    if isinstance(conditions, Iterable):
+        filters.append(ConditionFilter(cast(Iterable[str], conditions)))
     include = config.get("include", ())
     if isinstance(include, str):
         include = (include,)

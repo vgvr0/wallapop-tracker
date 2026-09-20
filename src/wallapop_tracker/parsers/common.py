@@ -6,6 +6,24 @@ from typing import Any
 from wallapop_tracker.exceptions import WallapopParseError
 
 
+def parse_condition(raw: Any, attributes: Any = None) -> tuple[str | None, str | None]:
+    """Return Wallapop's condition code and visible label from known shapes."""
+    candidates = [raw]
+    if isinstance(attributes, dict):
+        candidates.append(attributes.get("condition"))
+    for value in candidates:
+        if isinstance(value, str):
+            return value, None
+        if isinstance(value, dict):
+            code = value.get("value")
+            label = value.get("text") or value.get("iconText") or value.get("icon_text")
+            return (
+                code if isinstance(code, str) else None,
+                label if isinstance(label, str) else None,
+            )
+    return None, None
+
+
 def first_value(data: dict[str, Any], *keys: str) -> Any:
     for key in keys:
         if key in data and data[key] is not None:

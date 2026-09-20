@@ -723,6 +723,8 @@ class ListingRepository:
                 record.seller_user_id = listing.user_id
             record.last_seen_at = now
             record.updated_at = now
+            record.condition_code = listing.condition_code
+            record.condition_label = listing.condition_label
         self.session.flush()
         return record
 
@@ -760,6 +762,8 @@ class ListingRepository:
                 last_seen_at=now,
                 created_at=now,
                 updated_at=now,
+                condition_code=listing.condition_code,
+                condition_label=listing.condition_label,
             )
             try:
                 with self.session.begin_nested():
@@ -777,6 +781,8 @@ class ListingRepository:
         if valid_observation and record is not None:
             record.last_seen_at = now
             record.updated_at = now
+            record.condition_code = listing.condition_code
+            record.condition_label = listing.condition_label
             self.session.flush()
         return record, created
 
@@ -1065,6 +1071,8 @@ class SnapshotRepository:
                 "shipping_available": listing.shipping_available,
                 "seller_allows_shipping": listing.seller_allows_shipping,
                 "condition": listing.condition,
+                "condition_code": listing.condition_code,
+                "condition_label": listing.condition_label,
                 "brand": listing.brand,
                 "has_warranty": listing.has_warranty,
                 "is_refurbished": listing.is_refurbished,
@@ -1165,6 +1173,8 @@ class SnapshotRepository:
         "shipping_available",
         "seller_allows_shipping",
         "condition",
+        "condition_code",
+        "condition_label",
         "brand",
         "has_warranty",
         "is_refurbished",
