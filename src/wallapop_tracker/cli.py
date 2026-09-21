@@ -791,6 +791,38 @@ def notifications_retry() -> None:
     typer.echo(f"delivered: {retried}")
 
 
+@app.command("notify")
+def notify(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show pending deliveries without sending them."),
+) -> None:
+    """Dispatch persisted notification deliveries through configured channels."""
+    database = _db()
+    try:
+        service = NotificationService(database)
+        before = service.list_deliveries()
+        if dry_run:
+            pending = [row for row in before if row.status.value in {"pending", "failed"}]
+            typer.echo(f"Pending deliveries: {len(pending)} (dry-run; nothing sent)")
+            for channel in sorted({row.channel for row in pending}):
+                typer.echo(f"{channel}: {sum(row.channel == channel for row in pending)} would send")
+            return
+        asyncio.run(service.deliver_pending())
+        after = service.list_deliveries()
+        channels = sorted({row.channel for row in before + after})
+        typer.echo(f"Deliveries processed: {len(after)}")
+        for channel in channels:
+            old = [row for row in before if row.channel == channel]
+            current = [row for row in after if row.channel == channel]
+            delivered = sum(row.status.value == "delivered" and next((x for x in old if x.id == row.id), None) is None for row in current)
+            skipped = sum(row.status.value == "delivered" for row in old)
+            failed = sum(row.status.value == "failed" for row in current)
+            typer.echo(f"{channel}: {delivered} delivered, {failed} failed, {skipped} skipped")
+        if not channels:
+            typer.echo("No enabled notification channels or pending deliveries")
+    finally:
+        database.close()
+
+
 @listing_app.command("add")
 def listing_add(
     reference: str,

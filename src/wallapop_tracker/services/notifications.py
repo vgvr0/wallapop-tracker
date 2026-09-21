@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -62,9 +62,11 @@ class WebhookNotificationChannel:
         self,
         *,
         timeout: float = 10.0,
+        headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.timeout = timeout
+        self.headers = dict(headers or {})
         self.http_client = http_client
 
     def payload(self, notification: Notification) -> dict[str, Any]:
@@ -72,16 +74,29 @@ class WebhookNotificationChannel:
 
     async def send(self, notification: Notification, destination: str) -> DeliveryResult:
         parsed = urlparse(destination)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+        ):
             return DeliveryResult(False, False, "Invalid webhook URL")
         try:
             if self.http_client is not None:
                 response = await self.http_client.post(
-                    destination, json=self.payload(notification), timeout=self.timeout, follow_redirects=False
+                    destination,
+                    json=self.payload(notification),
+                    timeout=self.timeout,
+                    headers=self.headers,
+                    follow_redirects=False,
                 )
             else:
-                async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
-                    response = await client.post(destination, json=self.payload(notification))
+                async with httpx.AsyncClient(
+                    timeout=self.timeout, follow_redirects=False
+                ) as client:
+                    response = await client.post(
+                        destination, json=self.payload(notification), headers=self.headers
+                    )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             return DeliveryResult(False, True, type(exc).__name__)
         return _http_result(response)
@@ -139,16 +154,27 @@ class TelegramNotificationChannel:
         if notification.details:
             text += f"\n{notification.details}"
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        payload = {"chat_id": destination, "text": text}
-        try:
-            if self.http_client is not None:
-                response = await self.http_client.post(url, json=payload, timeout=self.timeout)
-            else:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(url, json=payload)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
-            return DeliveryResult(False, True, type(exc).__name__)
-        return _http_result(response)
+        chunks = [text[index : index + 4096] for index in range(0, len(text), 4096)] or [""]
+        for chunk in chunks:
+            payload = {"chat_id": destination, "text": chunk}
+            try:
+                if self.http_client is not None:
+                    response = await self.http_client.post(url, json=payload, timeout=self.timeout)
+                else:
+                    async with httpx.AsyncClient(timeout=self.timeout) as client:
+                        response = await client.post(url, json=payload)
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                return DeliveryResult(False, True, type(exc).__name__)
+            result = _http_result(response)
+            if not result.delivered:
+                return result
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            if isinstance(body, dict) and body.get("ok") is False:
+                return DeliveryResult(False, False, "Telegram API error")
+        return DeliveryResult(True)
 
 
 def _http_result(response: httpx.Response) -> DeliveryResult:
@@ -160,10 +186,15 @@ def _http_result(response: httpx.Response) -> DeliveryResult:
 
 @dataclass(frozen=True)
 class NotificationSettings:
+    webhook_enabled: bool = False
+    discord_enabled: bool = False
+    telegram_enabled: bool = False
     webhook_url: str | None = None
     discord_webhook_url: str | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
+    webhook_headers: Mapping[str, str] = field(default_factory=dict)
+    timeout: float = 10.0
     max_attempts: int = 3
 
     @classmethod
@@ -173,11 +204,31 @@ class NotificationSettings:
             max_attempts = max(1, int(raw_attempts))
         except ValueError:
             max_attempts = 3
+
+        def enabled(name: str) -> bool:
+            return os.getenv(name, "false").strip().lower() in {"1", "true", "yes", "on"}
+
+        raw_headers = os.getenv("WALLAPOP_WEBHOOK_HEADERS", "")
+        try:
+            parsed_headers = json.loads(raw_headers) if raw_headers else {}
+            if not isinstance(parsed_headers, dict) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in parsed_headers.items()
+            ):
+                raise ValueError
+        except ValueError as exc:
+            raise ValueError("WALLAPOP_WEBHOOK_HEADERS must be a JSON object of strings") from exc
         return cls(
+            webhook_enabled=enabled("WALLAPOP_NOTIFY_WEBHOOK_ENABLED"),
+            discord_enabled=enabled("WALLAPOP_NOTIFY_DISCORD_ENABLED"),
+            telegram_enabled=enabled("WALLAPOP_NOTIFY_TELEGRAM_ENABLED"),
             webhook_url=os.getenv("WALLAPOP_WEBHOOK_URL"),
             discord_webhook_url=os.getenv("WALLAPOP_DISCORD_WEBHOOK_URL"),
-            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN"),
-            telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID"),
+            telegram_bot_token=os.getenv(
+                "WALLAPOP_TELEGRAM_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN")
+            ),
+            telegram_chat_id=os.getenv("WALLAPOP_TELEGRAM_CHAT_ID", os.getenv("TELEGRAM_CHAT_ID")),
+            webhook_headers=parsed_headers,
             max_attempts=max_attempts,
         )
 
@@ -196,17 +247,35 @@ class NotificationService:
         self.database = database
         self.settings = settings or NotificationSettings.from_env()
         if channels is None:
+            if self.settings.webhook_enabled and not self.settings.webhook_url:
+                raise ValueError(
+                    "Webhook notifications enabled but WALLAPOP_WEBHOOK_URL is missing"
+                )
+            if self.settings.discord_enabled and not self.settings.discord_webhook_url:
+                raise ValueError(
+                    "Discord notifications enabled but WALLAPOP_DISCORD_WEBHOOK_URL is missing"
+                )
+            if self.settings.telegram_enabled and not (
+                self.settings.telegram_bot_token and self.settings.telegram_chat_id
+            ):
+                raise ValueError("Telegram notifications enabled but token or chat ID is missing")
             configured: dict[str, NotificationChannel] = {}
             configured_destinations: dict[str, tuple[str, ...]] = {}
-            if self.settings.webhook_url:
-                configured["webhook"] = WebhookNotificationChannel()
+            if self.settings.webhook_enabled:
+                assert self.settings.webhook_url is not None
+                configured["webhook"] = WebhookNotificationChannel(
+                    timeout=self.settings.timeout, headers=self.settings.webhook_headers
+                )
                 configured_destinations["webhook"] = (self.settings.webhook_url,)
-            if self.settings.discord_webhook_url:
-                configured["discord"] = DiscordWebhookChannel()
+            if self.settings.discord_enabled:
+                assert self.settings.discord_webhook_url is not None
+                configured["discord"] = DiscordWebhookChannel(timeout=self.settings.timeout)
                 configured_destinations["discord"] = (self.settings.discord_webhook_url,)
-            if self.settings.telegram_bot_token and self.settings.telegram_chat_id:
+            if self.settings.telegram_enabled:
+                assert self.settings.telegram_bot_token is not None
+                assert self.settings.telegram_chat_id is not None
                 configured["telegram"] = TelegramNotificationChannel(
-                    self.settings.telegram_bot_token
+                    self.settings.telegram_bot_token, timeout=self.settings.timeout
                 )
                 configured_destinations["telegram"] = (self.settings.telegram_chat_id,)
             self.channels = configured

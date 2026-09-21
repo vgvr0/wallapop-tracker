@@ -256,10 +256,32 @@ The application reads the following environment variables:
 - `WALLAPOP_TRACKER_DB_URL`: SQLAlchemy database URL used by the CLI. It defaults to `sqlite:///data/wallapop_tracker.db`.
 - `WALLAPOP_TEST_PROFILE_URL`: optional profile URL used by the opt-in live pytest.
 - `WALLAPOP_E2E_PROFILE_URL_1` and `WALLAPOP_E2E_PROFILE_URL_2`: the two optional profile URLs required by `scripts/run_e2e_validation.py`.
-- `WALLAPOP_WEBHOOK_URL`: optional generic webhook destination.
-- `WALLAPOP_DISCORD_WEBHOOK_URL`: optional Discord webhook destination.
-- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`: optional Telegram Bot API configuration.
+- `WALLAPOP_NOTIFY_WEBHOOK_ENABLED`, `WALLAPOP_NOTIFY_DISCORD_ENABLED`, and `WALLAPOP_NOTIFY_TELEGRAM_ENABLED`: explicit `true`/`false` channel switches (all disabled by default).
+- `WALLAPOP_WEBHOOK_URL` and optional JSON `WALLAPOP_WEBHOOK_HEADERS`: generic webhook destination and headers.
+- `WALLAPOP_DISCORD_WEBHOOK_URL`: Discord webhook destination.
+- `WALLAPOP_TELEGRAM_BOT_TOKEN` and `WALLAPOP_TELEGRAM_CHAT_ID`: Telegram Bot API configuration (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` remain compatible aliases).
 - `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`: delivery attempt limit, default `3`.
+
+### External notifications
+
+Tracking persists each alert before creating one `NotificationDelivery` per
+channel and destination. The dispatcher skips delivered rows, retries pending
+or failed rows up to the configured attempt limit, and isolates failures across
+channels. Webhook, Telegram, and Discord use the existing `httpx` dependency;
+secrets and complete webhook URLs are never written to delivery errors or logs.
+
+Enable a channel and dispatch persisted deliveries with:
+
+```bash
+export WALLAPOP_NOTIFY_TELEGRAM_ENABLED=true
+export WALLAPOP_TELEGRAM_BOT_TOKEN=replace-me
+export WALLAPOP_TELEGRAM_CHAT_ID=replace-me
+wallapop-track notify
+```
+
+The generic webhook and Discord adapters use the same pattern with their
+respective URLs. `wallapop-track notify --dry-run` reports pending deliveries
+without contacting an external provider.
 
 The client itself also accepts runtime options such as base URLs, timeout, retry limits, rate-limit interval, user agent, and an optional RAW data directory through its Python constructor; these are not environment variables.
 
