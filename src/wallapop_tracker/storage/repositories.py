@@ -936,6 +936,20 @@ class TrackingRunRepository:
         new_listings: int | None = None,
         price_changes: int | None = None,
         duplicates_suppressed: int | None = None,
+        health_status: str | None = None,
+        duration_ms: int | None = None,
+        items_scanned: int | None = None,
+        items_new: int | None = None,
+        items_changed: int | None = None,
+        items_missing: int | None = None,
+        items_sold: int | None = None,
+        http_requests: int | None = None,
+        http_errors: int | None = None,
+        http_403: int | None = None,
+        http_429: int | None = None,
+        http_5xx: int | None = None,
+        parse_errors: int | None = None,
+        suspicious_result: bool | None = None,
     ) -> TrackingRunRecord:
         if status not in {
             TrackingRunStatus.VALID,
@@ -962,6 +976,20 @@ class TrackingRunRepository:
         record.new_listings = new_listings
         record.price_changes = price_changes
         record.duplicates_suppressed = duplicates_suppressed
+        record.health_status = health_status
+        record.duration_ms = duration_ms
+        record.items_scanned = items_scanned if items_scanned is not None else items_fetched
+        record.items_new = items_new if items_new is not None else new_listings
+        record.items_changed = items_changed if items_changed is not None else price_changes
+        record.items_missing = items_missing
+        record.items_sold = items_sold
+        record.http_requests = http_requests
+        record.http_errors = http_errors
+        record.http_403 = http_403
+        record.http_429 = http_429
+        record.http_5xx = http_5xx
+        record.parse_errors = parse_errors
+        record.suspicious_result = suspicious_result
         self.session.flush()
         source = (
             "profile"

@@ -118,6 +118,15 @@ class WallapopClient:
         self.raw_data_dir = raw_data_dir
         self._http: httpx.AsyncClient | None = None
         self._rate_limiter = _rate_limiter_for(self.base_url)
+        self.health_counters = {
+            "http_requests": 0,
+            "http_errors": 0,
+            "http_403": 0,
+            "http_429": 0,
+            "http_5xx": 0,
+            "parse_errors": 0,
+        }
+        self.schema_observations: list[tuple[str, Any]] = []
 
     async def __aenter__(self) -> "WallapopClient":
         self._http = httpx.AsyncClient(timeout=self.timeout)
@@ -152,6 +161,8 @@ class WallapopClient:
             try:
                 response = await self._http.request(method, url, params=params, headers=headers)
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                self.health_counters["http_requests"] += 1
+                self.health_counters["http_errors"] += 1
                 metrics.wallapop_http_requests_total.labels(operation, method, "error").inc()
                 if attempt >= self.max_retries:
                     raise WallapopHTTPError(f"Transient request failed: {url}") from exc
@@ -160,6 +171,15 @@ class WallapopClient:
             metrics.wallapop_http_requests_total.labels(
                 operation, method, status_class(response.status_code)
             ).inc()
+            self.health_counters["http_requests"] += 1
+            if response.status_code == 403:
+                self.health_counters["http_403"] += 1
+            if response.status_code == 429:
+                self.health_counters["http_429"] += 1
+            if 500 <= response.status_code <= 599:
+                self.health_counters["http_5xx"] += 1
+            if response.is_error:
+                self.health_counters["http_errors"] += 1
             if response.status_code == 404:
                 raise WallapopNotFoundError(f"Resource not found: {url}")
             if response.status_code == 429:
@@ -180,6 +200,7 @@ class WallapopClient:
                     raw_value = json.loads(response.text)
                     value = json.loads(response.text, parse_float=Decimal)
                 except json.JSONDecodeError as exc:
+                    self.health_counters["parse_errors"] += 1
                     metrics.wallapop_parse_errors_total.labels(operation).inc()
                     raise WallapopParseError(f"Invalid JSON response: {url}") from exc
             else:
@@ -187,6 +208,13 @@ class WallapopClient:
                 value = response.text
             if raw_kind is not None:
                 self._save_raw(raw_kind, raw_key, raw_value)
+                source = {
+                    "search": "search",
+                    "profile": "profile",
+                    "items": "profile_items" if "/users/" in url else "listing_detail",
+                }.get(raw_kind)
+                if source is not None and isinstance(raw_value, (dict, list)):
+                    self.schema_observations.append((source, raw_value))
             return value
         raise WallapopHTTPError(f"Request failed: {url}")
 

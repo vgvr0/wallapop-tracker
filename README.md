@@ -332,3 +332,16 @@ Wallapop Tracker captures the physical condition of listings when Wallapop expos
 The tracker stores the internal condition code separately from its localized label. Condition
 is optional because not every listing or category necessarily exposes it. The internal code is
 preferred for filtering and historical comparisons; the localized label is retained for display.
+### Health monitoring
+
+Wallapop Tracker records health metadata on the existing `tracking_runs` rows:
+duration, scanned listings, HTTP errors/status classes, parser errors, degraded
+results and consecutive failures. The API exposes `/api/v1/health`, run history,
+and search/profile-specific summaries. A zero-result run is degraded only when
+at least three recent runs for the same source contained listings.
+
+Schema fingerprints are value-independent sets of sorted key paths and scalar
+types. Search, profile-items and listing-detail responses are observed when
+the client receives valid payloads. Changes are persisted as idempotent schema
+drift events without storing payloads or credentials. CLI health reporting and
+external alert channels are intentionally outside this phase.

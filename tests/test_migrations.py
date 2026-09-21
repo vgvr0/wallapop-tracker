@@ -12,6 +12,32 @@ def _config(database_path: Path) -> Config:
     return config
 
 
+def test_health_migrations_upgrade_from_0015_preserves_existing_rows(tmp_path):
+    database_path = tmp_path / "health-upgrade.db"
+    config = _config(database_path)
+    command.upgrade(config, "0015_listing_condition_codes")
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO profiles (wallapop_user_id, first_seen_at, last_seen_at, created_at, updated_at) "
+            "VALUES ('migration-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ))
+        profile_id = connection.execute(text(
+            "SELECT id FROM profiles WHERE wallapop_user_id = 'migration-user'"
+        )).scalar_one()
+        connection.execute(text(
+            "INSERT INTO tracking_runs (profile_id, started_at, finished_at, status, "
+            "profile_ok, stats_ok, reviews_ok, items_ok) "
+            "VALUES (:profile_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'valid', 1, 1, 1, 1)"
+        ), {"profile_id": profile_id})
+    command.upgrade(config, "0017_schema_drift_events")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM tracking_runs")).scalar_one() == 1
+        columns = {row[1] for row in connection.execute(text("PRAGMA table_info(tracking_runs)"))}
+        assert "health_status" in columns
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_drift_events")).scalar_one() == 0
+
+
 def test_separate_tracking_run_sources_migrates_synthetic_profiles(tmp_path):
     database_path = tmp_path / "legacy.db"
     config = _config(database_path)

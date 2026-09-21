@@ -15,8 +15,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from wallapop_tracker.client import WallapopClient
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.exceptions import WallapopParseError
+from wallapop_tracker.health import classify_run, suspicious_zero
 from wallapop_tracker.models import Profile, ProfileStats, ReviewSummary
 from wallapop_tracker.observability import get_metrics
+from wallapop_tracker.schema_monitor import observe_schema
 from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
@@ -184,9 +186,13 @@ class ProfileTracker:
         error: BaseException | None,
     ) -> TrackingResult:
         with self.session_factory.begin() as session:
+            self._persist_schema_observations(session)
             run = TrackingRunRepository(session).start_profile_run(
                 profile_id, started_at=started_at
             )
+            counters = getattr(self.client, "health_counters", {})
+            health_status = "FAILED" if status == TrackingRunStatus.FAILED else "DEGRADED"
+            finished_at = datetime.now(UTC)
             TrackingRunRepository(session).finish_tracking_run(
                 run.id,
                 status=status,
@@ -198,6 +204,11 @@ class ProfileTracker:
                 items_ok=capture.items_ok,
                 error_type=type(error).__name__ if error else capture.error_component,
                 error_message=str(error) if error else None,
+                health_status=health_status,
+                duration_ms=max(0, int((finished_at - started_at).total_seconds() * 1000)),
+                http_requests=counters.get("http_requests"), http_errors=counters.get("http_errors"),
+                http_403=counters.get("http_403"), http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"), parse_errors=counters.get("parse_errors"),
             )
             return TrackingResult(
                 run_id=run.id,
@@ -221,12 +232,19 @@ class ProfileTracker:
         assert capture.reviews is not None
         listings = capture.listings or []
         with self.session_factory.begin() as session:
+            self._persist_schema_observations(session)
             if profile_id is None:
                 profile_id = self._identity_profile(
                     session, user_id, profile_url, started_at
                 ).id
             runs = TrackingRunRepository(session)
             run = runs.start_profile_run(profile_id, started_at=started_at)
+            counters = getattr(self.client, "health_counters", {})
+            suspicious = suspicious_zero(session, TrackingRunRecord.profile_id, profile_id, current=len(listings))
+            finished_at = datetime.now(UTC)
+            health_status = classify_run(completed=True, suspicious_result=suspicious,
+                http_errors=counters.get("http_errors"), http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"), parse_errors=counters.get("parse_errors"))
             runs.mark_valid(
                 run.id,
                 items_fetched=len(listings),
@@ -234,6 +252,11 @@ class ProfileTracker:
                 stats_ok=True,
                 reviews_ok=True,
                 items_ok=True,
+                health_status=health_status, duration_ms=max(0, int((finished_at-started_at).total_seconds()*1000)),
+                suspicious_result=suspicious, http_requests=counters.get("http_requests"),
+                http_errors=counters.get("http_errors"), http_403=counters.get("http_403"),
+                http_429=counters.get("http_429"), http_5xx=counters.get("http_5xx"),
+                parse_errors=counters.get("parse_errors"),
             )
             profiles = ProfileRepository(session)
             profile_record = profiles.get_or_create_profile(
@@ -324,6 +347,12 @@ class ProfileTracker:
                 pages_fetched=None,
                 alerts=tuple(alerts),
             )
+
+    def _persist_schema_observations(self, session: Session) -> None:
+        for source, payload in getattr(self.client, "schema_observations", []):
+            observe_schema(session, source, payload)
+        if hasattr(self.client, "schema_observations"):
+            self.client.schema_observations.clear()
 
     @staticmethod
     def _previous_complete_run(

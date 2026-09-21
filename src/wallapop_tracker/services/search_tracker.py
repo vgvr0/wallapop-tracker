@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
 from wallapop_tracker.exceptions import WallapopParseError
+from wallapop_tracker.health import classify_run, suspicious_zero
 from wallapop_tracker.models import Listing
 from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.providers.search import SearchProvider, SearchRequest
+from wallapop_tracker.schema_monitor import observe_schema
 from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
@@ -25,6 +27,7 @@ from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
     TrackedSearchRecord,
     TrackingEventRecord,
+    TrackingRunRecord,
     TrackingRunStatus,
 )
 from wallapop_tracker.storage.repositories import (
@@ -87,9 +90,7 @@ class SearchTracker:
                 condition=self._optional_str(config.get("condition")),
                 brand=self._optional_str(config.get("brand")),
                 shipping_required=(
-                    bool(config["shipping_required"])
-                    if "shipping_required" in config
-                    else None
+                    bool(config["shipping_required"]) if "shipping_required" in config else None
                 ),
                 latitude=self._optional_float(config.get("latitude")),
                 longitude=self._optional_float(config.get("longitude")),
@@ -127,7 +128,44 @@ class SearchTracker:
                 not search_repo.has_valid_run(search_id) and not search.notify_on_first_run
             )
             run = runs.start_search_run(search_id, started_at=started_at)
-            runs.mark_valid(run.id, items_fetched=len(fetched), items_ok=True)
+            counters = getattr(getattr(self.provider, "client", None), "health_counters", {})
+            for source, payload in getattr(getattr(self.provider, "client", None), "schema_observations", []):
+                observe_schema(session, source, payload, observed_at=datetime.now(UTC))
+            suspicious = suspicious_zero(
+                session, TrackingRunRecord.tracked_search_id, search_id, current=len(fetched)
+            )
+            finished_at = datetime.now(UTC)
+            status = classify_run(
+                completed=True,
+                suspicious_result=suspicious,
+                http_errors=counters.get("http_errors"),
+                http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"),
+                parse_errors=counters.get("parse_errors"),
+            )
+            runs.finish_tracking_run(
+                run.id,
+                status=TrackingRunStatus.PARTIAL
+                if status == "DEGRADED"
+                else TrackingRunStatus.VALID,
+                finished_at=finished_at,
+                items_fetched=len(fetched),
+                items_ok=True,
+                health_status=status,
+                duration_ms=max(0, int((finished_at - started_at).total_seconds() * 1000)),
+                suspicious_result=suspicious,
+                **{
+                    key: counters.get(key)
+                    for key in (
+                        "http_requests",
+                        "http_errors",
+                        "http_403",
+                        "http_429",
+                        "http_5xx",
+                        "parse_errors",
+                    )
+                },
+            )
             listing_repo = ListingRepository(session)
             snapshots = SnapshotRepository(session)
             matches = SearchMatchRepository(session)
@@ -143,9 +181,7 @@ class SearchTracker:
                 existing = listing_repo.get_listing(listing.marketplace, listing.external_id)
                 previous_snapshot = self._latest_snapshot(session, existing)
                 previous_match = (
-                    matches.get(search_id, existing.id)
-                    if existing is not None
-                    else None
+                    matches.get(search_id, existing.id) if existing is not None else None
                 )
                 record, created = listing_repo.get_or_create_global_listing(
                     listing,
@@ -155,23 +191,27 @@ class SearchTracker:
                 )
                 matches.touch(search_id, record.id, started_at)
                 snapshots.mark_listing_seen(run.id, record.id, observed_at=started_at)
-                snapshots.save_listing_snapshot(
-                    record.id, run.id, listing, observed_at=started_at
-                )
+                snapshots.save_listing_snapshot(record.id, run.id, listing, observed_at=started_at)
                 previous_sale_status = (
                     getattr(previous_snapshot.sale_status, "value", previous_snapshot.sale_status)
-                    if previous_snapshot is not None else None
+                    if previous_snapshot is not None
+                    else None
                 )
                 current_sale_status = getattr(listing.sale_status, "value", listing.sale_status)
-                if (previous_snapshot is not None
-                        and previous_sale_status != "sold"
-                        and current_sale_status == "sold"):
+                if (
+                    previous_snapshot is not None
+                    and previous_sale_status != "sold"
+                    and current_sale_status == "sold"
+                ):
                     sold_event, sold_created = events.create_once(
                         event_type=AlertType.LISTING_SOLD.value,
                         idempotency_key=self._event_key(AlertType.LISTING_SOLD, listing.item_id),
-                        listing_id=record.id, tracking_run_id=run.id,
-                        tracked_search_id=search_id, old_price=previous_snapshot.price,
-                        new_price=listing.price, created_at=started_at,
+                        listing_id=record.id,
+                        tracking_run_id=run.id,
+                        tracked_search_id=search_id,
+                        old_price=previous_snapshot.price,
+                        new_price=listing.price,
+                        created_at=started_at,
                     )
                     if sold_created:
                         alerts.append(self._alert(sold_event, listing, search_id))
@@ -192,9 +232,7 @@ class SearchTracker:
                         )
                     else:
                         if detection is not None:
-                            relisting_event = session.get(
-                                TrackingEventRecord, detection.event_id
-                            )
+                            relisting_event = session.get(TrackingEventRecord, detection.event_id)
                             if relisting_event is not None:
                                 alerts.append(self._alert(relisting_event, listing, search_id))
 
@@ -260,7 +298,7 @@ class SearchTracker:
             return SearchTrackingResult(
                 search_id,
                 run.id,
-                TrackingRunStatus.VALID,
+                TrackingRunStatus.PARTIAL if status == "DEGRADED" else TrackingRunStatus.VALID,
                 len(fetched),
                 len(seen_ids),
                 new_count,
@@ -276,11 +314,13 @@ class SearchTracker:
             search = TrackedSearchRepository(session).get(search_id)
             if search is None:
                 raise ValueError(f"Unknown search: {search_id}")
-            run = TrackingRunRepository(session).start_search_run(
-                search_id, started_at=started_at
-            )
+            run = TrackingRunRepository(session).start_search_run(search_id, started_at=started_at)
             TrackingRunRepository(session).mark_failed(
-                run.id, error_type=type(error).__name__, error_message=str(error)
+                run.id,
+                error_type=type(error).__name__,
+                error_message=str(error),
+                health_status="FAILED",
+                duration_ms=max(0, int((datetime.now(UTC) - started_at).total_seconds() * 1000)),
             )
             TrackedSearchRepository(session).update_last_run(
                 search_id, started_at, TrackingRunStatus.FAILED.value, run.id
@@ -342,9 +382,7 @@ class SearchTracker:
         )
 
     @staticmethod
-    def _alert(
-        event: TrackingEventRecord, listing: Listing, search_id: int
-    ) -> TrackingAlert:
+    def _alert(event: TrackingEventRecord, listing: Listing, search_id: int) -> TrackingAlert:
         return TrackingAlert(
             event.id,
             AlertType(event.event_type),

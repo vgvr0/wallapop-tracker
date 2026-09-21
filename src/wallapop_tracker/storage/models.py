@@ -31,6 +31,12 @@ class TrackingRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class HealthRunStatus(StrEnum):
+    SUCCESS = "SUCCESS"
+    DEGRADED = "DEGRADED"
+    FAILED = "FAILED"
+
+
 class PresenceState(StrEnum):
     ACTIVE = "active"
     REMOVED = "removed"
@@ -49,6 +55,7 @@ class Base(DeclarativeBase):
 
 class SavedSearchRecord(Base):
     """Deprecated pre-TrackedSearch persistence kept for old databases."""
+
     __tablename__ = "saved_searches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -68,6 +75,7 @@ class SavedSearchRecord(Base):
 
 class SavedSearchItemRecord(Base):
     """Deprecated child rows for :class:`SavedSearchRecord`."""
+
     __tablename__ = "saved_search_items"
     __table_args__ = (
         UniqueConstraint("saved_search_id", "wallapop_item_id", name="uq_saved_search_item"),
@@ -127,9 +135,7 @@ class TrackedListingRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    listing_id: Mapped[int] = mapped_column(
-        ForeignKey("listings.id"), nullable=False
-    )
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
     alias: Mapped[str] = mapped_column(String(100), nullable=False)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
@@ -147,9 +153,7 @@ class SearchListingMatchRecord(Base):
 
     __tablename__ = "search_listing_matches"
     __table_args__ = (
-        UniqueConstraint(
-            "tracked_search_id", "listing_id", name="uq_search_listing_match"
-        ),
+        UniqueConstraint("tracked_search_id", "listing_id", name="uq_search_listing_match"),
         Index("ix_search_listing_matches_listing", "listing_id"),
     )
 
@@ -187,9 +191,7 @@ class TrackingEventRecord(Base):
     listing: Mapped["ListingRecord"] = relationship()
     tracking_run: Mapped["TrackingRunRecord"] = relationship()
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
-    deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(
-        back_populates="event"
-    )
+    deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(back_populates="event")
 
 
 class NotificationDeliveryStatus(StrEnum):
@@ -231,6 +233,7 @@ class NotificationDeliveryRecord(Base):
 
 class PriceWatchRecord(Base):
     """Deprecated pre-TrackedListing watch retained for historical data."""
+
     __tablename__ = "price_watches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), unique=True, nullable=False)
@@ -308,9 +311,7 @@ class TrackingRunRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"))
     tracked_search_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_searches.id"))
-    tracked_listing_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tracked_listings.id")
-    )
+    tracked_listing_id: Mapped[int | None] = mapped_column(ForeignKey("tracked_listings.id"))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TrackingRunStatus] = mapped_column(
@@ -329,11 +330,26 @@ class TrackingRunRecord(Base):
     new_listings: Mapped[int | None] = mapped_column(Integer)
     price_changes: Mapped[int | None] = mapped_column(Integer)
     duplicates_suppressed: Mapped[int | None] = mapped_column(Integer)
+    health_status: Mapped[str | None] = mapped_column(String(20))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    items_scanned: Mapped[int | None] = mapped_column(Integer)
+    items_new: Mapped[int | None] = mapped_column(Integer)
+    items_changed: Mapped[int | None] = mapped_column(Integer)
+    items_missing: Mapped[int | None] = mapped_column(Integer)
+    items_sold: Mapped[int | None] = mapped_column(Integer)
+    http_requests: Mapped[int | None] = mapped_column(Integer)
+    http_errors: Mapped[int | None] = mapped_column(Integer)
+    http_403: Mapped[int | None] = mapped_column(Integer)
+    http_429: Mapped[int | None] = mapped_column(Integer)
+    http_5xx: Mapped[int | None] = mapped_column(Integer)
+    parse_errors: Mapped[int | None] = mapped_column(Integer)
+    suspicious_result: Mapped[bool | None] = mapped_column()
     profile: Mapped[ProfileRecord | None] = relationship(back_populates="tracking_runs")
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
     tracked_listing: Mapped[TrackedListingRecord | None] = relationship(
-        primaryjoin=lambda: foreign(TrackingRunRecord.tracked_listing_id)
-        == TrackedListingRecord.id,
+        primaryjoin=lambda: (
+            foreign(TrackingRunRecord.tracked_listing_id) == TrackedListingRecord.id
+        ),
         foreign_keys=[tracked_listing_id],
     )
     profile_snapshots: Mapped[list["ProfileSnapshotRecord"]] = relationship(
@@ -342,6 +358,33 @@ class TrackingRunRecord(Base):
     listing_snapshots: Mapped[list["ListingSnapshotRecord"]] = relationship(
         back_populates="tracking_run"
     )
+
+
+class SchemaObservationRecord(Base):
+    """Latest structural fingerprint for a monitored payload source."""
+
+    __tablename__ = "schema_observations"
+    __table_args__ = (UniqueConstraint("source", name="uq_schema_observations_source"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    signature: Mapped[str] = mapped_column(String(128), nullable=False)
+    paths_json: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SchemaDriftEventRecord(Base):
+    __tablename__ = "schema_drift_events"
+    __table_args__ = (UniqueConstraint("source", "previous_signature", "current_signature", name="uq_schema_drift_transition"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    previous_signature: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_signature: Mapped[str] = mapped_column(String(128), nullable=False)
+    missing_paths_json: Mapped[str] = mapped_column(Text, nullable=False)
+    new_paths_json: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_types_json: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ListingRecord(Base):
@@ -404,7 +447,9 @@ class PossibleRelistingRecord(Base):
     reasons_json: Mapped[str] = mapped_column(Text, nullable=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[PossibleRelistingStatus] = mapped_column(
-        String(20), nullable=False, default=PossibleRelistingStatus.CANDIDATE,
+        String(20),
+        nullable=False,
+        default=PossibleRelistingStatus.CANDIDATE,
         server_default="candidate",
     )
     event_id: Mapped[int | None] = mapped_column(

@@ -11,6 +11,7 @@ def api_client():
     database.create_all()
     app = create_app(database)
     with TestClient(app) as client:
+        client._health_database = database
         yield client
     database.close()
 
@@ -30,6 +31,31 @@ def test_health_and_search_crud(api_client):
     )
     assert patched.status_code == 200
     assert patched.json()["enabled"] is False
+
+
+def test_health_api_endpoints_work_without_data(api_client):
+    assert api_client.get("/api/v1/health").status_code == 200
+    assert api_client.get("/api/v1/health/runs").status_code == 200
+    assert api_client.get("/api/v1/health/searches/999").status_code == 200
+    assert api_client.get("/api/v1/health/profiles/999").status_code == 200
+
+
+def test_health_api_endpoints_work_with_data(api_client):
+    from datetime import UTC, datetime
+
+    from wallapop_tracker.storage.models import TrackingRunRecord, TrackingRunStatus
+
+    created = api_client.post("/api/v1/searches", json={"query": "phone"}).json()
+    now = datetime.now(UTC)
+    with api_client._health_database.transaction() as session:
+        session.add(TrackingRunRecord(
+            tracked_search_id=created["id"], started_at=now, finished_at=now,
+            status=TrackingRunStatus.VALID, health_status="SUCCESS", duration_ms=100,
+        ))
+    assert api_client.get("/api/v1/health").json()["runs_24h"] == 1
+    assert api_client.get("/api/v1/health/runs").json()[0]["status"] == "SUCCESS"
+    assert api_client.get(f"/api/v1/health/searches/{created['id']}").json()["status"] == "HEALTHY"
+    assert api_client.get("/api/v1/health/profiles/999").json()["status"] == "DEGRADED"
 
 
 def test_search_import_and_pagination(api_client):

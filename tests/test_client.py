@@ -12,6 +12,7 @@ from wallapop_tracker.exceptions import (
     WallapopHTTPError,
     WallapopNotFoundError,
     WallapopPaginationError,
+    WallapopParseError,
 )
 
 BASE = "https://api.wallapop.com"
@@ -225,9 +226,22 @@ async def test_retry_429_then_success():
         backoff = AsyncMock(wraps=client._backoff)
         client._backoff = backoff
         stats = await client.get_profile_stats("user-1")
+        assert client.health_counters["http_429"] == 1
     backoff.assert_awaited_once_with(0, "0")
     assert stats.review_count == 12
     assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_invalid_json_increments_parse_errors():
+    respx.get(f"{BASE}/api/v3/users/user-1/stats").mock(
+        return_value=httpx.Response(200, text="not-json")
+    )
+    async with WallapopClient(min_interval=0) as client:
+        with pytest.raises(WallapopParseError):
+            await client.get_profile_stats("user-1")
+        assert client.health_counters["parse_errors"] == 1
 
 
 @pytest.mark.asyncio

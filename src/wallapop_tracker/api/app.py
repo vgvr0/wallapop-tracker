@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from wallapop_tracker.domain.deal_scoring import DealScore
 from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
+from wallapop_tracker.health import health_summary
 from wallapop_tracker.observability import Metrics, configure_logging, get_metrics
 from wallapop_tracker.parsers.search_url import SearchURLParseError, parse_search_url
 from wallapop_tracker.reporting.market import (
@@ -674,6 +675,42 @@ def create_app(
         if row is None:
             raise _not_found("Run", run_id)
         return _run(row)
+
+    @api.get("/api/v1/health", tags=["health"])
+    def health_summary_endpoint(session: Session = Depends(get_session)) -> dict[str, Any]:
+        return health_summary(session)
+
+    @api.get("/api/v1/health/runs", tags=["health"])
+    def health_runs(
+        session: Session = Depends(get_session), limit: int = Query(50, ge=1, le=500)
+    ) -> list[dict[str, Any]]:
+        rows = session.scalars(
+            select(TrackingRunRecord).order_by(TrackingRunRecord.started_at.desc()).limit(limit)
+        ).all()
+        return [
+            {
+                "run_id": r.id,
+                "status": r.health_status,
+                "started_at": r.started_at,
+                "finished_at": r.finished_at,
+                "duration_ms": r.duration_ms,
+                "items_scanned": r.items_scanned,
+                "http_errors": r.http_errors,
+                "http_403": r.http_403,
+                "http_429": r.http_429,
+                "http_5xx": r.http_5xx,
+                "parse_errors": r.parse_errors,
+            }
+            for r in rows
+        ]
+
+    @api.get("/api/v1/health/searches/{search_id}", tags=["health"])
+    def search_health(search_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+        return health_summary(session, search_id=search_id)
+
+    @api.get("/api/v1/health/profiles/{profile_id}", tags=["health"])
+    def profile_health(profile_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+        return health_summary(session, profile_id=profile_id)
 
     @api.get("/api/v1/analytics/market/{search_id}", tags=["analytics"])
     def market(search_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
