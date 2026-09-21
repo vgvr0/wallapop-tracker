@@ -38,6 +38,14 @@ from .parsers.stats import parse_profile_stats
 logger = logging.getLogger(__name__)
 
 
+def _listing_coordinate(raw: Mapping[str, Any], name: str) -> float | None:
+    value = raw.get(name)
+    location = raw.get("location")
+    if value is None and isinstance(location, Mapping):
+        value = location.get(name)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
 class _SharedRateLimiter:
     """Process-local limiter shared by clients targeting one Wallapop host."""
 
@@ -526,6 +534,10 @@ class WallapopClient:
                     else None,
                     category_name=raw.get("category_name"),
                     brand=raw.get("brand"),
+                    model=(raw.get("model") or (raw.get("attributes") or {}).get("model"))
+                    if isinstance(raw.get("attributes") or {}, Mapping) else None,
+                    latitude=_listing_coordinate(raw, "latitude"),
+                    longitude=_listing_coordinate(raw, "longitude"),
                     condition=condition_code or condition_label,
                     condition_code=condition_code,
                     condition_label=condition_label,

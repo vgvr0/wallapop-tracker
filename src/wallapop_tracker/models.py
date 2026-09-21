@@ -75,6 +75,9 @@ class Listing(BaseModel):
     condition_code: str | None = None
     condition_label: str | None = None
     brand: str | None = None
+    model: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     has_warranty: bool | None = None
     is_refurbished: bool | None = None
     url: str | None = None

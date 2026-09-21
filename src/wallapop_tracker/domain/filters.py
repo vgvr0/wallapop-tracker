@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+from math import asin, cos, radians, sin, sqrt
 from re import Pattern
 from typing import Protocol, cast
 
@@ -55,7 +56,45 @@ class ConditionFilter:
         object.__setattr__(self, "codes", frozenset(code for code in codes if code))
 
     def matches(self, listing: Listing) -> bool:
-        return not self.codes or listing.condition_code in self.codes
+        value = listing.condition_code or listing.condition
+        return not self.codes or (value is not None and value.casefold() in {c.casefold() for c in self.codes})
+
+
+@dataclass(frozen=True)
+class CategoryFilter:
+    category_id: str
+
+    def matches(self, listing: Listing) -> bool:
+        return listing.category_id == self.category_id
+
+
+@dataclass(frozen=True)
+class ValueFilter:
+    values: frozenset[str]
+    attribute: str
+
+    def __init__(self, values: Iterable[str], attribute: str) -> None:
+        object.__setattr__(self, "values", frozenset(v.casefold() for v in values if v.strip()))
+        object.__setattr__(self, "attribute", attribute)
+
+    def matches(self, listing: Listing) -> bool:
+        value = getattr(listing, self.attribute, None)
+        return not self.values or (isinstance(value, str) and value.casefold() in self.values)
+
+
+@dataclass(frozen=True)
+class DistanceFilter:
+    latitude: float
+    longitude: float
+    max_distance_km: float
+
+    def matches(self, listing: Listing) -> bool:
+        if listing.latitude is None or listing.longitude is None:
+            return False
+        dlat = radians(listing.latitude - self.latitude)
+        dlon = radians(listing.longitude - self.longitude)
+        a = sin(dlat / 2) ** 2 + cos(radians(self.latitude)) * cos(radians(listing.latitude)) * sin(dlon / 2) ** 2
+        return 6371.0088 * 2 * asin(sqrt(a)) <= self.max_distance_km
 
 
 @dataclass(frozen=True)
@@ -144,11 +183,29 @@ def filters_from_config(config: Mapping[str, object]) -> FilterEngine:
                 Decimal(str(maximum)) if maximum is not None else None,
             )
         )
-    conditions = config.get("conditions")
+    conditions = config.get("conditions", config.get("condition"))
     if isinstance(conditions, str):
         conditions = (conditions,)
     if isinstance(conditions, Iterable):
         filters.append(ConditionFilter(cast(Iterable[str], conditions)))
+    category = config.get("category_id")
+    if category is not None:
+        filters.append(CategoryFilter(str(category)))
+    for key, attribute in (("brands", "brand"), ("brand", "brand"), ("models", "model"), ("model", "model")):
+        values = config.get(key)
+        if isinstance(values, str):
+            values = (values,)
+        if isinstance(values, Iterable):
+            filters.append(ValueFilter(cast(Iterable[str], values), attribute))
+    distance_key = "max_distance_km" if config.get("max_distance_km") is not None else "distance"
+    if all(config.get(k) is not None for k in ("latitude", "longitude", distance_key)):
+        filters.append(
+            DistanceFilter(
+                float(cast(float | int | str, config["latitude"])),
+                float(cast(float | int | str, config["longitude"])),
+                float(cast(float | int | str, config[distance_key])),
+            )
+        )
     include = config.get("include", ())
     if isinstance(include, str):
         include = (include,)

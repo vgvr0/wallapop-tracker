@@ -1,11 +1,18 @@
+from decimal import Decimal
+
 from typer.testing import CliRunner
 
 from wallapop_tracker import cli
-from wallapop_tracker.models import Profile
+from wallapop_tracker.models import Listing, Profile
 from wallapop_tracker.services.tracker import TrackingResult
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import TrackingRunStatus
-from wallapop_tracker.storage.repositories import TrackedProfileRepository
+from wallapop_tracker.storage.repositories import (
+    ListingRepository,
+    TrackedListingRepository,
+    TrackedProfileRepository,
+    TrackedSearchRepository,
+)
 
 runner = CliRunner()
 
@@ -49,6 +56,54 @@ def test_cli_add_list_enable_disable_remove(tmp_path, monkeypatch):
     assert removed.exit_code == 0
     with Database(f"sqlite:///{tmp_path / 'cli.db'}").session() as session:
         assert TrackedProfileRepository(session).list_all() == []
+
+
+def test_search_alerts_set_persists_configuration(tmp_path, monkeypatch):
+    _database(tmp_path, monkeypatch)
+    with Database(f"sqlite:///{tmp_path / 'cli.db'}").transaction() as session:
+        search_id = TrackedSearchRepository(session).create("camera").id
+    result = runner.invoke(cli.app, ["search", "alerts", "set", str(search_id),
+        "--percentage-drop", "10", "--deal-score-threshold", "80", "--notify-30d-low"])
+    assert result.exit_code == 0
+    with Database(f"sqlite:///{tmp_path / 'cli.db'}").session() as session:
+        row = TrackedSearchRepository(session).get(search_id)
+        assert row is not None
+        assert row.percentage_drop_threshold == 10
+        assert row.deal_score_threshold == 80
+        assert row.notify_on_30d_low is True
+
+
+def test_advanced_alert_cli_listing_and_search_round_trip_and_clear(tmp_path, monkeypatch):
+    _database(tmp_path, monkeypatch)
+    with Database(f"sqlite:///{tmp_path / 'cli.db'}").transaction() as session:
+        listing, _ = ListingRepository(session).get_or_create_global_listing(Listing(
+            item_id="item-1", user_id="seller", title="Camera", price=Decimal("100"),
+            currency="EUR", url="https://example/item-1"), None)
+        tracked_id = TrackedListingRepository(session).create(listing.id, "camera").id
+        search_id = TrackedSearchRepository(session).create("camera").id
+    listing_set = runner.invoke(cli.app, ["listing", "alerts", "set", "camera", "--target-price", "50",
+        "--percentage-drop", "10", "--deal-score-threshold", "80", "--notify-30d-low",
+        "--notify-90d-low", "--notify-all-time-low"])
+    assert listing_set.exit_code == 0
+    search_set = runner.invoke(cli.app, ["search", "alerts", "set", str(search_id), "--percentage-drop", "10",
+        "--deal-score-threshold", "80", "--notify-30d-low", "--notify-90d-low", "--notify-all-time-low"])
+    assert search_set.exit_code == 0
+    with Database(f"sqlite:///{tmp_path / 'cli.db'}").session() as session:
+        listing_row = TrackedListingRepository(session).get(tracked_id)
+        search_row = TrackedSearchRepository(session).get(search_id)
+        assert listing_row is not None and listing_row.target_price == 50
+        assert listing_row.notify_on_90d_low and listing_row.notify_on_all_time_low
+        assert search_row is not None and search_row.deal_score_threshold == 80
+        assert search_row.notify_on_90d_low and search_row.notify_on_all_time_low
+    cleared = runner.invoke(cli.app, ["listing", "alerts", "set", "camera", "--clear-target-price",
+        "--clear-percentage-drop", "--clear-deal-score-threshold"])
+    assert cleared.exit_code == 0
+    search_cleared = runner.invoke(cli.app, ["search", "alerts", "set", str(search_id),
+        "--clear-percentage-drop", "--clear-deal-score-threshold"])
+    assert search_cleared.exit_code == 0
+    with Database(f"sqlite:///{tmp_path / 'cli.db'}").session() as session:
+        assert TrackedListingRepository(session).get(tracked_id).target_price is None
+        assert TrackedSearchRepository(session).get(search_id).deal_score_threshold is None
 
 
 def test_cli_add_duplicate_and_missing_alias(tmp_path, monkeypatch):

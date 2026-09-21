@@ -115,6 +115,12 @@ class TrackedSearchRecord(Base):
     notify_on_first_run: Mapped[bool] = mapped_column(
         nullable=False, default=False, server_default="0"
     )
+    target_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    percentage_drop_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    deal_score_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    notify_on_30d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_90d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_all_time_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -143,6 +149,12 @@ class TrackedListingRecord(Base):
     last_run_status: Mapped[str | None] = mapped_column(String(20))
     last_tracking_run_id: Mapped[int | None] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text)
+    target_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    percentage_drop_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    deal_score_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    notify_on_30d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_90d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_all_time_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     listing: Mapped["ListingRecord"] = relationship()
@@ -186,12 +198,25 @@ class TrackingEventRecord(Base):
     old_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     new_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    metadata_json: Mapped[str | None] = mapped_column(Text)
     # Deprecated compatibility flag; notification_deliveries is authoritative.
     alert_delivered: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     listing: Mapped["ListingRecord"] = relationship()
     tracking_run: Mapped["TrackingRunRecord"] = relationship()
     tracked_search: Mapped[TrackedSearchRecord | None] = relationship()
     deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(back_populates="event")
+
+
+class DealScoreSnapshotRecord(Base):
+    """A score observation scoped to one listing/search context."""
+    __tablename__ = "deal_score_snapshots"
+    __table_args__ = (Index("ix_deal_score_snapshots_context_time", "listing_id", "tracked_search_id", "computed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
+    tracked_search_id: Mapped[int] = mapped_column(ForeignKey("tracked_searches.id"), nullable=False)
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class NotificationDeliveryStatus(StrEnum):

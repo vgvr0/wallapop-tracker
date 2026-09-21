@@ -16,6 +16,7 @@ from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummar
 from wallapop_tracker.observability import get_metrics
 
 from .models import (
+    DealScoreSnapshotRecord,
     ListingRecord,
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
@@ -34,6 +35,33 @@ from .models import (
     TrackingRunRecord,
     TrackingRunStatus,
 )
+
+
+def latest_deal_score(
+    session: Session, listing_id: int, search_id: int
+) -> DealScoreSnapshotRecord | None:
+    return session.scalar(
+        select(DealScoreSnapshotRecord)
+        .where(
+            DealScoreSnapshotRecord.listing_id == listing_id,
+            DealScoreSnapshotRecord.tracked_search_id == search_id,
+        )
+        .order_by(DealScoreSnapshotRecord.computed_at.desc(), DealScoreSnapshotRecord.id.desc())
+        .limit(1)
+    )
+
+
+def _validate_alert_thresholds(
+    target_price: Decimal | None,
+    percentage_drop_threshold: Decimal | None,
+    deal_score_threshold: Decimal | None,
+) -> None:
+    if target_price is not None and target_price < 0:
+        raise ValueError("target_price must be non-negative")
+    if percentage_drop_threshold is not None and not 0 < percentage_drop_threshold <= 100:
+        raise ValueError("percentage_drop_threshold must be between 0 and 100")
+    if deal_score_threshold is not None and not 0 <= deal_score_threshold <= 100:
+        raise ValueError("deal_score_threshold must be between 0 and 100")
 
 
 class TrackedSearchRepository:
@@ -68,6 +96,12 @@ class TrackedSearchRepository:
         interval_seconds: int = 600,
         notify_on_first_run: bool = False,
         marketplace: Marketplace = Marketplace.WALLAPOP,
+        target_price: Decimal | None = None,
+        percentage_drop_threshold: Decimal | None = None,
+        deal_score_threshold: Decimal | None = None,
+        notify_on_30d_low: bool = False,
+        notify_on_90d_low: bool = False,
+        notify_on_all_time_low: bool = False,
     ) -> TrackedSearchRecord:
         query = query.strip()
         if not query:
@@ -76,6 +110,8 @@ class TrackedSearchRepository:
             raise ValueError("interval_seconds must be positive")
         if min_price is not None and max_price is not None and min_price > max_price:
             raise ValueError("min_price must not exceed max_price")
+        _validate_search_filters(filters)
+        _validate_alert_thresholds(target_price, percentage_drop_threshold, deal_score_threshold)
         now = datetime.now(UTC)
         record = TrackedSearchRecord(
             marketplace=require_supported_marketplace(marketplace).value,
@@ -86,6 +122,12 @@ class TrackedSearchRepository:
             filters_json=_json_text(filters),
             interval_seconds=interval_seconds,
             notify_on_first_run=notify_on_first_run,
+            target_price=target_price,
+            percentage_drop_threshold=percentage_drop_threshold,
+            deal_score_threshold=deal_score_threshold,
+            notify_on_30d_low=notify_on_30d_low,
+            notify_on_90d_low=notify_on_90d_low,
+            notify_on_all_time_low=notify_on_all_time_low,
             created_at=now,
             updated_at=now,
         )
@@ -169,6 +211,12 @@ class TrackedSearchRepository:
         notify_on_first_run: bool | None = None,
         interval_seconds: int | None = None,
         marketplace: str | Marketplace | None = None,
+        target_price: Decimal | None = None,
+        percentage_drop_threshold: Decimal | None = None,
+        deal_score_threshold: Decimal | None = None,
+        notify_on_30d_low: bool | None = None,
+        notify_on_90d_low: bool | None = None,
+        notify_on_all_time_low: bool | None = None,
     ) -> TrackedSearchRecord:
         record = self.get(search_id)
         if record is None:
@@ -194,6 +242,7 @@ class TrackedSearchRepository:
         if max_price is not None:
             record.max_price = max_price
         if filters is not None:
+            _validate_search_filters(filters)
             record.filters_json = _json_text(filters)
         if enabled is not None:
             record.enabled = enabled
@@ -203,6 +252,17 @@ class TrackedSearchRepository:
             record.interval_seconds = interval_seconds
         if marketplace is not None:
             record.marketplace = require_supported_marketplace(marketplace).value
+        _validate_alert_thresholds(target_price, percentage_drop_threshold, deal_score_threshold)
+        for name, value in (
+            ("target_price", target_price),
+            ("percentage_drop_threshold", percentage_drop_threshold),
+            ("deal_score_threshold", deal_score_threshold),
+            ("notify_on_30d_low", notify_on_30d_low),
+            ("notify_on_90d_low", notify_on_90d_low),
+            ("notify_on_all_time_low", notify_on_all_time_low),
+        ):
+            if value is not None:
+                setattr(record, name, value)
         record.updated_at = _utc_now()
         self.session.flush()
         return record
@@ -246,12 +306,19 @@ class TrackedListingRepository:
         *,
         interval_seconds: int = 600,
         notes: str | None = None,
+        target_price: Decimal | None = None,
+        percentage_drop_threshold: Decimal | None = None,
+        deal_score_threshold: Decimal | None = None,
+        notify_on_30d_low: bool = False,
+        notify_on_90d_low: bool = False,
+        notify_on_all_time_low: bool = False,
     ) -> TrackedListingRecord:
         alias = alias.strip()
         if not alias:
             raise ValueError("alias is required")
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
+        _validate_alert_thresholds(target_price, percentage_drop_threshold, deal_score_threshold)
         if self.session.get(ListingRecord, listing_id) is None:
             raise ValueError(f"Unknown listing: {listing_id}")
         now = _utc_now()
@@ -260,6 +327,12 @@ class TrackedListingRepository:
             alias=alias,
             interval_seconds=interval_seconds,
             notes=notes,
+            target_price=target_price,
+            percentage_drop_threshold=percentage_drop_threshold,
+            deal_score_threshold=deal_score_threshold,
+            notify_on_30d_low=notify_on_30d_low,
+            notify_on_90d_low=notify_on_90d_low,
+            notify_on_all_time_low=notify_on_all_time_low,
             created_at=now,
             updated_at=now,
         )
@@ -300,6 +373,12 @@ class TrackedListingRepository:
         enabled: bool | None = None,
         interval_seconds: int | None = None,
         notes: str | None = None,
+        target_price: Decimal | None = None,
+        percentage_drop_threshold: Decimal | None = None,
+        deal_score_threshold: Decimal | None = None,
+        notify_on_30d_low: bool | None = None,
+        notify_on_90d_low: bool | None = None,
+        notify_on_all_time_low: bool | None = None,
     ) -> TrackedListingRecord:
         record = self.get(listing_id)
         if record is None:
@@ -312,6 +391,17 @@ class TrackedListingRepository:
             record.interval_seconds = interval_seconds
         if notes is not None:
             record.notes = notes
+        _validate_alert_thresholds(target_price, percentage_drop_threshold, deal_score_threshold)
+        for name, value in (
+            ("target_price", target_price),
+            ("percentage_drop_threshold", percentage_drop_threshold),
+            ("deal_score_threshold", deal_score_threshold),
+            ("notify_on_30d_low", notify_on_30d_low),
+            ("notify_on_90d_low", notify_on_90d_low),
+            ("notify_on_all_time_low", notify_on_all_time_low),
+        ):
+            if value is not None:
+                setattr(record, name, value)
         record.updated_at = _utc_now()
         self.session.flush()
         return record
@@ -392,6 +482,7 @@ class TrackingEventRepository:
         old_price: Decimal | None,
         new_price: Decimal | None,
         created_at: datetime,
+        metadata_json: str | None = None,
     ) -> tuple[TrackingEventRecord, bool]:
         existing = self.get_by_key(idempotency_key)
         if existing is not None:
@@ -407,6 +498,7 @@ class TrackingEventRepository:
                     old_price=old_price,
                     new_price=new_price,
                     created_at=created_at,
+                    metadata_json=metadata_json,
                 )
                 self.session.add(record)
                 self.session.flush()
@@ -591,6 +683,24 @@ logger = logging.getLogger(__name__)
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _validate_search_filters(filters: dict[str, Any] | None) -> None:
+    if filters is None:
+        return
+    for key, low, high in (("latitude", -90, 90), ("longitude", -180, 180)):
+        if key in filters and filters[key] is not None and not low <= float(filters[key]) <= high:
+            raise ValueError(f"{key} must be between {low} and {high}")
+    if (
+        "max_distance_km" in filters
+        and filters["max_distance_km"] is not None
+        and float(filters["max_distance_km"]) <= 0
+    ):
+        raise ValueError("max_distance_km must be positive")
+    for key in ("brands", "brand_ids", "models", "model_ids", "conditions", "condition"):
+        value = filters.get(key)
+        if isinstance(value, list) and len(value) != len(set(value)):
+            raise ValueError(f"{key} must not contain duplicates")
 
 
 def _json_text(value: Any) -> str | None:

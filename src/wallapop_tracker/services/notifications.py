@@ -348,6 +348,18 @@ class NotificationService:
             else str(event.listing_id)
         )
         details = None
+        if event.metadata_json and event.event_type in {
+            AlertType.TARGET_PRICE_REACHED.value,
+            AlertType.PERCENTAGE_DROP.value,
+            AlertType.NEW_30D_LOW.value,
+            AlertType.NEW_90D_LOW.value,
+            AlertType.NEW_ALL_TIME_LOW.value,
+            AlertType.DEAL_SCORE_THRESHOLD.value,
+        }:
+            metadata = json.loads(event.metadata_json)
+            details = "Advanced alert: " + ", ".join(
+                f"{key}={value}" for key, value in metadata.items()
+            )
         if event.event_type == AlertType.POSSIBLE_RELISTING.value:
             candidate = session.scalar(
                 select(PossibleRelistingRecord).where(PossibleRelistingRecord.event_id == event.id)

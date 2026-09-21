@@ -6,10 +6,12 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from wallapop_tracker.domain.advanced_alerts import detect_price_alerts
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.exceptions import WallapopNotFoundError, WallapopParseError
 from wallapop_tracker.models import Listing
@@ -21,6 +23,7 @@ from wallapop_tracker.storage.models import (
     ListingSnapshotRecord,
     PresenceState,
     TrackedListingRecord,
+    TrackingEventRecord,
     TrackingRunStatus,
 )
 from wallapop_tracker.storage.repositories import (
@@ -107,9 +110,42 @@ class TrackedListingTracker:
             SnapshotRepository(session).save_listing_snapshot(
                 current.id, run.id, listing, observed_at=started_at
             )
+            current_snapshot = self._latest_snapshot(session, current.id)
             alerts = self._events_for_transition(
                 session, tracked, run.id, current, previous, listing, started_at
             )
+            if current_snapshot is not None:
+                for advanced in detect_price_alerts(
+                    session,
+                    listing_id=current.id,
+                    run_id=run.id,
+                    tracked_search_id=None,
+                    previous=previous,
+                    current=current_snapshot,
+                    config=tracked,
+                ):
+                    event, created = TrackingEventRepository(session).create_once(
+                        event_type=advanced["event_type"],
+                        idempotency_key=advanced["key"],
+                        listing_id=current.id,
+                        tracking_run_id=run.id,
+                        tracked_search_id=None,
+                        old_price=previous.price if previous else None,
+                        new_price=listing.price,
+                        created_at=started_at,
+                        metadata_json=json.dumps(advanced["metadata"], default=str),
+                    )
+                    if created:
+                        alerts.append(
+                            self._create_event_alert(
+                                event,
+                                tracked,
+                                listing,
+                                advanced["event_type"],
+                                started_at,
+                                advanced["key"],
+                            )
+                        )
             TrackedListingRepository(session).update_last_run(
                 tracked_listing_id, started_at, TrackingRunStatus.VALID.value, run.id
             )
@@ -181,9 +217,7 @@ class TrackedListingTracker:
         self, tracked_listing_id: int, started_at: datetime, error: BaseException
     ) -> ListingTrackingResult:
         with self.session_factory.begin() as session:
-            return self._persist_failure_in_session(
-                session, tracked_listing_id, started_at, error
-            )
+            return self._persist_failure_in_session(session, tracked_listing_id, started_at, error)
 
     @staticmethod
     def _persist_failure_in_session(
@@ -239,11 +273,19 @@ class TrackedListingTracker:
         previous_sale_status = getattr(previous.sale_status, "value", previous.sale_status)
         current_sale_status = getattr(listing.sale_status, "value", listing.sale_status)
         if previous_sale_status != "sold" and current_sale_status == "sold":
-            events.append(self._create_event(
-                session, tracked, run_id, record, AlertType.LISTING_SOLD,
-                created_at, previous.price, listing.price,
-                {"from": previous_sale_status, "to": "sold"},
-            ))
+            events.append(
+                self._create_event(
+                    session,
+                    tracked,
+                    run_id,
+                    record,
+                    AlertType.LISTING_SOLD,
+                    created_at,
+                    previous.price,
+                    listing.price,
+                    {"from": previous_sale_status, "to": "sold"},
+                )
+            )
         for field, event_type in (
             ("title", AlertType.TITLE_CHANGE),
             ("reserved", AlertType.RESERVATION_CHANGE),
@@ -272,9 +314,7 @@ class TrackedListingTracker:
             and listing.price is not None
         ):
             event_type = (
-                AlertType.PRICE_DROP
-                if listing.price < previous.price
-                else AlertType.PRICE_INCREASE
+                AlertType.PRICE_DROP if listing.price < previous.price else AlertType.PRICE_INCREASE
             )
             events.append(
                 self._create_event(
@@ -334,9 +374,31 @@ class TrackedListingTracker:
         )
 
     @staticmethod
-    def _latest_snapshot(
-        session: Session, listing_id: int
-    ) -> ListingSnapshotRecord | None:
+    def _create_event_alert(
+        event: object,
+        tracked: TrackedListingRecord,
+        listing: Listing,
+        event_type: str,
+        created_at: datetime,
+        key: str,
+    ) -> TrackingAlert:
+        event = cast(TrackingEventRecord, event)
+        return TrackingAlert(
+            event.id,
+            AlertType(event_type),
+            created_at,
+            listing.item_id,
+            None,
+            event.old_price,
+            event.new_price,
+            listing.title,
+            listing.url,
+            key,
+            tracked.id,
+        )
+
+    @staticmethod
+    def _latest_snapshot(session: Session, listing_id: int) -> ListingSnapshotRecord | None:
         return session.scalar(
             select(ListingSnapshotRecord)
             .where(ListingSnapshotRecord.listing_id == listing_id)

@@ -47,6 +47,8 @@ app = typer.Typer(no_args_is_help=True)
 search_app = typer.Typer(no_args_is_help=True)
 notifications_app = typer.Typer(no_args_is_help=True)
 listing_app = typer.Typer(no_args_is_help=True)
+listing_alerts_app = typer.Typer(no_args_is_help=True)
+search_alerts_app = typer.Typer(no_args_is_help=True)
 metadata_app = typer.Typer(no_args_is_help=True)
 relistings_app = typer.Typer(no_args_is_help=True)
 analytics_app = typer.Typer(no_args_is_help=True)
@@ -54,6 +56,8 @@ score_app = typer.Typer(no_args_is_help=True)
 app.add_typer(search_app, name="search")
 app.add_typer(notifications_app, name="notifications")
 app.add_typer(listing_app, name="listing")
+listing_app.add_typer(listing_alerts_app, name="alerts")
+search_app.add_typer(search_alerts_app, name="alerts")
 app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
 app.add_typer(analytics_app, name="analytics")
@@ -93,6 +97,15 @@ def _json_default(value: object) -> str:
     if isinstance(value, timedelta):
         return str(value)
     raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
+
+def _decimal_option(value: str | None, name: str) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(value)
+    except Exception as exc:
+        raise typer.BadParameter(f"{name} must be numeric") from exc
 
 
 @analytics_app.command("market")
@@ -537,6 +550,13 @@ def search_add(
     include_all: bool = typer.Option(False, "--include-all"),
     regex: str | None = typer.Option(None, "--regex"),
     regex_target: str = typer.Option("both", "--regex-target"),
+    category_id: str | None = typer.Option(None, "--category-id"),
+    brand: list[str] = typer.Option([], "--brand"),  # noqa: B008
+    model: list[str] = typer.Option([], "--model"),  # noqa: B008
+    condition: list[str] = typer.Option([], "--condition"),  # noqa: B008
+    latitude: float | None = typer.Option(None, "--latitude"),
+    longitude: float | None = typer.Option(None, "--longitude"),
+    max_distance_km: float | None = typer.Option(None, "--max-distance-km"),
     notify_on_first_run: bool = typer.Option(False, "--notify-on-first-run"),
 ) -> None:
     """Create a persistent read-only Wallapop search tracker."""
@@ -546,6 +566,13 @@ def search_add(
         "include_mode": "all" if include_all else "any",
         "regex": regex,
         "regex_target": regex_target,
+        "category_id": category_id,
+        "brands": brand,
+        "models": model,
+        "conditions": condition,
+        "latitude": latitude,
+        "longitude": longitude,
+        "max_distance_km": max_distance_km,
     }
     database = _db()
     try:
@@ -874,6 +901,133 @@ def listing_remove(value: str, yes: bool = typer.Option(False, "--yes")) -> None
     finally:
         database.close()
     typer.echo(f"Removed: {value}")
+
+
+def _alert_values(row: object) -> None:
+    for name in (
+        "target_price",
+        "percentage_drop_threshold",
+        "deal_score_threshold",
+        "notify_on_30d_low",
+        "notify_on_90d_low",
+        "notify_on_all_time_low",
+    ):
+        typer.echo(f"{name}: {getattr(row, name)}")
+
+
+@listing_alerts_app.command("show")
+def listing_alerts_show(value: str) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            row = TrackedListingRepository(session).get_by_alias_or_id(value)
+            if row is None:
+                raise typer.BadParameter(f"Unknown tracked listing: {value}")
+            _alert_values(row)
+    finally:
+        database.close()
+
+
+@listing_alerts_app.command("set")
+def listing_alerts_set(
+    value: str,
+    target_price: str | None = typer.Option(None),
+    percentage_drop: str | None = typer.Option(None, "--percentage-drop"),
+    deal_score_threshold: str | None = typer.Option(None),
+    notify_30d_low: bool = typer.Option(False, "--notify-30d-low/--no-notify-30d-low"),
+    notify_90d_low: bool = typer.Option(False, "--notify-90d-low/--no-notify-90d-low"),
+    notify_all_time_low: bool = typer.Option(
+        False, "--notify-all-time-low/--no-notify-all-time-low"
+    ),
+    clear_target_price: bool = typer.Option(False),
+    clear_percentage_drop: bool = typer.Option(False),
+    clear_deal_score_threshold: bool = typer.Option(False),
+) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            row = TrackedListingRepository(session).get_by_alias_or_id(value)
+            if row is None:
+                raise typer.BadParameter(f"Unknown tracked listing: {value}")
+            target_value = _decimal_option(target_price, "target-price")
+            percentage_value = _decimal_option(percentage_drop, "percentage-drop")
+            score_value = _decimal_option(deal_score_threshold, "deal-score-threshold")
+            if target_value is not None and target_value < 0:
+                raise typer.BadParameter("target-price must be non-negative")
+            if score_value is not None and not 0 <= score_value <= 100:
+                raise typer.BadParameter("deal-score-threshold must be between 0 and 100")
+            if clear_target_price:
+                row.target_price = None
+            elif target_value is not None:
+                row.target_price = target_value
+            if clear_deal_score_threshold:
+                row.deal_score_threshold = None
+            elif score_value is not None:
+                row.deal_score_threshold = score_value
+            if clear_percentage_drop:
+                row.percentage_drop_threshold = None
+            elif percentage_value is not None:
+                row.percentage_drop_threshold = percentage_value
+            row.notify_on_30d_low, row.notify_on_90d_low, row.notify_on_all_time_low = (
+                notify_30d_low,
+                notify_90d_low,
+                notify_all_time_low,
+            )
+            if percentage_value is not None and not 0 < percentage_value <= 100:
+                raise typer.BadParameter("percentage-drop must be > 0 and <= 100")
+            _alert_values(row)
+    finally:
+        database.close()
+
+
+@search_alerts_app.command("show")
+def search_alerts_show(search_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            row = TrackedSearchRepository(session).get(search_id)
+            if row is None:
+                raise typer.BadParameter(f"Unknown search: {search_id}")
+            _alert_values(row)
+    finally:
+        database.close()
+
+
+@search_alerts_app.command("set")
+def search_alerts_set(
+    search_id: int,
+    percentage_drop: str | None = typer.Option(None, "--percentage-drop"),
+    deal_score_threshold: str | None = typer.Option(None),
+    notify_30d_low: bool = typer.Option(False, "--notify-30d-low/--no-notify-30d-low"),
+    notify_90d_low: bool = typer.Option(False, "--notify-90d-low/--no-notify-90d-low"),
+    notify_all_time_low: bool = typer.Option(False, "--notify-all-time-low/--no-notify-all-time-low"),
+    clear_percentage_drop: bool = typer.Option(False),
+    clear_deal_score_threshold: bool = typer.Option(False),
+) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            row = TrackedSearchRepository(session).get(search_id)
+            if row is None:
+                raise typer.BadParameter(f"Unknown search: {search_id}")
+            percentage_value = _decimal_option(percentage_drop, "percentage-drop")
+            score_value = _decimal_option(deal_score_threshold, "deal-score-threshold")
+            if score_value is not None and not 0 <= score_value <= 100:
+                raise typer.BadParameter("deal-score-threshold must be between 0 and 100")
+            if clear_percentage_drop:
+                row.percentage_drop_threshold = None
+            elif percentage_value is not None:
+                row.percentage_drop_threshold = percentage_value
+            if clear_deal_score_threshold:
+                row.deal_score_threshold = None
+            elif score_value is not None:
+                row.deal_score_threshold = score_value
+            row.notify_on_30d_low = notify_30d_low
+            row.notify_on_90d_low = notify_90d_low
+            row.notify_on_all_time_low = notify_all_time_low
+            _alert_values(row)
+    finally:
+        database.close()
 
 
 async def _run_listing(value: str) -> None:

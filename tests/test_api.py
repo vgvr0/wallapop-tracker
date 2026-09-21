@@ -78,3 +78,54 @@ def test_errors_and_validation(api_client):
     invalid = api_client.post("/api/v1/searches", json={"query": "", "interval_seconds": 0})
     assert invalid.status_code == 422
     assert api_client.get("/api/v1/listings?limit=201").status_code == 422
+
+
+def test_advanced_alert_configuration_round_trips_for_search(api_client):
+    created = api_client.post("/api/v1/searches", json={"query": "camera"}).json()
+    assert created["target_price"] is None
+    assert created["percentage_drop_threshold"] is None
+    assert created["deal_score_threshold"] is None
+    updated = api_client.patch(
+        f"/api/v1/searches/{created['id']}",
+        json={"target_price": "500", "percentage_drop_threshold": "10", "deal_score_threshold": "80",
+              "notify_on_30d_low": True, "notify_on_90d_low": True, "notify_on_all_time_low": True},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["target_price"] == "500.00"
+    assert body["percentage_drop_threshold"] == "10.00"
+    assert body["deal_score_threshold"] == "80.00"
+    assert body["notify_on_90d_low"] is True
+
+
+def test_tracked_listing_advanced_alerts_patch_preserves_unmodified_fields(api_client):
+    from decimal import Decimal
+
+    from wallapop_tracker.models import Listing
+    from wallapop_tracker.storage.repositories import ListingRepository
+
+    with api_client._health_database.transaction() as session:
+        listing, _ = ListingRepository(session).get_or_create_global_listing(
+            Listing(item_id="item-1", user_id="seller", title="Camera", price=Decimal("100"),
+                    currency="EUR", url="https://example/item-1"), None
+        )
+        listing_id = listing.id
+    created = api_client.post("/api/v1/tracked-listings", json={
+        "listing_id": listing_id, "alias": "camera", "target_price": "50",
+        "percentage_drop_threshold": "10", "deal_score_threshold": "80",
+        "notify_on_30d_low": True, "notify_on_90d_low": True,
+    })
+    assert created.status_code == 201
+    tracked_id = created.json()["id"]
+    patched = api_client.patch(f"/api/v1/tracked-listings/{tracked_id}",
+                               json={"target_price": "40"})
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["target_price"] in {"40", "40.00"}
+    assert body["percentage_drop_threshold"] in {"10", "10.00"}
+    assert body["deal_score_threshold"] in {"80", "80.00"}
+    cleared = api_client.patch(f"/api/v1/tracked-listings/{tracked_id}",
+                               json={"target_price": None, "deal_score_threshold": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["target_price"] is None
+    assert cleared.json()["deal_score_threshold"] is None

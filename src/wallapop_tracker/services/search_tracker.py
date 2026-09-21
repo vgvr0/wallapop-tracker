@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from wallapop_tracker.domain.advanced_alerts import detect_price_alerts
 from wallapop_tracker.domain.alerts import AlertType, TrackingAlert
 from wallapop_tracker.domain.filters import filters_from_config
 from wallapop_tracker.exceptions import WallapopParseError
@@ -20,9 +21,11 @@ from wallapop_tracker.models import Listing
 from wallapop_tracker.observability import get_metrics
 from wallapop_tracker.providers.search import SearchProvider, SearchRequest
 from wallapop_tracker.schema_monitor import observe_schema
+from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.services.relisting import RelistingDetectionService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
+    DealScoreSnapshotRecord,
     ListingRecord,
     ListingSnapshotRecord,
     TrackedSearchRecord,
@@ -37,6 +40,7 @@ from wallapop_tracker.storage.repositories import (
     TrackedSearchRepository,
     TrackingEventRepository,
     TrackingRunRepository,
+    latest_deal_score,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,7 +98,9 @@ class SearchTracker:
                 ),
                 latitude=self._optional_float(config.get("latitude")),
                 longitude=self._optional_float(config.get("longitude")),
-                distance=self._optional_float(config.get("distance")),
+                distance=self._optional_float(
+                    config.get("distance", config.get("max_distance_km"))
+                ),
                 max_pages=int(config.get("max_pages", 5)),
             )
             listings = await self.provider.search(request)
@@ -129,7 +135,9 @@ class SearchTracker:
             )
             run = runs.start_search_run(search_id, started_at=started_at)
             counters = getattr(getattr(self.provider, "client", None), "health_counters", {})
-            for source, payload in getattr(getattr(self.provider, "client", None), "schema_observations", []):
+            for source, payload in getattr(
+                getattr(self.provider, "client", None), "schema_observations", []
+            ):
                 observe_schema(session, source, payload, observed_at=datetime.now(UTC))
             suspicious = suspicious_zero(
                 session, TrackingRunRecord.tracked_search_id, search_id, current=len(fetched)
@@ -192,6 +200,77 @@ class SearchTracker:
                 matches.touch(search_id, record.id, started_at)
                 snapshots.mark_listing_seen(run.id, record.id, observed_at=started_at)
                 snapshots.save_listing_snapshot(record.id, run.id, listing, observed_at=started_at)
+                current_snapshot = self._latest_snapshot(session, record)
+                if search.deal_score_threshold is not None:
+                    score_result = DealScoringService(session).score_listing(record.id, search_id)
+                    if score_result.score is not None:
+                        previous_score = latest_deal_score(session, record.id, search_id)
+                        if (
+                            previous_score is not None
+                            and previous_score.score
+                            < search.deal_score_threshold
+                            <= score_result.score
+                        ):
+                            score_key = self._event_key(
+                                AlertType.DEAL_SCORE_THRESHOLD,
+                                listing.item_id,
+                                context=search_id,
+                                threshold=search.deal_score_threshold,
+                                crossing=previous_score.id,
+                            )
+                            score_event, score_created = events.create_once(
+                                event_type=AlertType.DEAL_SCORE_THRESHOLD.value,
+                                idempotency_key=score_key,
+                                listing_id=record.id,
+                                tracking_run_id=run.id,
+                                tracked_search_id=search_id,
+                                old_price=previous_snapshot.price if previous_snapshot else None,
+                                new_price=listing.price,
+                                created_at=started_at,
+                                metadata_json=json.dumps(
+                                    {
+                                        "previous_score": previous_score.score,
+                                        "current_score": score_result.score,
+                                        "threshold": search.deal_score_threshold,
+                                        "search_id": search_id,
+                                    },
+                                    default=str,
+                                ),
+                            )
+                            if score_created:
+                                alerts.append(self._alert(score_event, listing, search_id))
+                        session.add(
+                            DealScoreSnapshotRecord(
+                                listing_id=record.id,
+                                tracked_search_id=search_id,
+                                score=score_result.score,
+                                computed_at=started_at,
+                            )
+                        )
+                if current_snapshot is None:
+                    continue
+                for advanced in detect_price_alerts(
+                    session,
+                    listing_id=record.id,
+                    run_id=run.id,
+                    tracked_search_id=search_id,
+                    previous=previous_snapshot,
+                    current=current_snapshot,
+                    config=search,
+                ):
+                    advanced_event, advanced_created = events.create_once(
+                        event_type=advanced["event_type"],
+                        idempotency_key=advanced["key"],
+                        listing_id=record.id,
+                        tracking_run_id=run.id,
+                        tracked_search_id=search_id,
+                        old_price=previous_snapshot.price if previous_snapshot else None,
+                        new_price=listing.price,
+                        created_at=started_at,
+                        metadata_json=json.dumps(advanced["metadata"], default=str),
+                    )
+                    if advanced_created:
+                        alerts.append(self._alert(advanced_event, listing, search_id))
                 previous_sale_status = (
                     getattr(previous_snapshot.sale_status, "value", previous_snapshot.sale_status)
                     if previous_snapshot is not None
@@ -369,6 +448,9 @@ class SearchTracker:
         item_id: str,
         old_price: Decimal | None = None,
         new_price: Decimal | None = None,
+        context: object | None = None,
+        threshold: Decimal | None = None,
+        crossing: object | None = None,
     ) -> str:
         return json.dumps(
             {
@@ -376,6 +458,9 @@ class SearchTracker:
                 "listing_id": item_id,
                 "old_price": str(old_price) if old_price is not None else None,
                 "new_price": str(new_price) if new_price is not None else None,
+                "context": context,
+                "threshold": str(threshold) if threshold is not None else None,
+                "crossing": crossing,
             },
             sort_keys=True,
             separators=(",", ":"),

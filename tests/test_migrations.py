@@ -12,6 +12,21 @@ def _config(database_path: Path) -> Config:
     return config
 
 
+def test_deal_score_snapshots_migration_from_0020(tmp_path):
+    database_path = tmp_path / "deal-score.db"
+    config = _config(database_path)
+    command.upgrade(config, "0020_advanced_alerts")
+    command.upgrade(config, "0021_deal_score_snapshots")
+    engine = create_engine(f"sqlite:///{database_path}")
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.execute(text("PRAGMA table_info(deal_score_snapshots)"))}
+        foreign_keys = {row[2] for row in connection.execute(text("PRAGMA foreign_key_list(deal_score_snapshots)"))}
+        indexes = {row[1] for row in connection.execute(text("PRAGMA index_list(deal_score_snapshots)"))}
+    assert columns == {"id", "listing_id", "tracked_search_id", "score", "computed_at"}
+    assert foreign_keys == {"listings", "tracked_searches"}
+    assert "ix_deal_score_snapshots_context_time" in indexes
+
+
 def test_health_migrations_upgrade_from_0015_preserves_existing_rows(tmp_path):
     database_path = tmp_path / "health-upgrade.db"
     config = _config(database_path)
@@ -241,8 +256,14 @@ def test_tracked_listing_migration_from_0009(tmp_path):
         "last_tracking_run_id",
         "notes",
         "created_at",
-        "updated_at",
-    } == tracked_columns
+            "updated_at",
+            "target_price",
+            "percentage_drop_threshold",
+            "deal_score_threshold",
+            "notify_on_30d_low",
+            "notify_on_90d_low",
+            "notify_on_all_time_low",
+        } == tracked_columns
     assert "tracked_listing_id" in run_columns
     assert "tracked_listings" in run_foreign_keys
 

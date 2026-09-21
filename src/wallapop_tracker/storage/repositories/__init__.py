@@ -30,6 +30,7 @@ SearchMatchRepository = _implementation.SearchMatchRepository
 TrackingEventRepository = _implementation.TrackingEventRepository
 NotificationDeliveryRepository = _implementation.NotificationDeliveryRepository
 PossibleRelistingRepository = _implementation.PossibleRelistingRepository
+latest_deal_score = _implementation.latest_deal_score
 
 __all__ = [
     "ListingRepository",
@@ -43,4 +44,5 @@ __all__ = [
     "TrackingEventRepository",
     "NotificationDeliveryRepository",
     "PossibleRelistingRepository",
+    "latest_deal_score",
 ]

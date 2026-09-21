@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -86,6 +87,32 @@ async def test_overlapping_searches_share_listing_and_new_alert(database):
         assert event is not None
         assert event.tracking_run_id in {run.id for run in runs}
         assert event.tracked_search_id in {first, second}
+
+
+@pytest.mark.asyncio
+async def test_deal_score_alerts_are_independent_per_search_and_disable_cleanly(database, monkeypatch):
+    scores = iter([70, 70, 85, 85, 85, 85])
+    monkeypatch.setattr("wallapop_tracker.services.search_tracker.DealScoringService.score_listing",
+                        lambda self, listing_id, search_id: SimpleNamespace(score=Decimal(next(scores))))
+    with database.transaction() as session:
+        first = TrackedSearchRepository(session).create("camera-a", deal_score_threshold=Decimal("80")).id
+        second = TrackedSearchRepository(session).create("camera-b", deal_score_threshold=Decimal("80")).id
+    provider = FakeSearchProvider(item())
+    await SearchTracker(provider, database).track_search(first)
+    await SearchTracker(provider, database).track_search(second)
+    crossed_a = await SearchTracker(provider, database).track_search(first)
+    crossed_b = await SearchTracker(provider, database).track_search(second)
+    assert [alert.type for alert in crossed_a.alerts].count(AlertType.DEAL_SCORE_THRESHOLD) == 1
+    assert [alert.type for alert in crossed_b.alerts].count(AlertType.DEAL_SCORE_THRESHOLD) == 1
+    with database.session() as session:
+        events = session.scalars(select(TrackingEventRecord).where(
+            TrackingEventRecord.event_type == AlertType.DEAL_SCORE_THRESHOLD.value)).all()
+        assert {event.tracked_search_id for event in events} == {first, second}
+        assert len({event.idempotency_key for event in events}) == 2
+        TrackedSearchRepository(session).update(first, enabled=False)
+    disabled_result = await SearchTracker(provider, database).track_search(first)
+    assert AlertType.DEAL_SCORE_THRESHOLD not in [alert.type for alert in disabled_result.alerts]
+    assert (await SearchTracker(provider, database).track_search(second)).status == TrackingRunStatus.VALID
 
 
 @pytest.mark.asyncio

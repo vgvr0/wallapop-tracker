@@ -91,6 +91,12 @@ class SearchCreate(APIModel):
     enabled: bool = True
     notify_on_first_run: bool = False
     interval_seconds: int = Field(default=600, gt=0)
+    target_price: Decimal | None = Field(default=None, ge=0)
+    percentage_drop_threshold: Decimal | None = Field(default=None, gt=0, le=100)
+    deal_score_threshold: Decimal | None = Field(default=None, ge=0, le=100)
+    notify_on_30d_low: bool = False
+    notify_on_90d_low: bool = False
+    notify_on_all_time_low: bool = False
 
 
 class SearchPatch(APIModel):
@@ -103,6 +109,12 @@ class SearchPatch(APIModel):
     enabled: bool | None = None
     notify_on_first_run: bool | None = None
     interval_seconds: int | None = Field(default=None, gt=0)
+    target_price: Decimal | None = Field(default=None, ge=0)
+    percentage_drop_threshold: Decimal | None = Field(default=None, gt=0, le=100)
+    deal_score_threshold: Decimal | None = Field(default=None, ge=0, le=100)
+    notify_on_30d_low: bool | None = None
+    notify_on_90d_low: bool | None = None
+    notify_on_all_time_low: bool | None = None
 
 
 class SearchImport(APIModel):
@@ -116,12 +128,24 @@ class TrackedListingCreate(APIModel):
     alias: str = Field(min_length=1, max_length=100)
     interval_seconds: int = Field(default=600, gt=0)
     notes: str | None = None
+    target_price: Decimal | None = Field(default=None, ge=0)
+    percentage_drop_threshold: Decimal | None = Field(default=None, gt=0, le=100)
+    deal_score_threshold: Decimal | None = Field(default=None, ge=0, le=100)
+    notify_on_30d_low: bool = False
+    notify_on_90d_low: bool = False
+    notify_on_all_time_low: bool = False
 
 
 class TrackedListingPatch(APIModel):
     enabled: bool | None = None
     interval_seconds: int | None = Field(default=None, gt=0)
     notes: str | None = None
+    target_price: Decimal | None = Field(default=None, ge=0)
+    percentage_drop_threshold: Decimal | None = Field(default=None, gt=0, le=100)
+    deal_score_threshold: Decimal | None = Field(default=None, ge=0, le=100)
+    notify_on_30d_low: bool | None = None
+    notify_on_90d_low: bool | None = None
+    notify_on_all_time_low: bool | None = None
 
 
 class SearchResponse(APIModel):
@@ -138,6 +162,12 @@ class SearchResponse(APIModel):
     last_run_at: datetime | None
     last_run_status: str | None
     last_run_id: int | None
+    target_price: Decimal | None = None
+    percentage_drop_threshold: Decimal | None = None
+    deal_score_threshold: Decimal | None = None
+    notify_on_30d_low: bool = False
+    notify_on_90d_low: bool = False
+    notify_on_all_time_low: bool = False
 
 
 class ProfileResponse(APIModel):
@@ -173,6 +203,7 @@ class EventResponse(APIModel):
     old_price: Decimal | None
     new_price: Decimal | None
     created_at: datetime
+    metadata: dict[str, Any] | None = None
 
 
 class RunResponse(APIModel):
@@ -249,6 +280,9 @@ def _search(record: TrackedSearchRecord) -> SearchResponse:
         last_run_at=_utc(record.last_run_at),
         last_run_status=record.last_run_status,
         last_run_id=record.last_run_id,
+        target_price=record.target_price, percentage_drop_threshold=record.percentage_drop_threshold,
+        deal_score_threshold=record.deal_score_threshold, notify_on_30d_low=record.notify_on_30d_low,
+        notify_on_90d_low=record.notify_on_90d_low, notify_on_all_time_low=record.notify_on_all_time_low,
     )
 
 
@@ -300,6 +334,7 @@ def _event(record: TrackingEventRecord) -> EventResponse:
         old_price=record.old_price,
         new_price=record.new_price,
         created_at=_utc(record.created_at),
+        metadata=json.loads(record.metadata_json) if record.metadata_json else None,
     )
 
 
@@ -501,6 +536,9 @@ def create_app(
                 interval_seconds=payload.interval_seconds,
                 notify_on_first_run=payload.notify_on_first_run,
                 marketplace=payload.marketplace,
+                target_price=payload.target_price, percentage_drop_threshold=payload.percentage_drop_threshold,
+                deal_score_threshold=payload.deal_score_threshold, notify_on_30d_low=payload.notify_on_30d_low,
+                notify_on_90d_low=payload.notify_on_90d_low, notify_on_all_time_low=payload.notify_on_all_time_low,
             )
             row.enabled = payload.enabled
             session.commit()
@@ -518,6 +556,10 @@ def create_app(
             row = TrackedSearchRepository(session).update(
                 search_id, **payload.model_dump(exclude_unset=True)
             )
+            for field in ("target_price", "percentage_drop_threshold", "deal_score_threshold",
+                          "notify_on_30d_low", "notify_on_90d_low", "notify_on_all_time_low"):
+                if field in payload.model_fields_set:
+                    setattr(row, field, getattr(payload, field))
             session.commit()
             return _search(row)
         except ValueError as exc:
@@ -615,6 +657,9 @@ def create_app(
                 payload.alias,
                 interval_seconds=payload.interval_seconds,
                 notes=payload.notes,
+                target_price=payload.target_price, percentage_drop_threshold=payload.percentage_drop_threshold,
+                deal_score_threshold=payload.deal_score_threshold, notify_on_30d_low=payload.notify_on_30d_low,
+                notify_on_90d_low=payload.notify_on_90d_low, notify_on_all_time_low=payload.notify_on_all_time_low,
             )
             session.commit()
             return _tracked_listing(row)
@@ -635,6 +680,10 @@ def create_app(
             row = TrackedListingRepository(session).update(
                 tracked_listing_id, **payload.model_dump(exclude_unset=True)
             )
+            for field in ("target_price", "percentage_drop_threshold", "deal_score_threshold",
+                          "notify_on_30d_low", "notify_on_90d_low", "notify_on_all_time_low"):
+                if field in payload.model_fields_set:
+                    setattr(row, field, getattr(payload, field))
             session.commit()
             return _tracked_listing(row)
         except ValueError as exc:
@@ -904,6 +953,9 @@ def _tracked_listing(row: TrackedListingRecord) -> dict[str, Any]:
         "last_run_at": _utc(row.last_run_at),
         "last_run_status": row.last_run_status,
         "notes": row.notes,
+        "target_price": row.target_price, "percentage_drop_threshold": row.percentage_drop_threshold,
+        "deal_score_threshold": row.deal_score_threshold, "notify_on_30d_low": row.notify_on_30d_low,
+        "notify_on_90d_low": row.notify_on_90d_low, "notify_on_all_time_low": row.notify_on_all_time_low,
     }
 
 
