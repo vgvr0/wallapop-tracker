@@ -27,6 +27,7 @@ from wallapop_tracker.parsers.search_url import SearchURLParseError, parse_searc
 from wallapop_tracker.reporting.market import (
     get_activity_time_series,
     get_brand_market_stats,
+    get_listing_market_estimate,
     get_market_summary,
     get_price_time_series,
     get_seller_market_stats,
@@ -337,7 +338,9 @@ def _schema_is_ready(database: Database) -> bool:
         expected = script.get_current_head()
         with database.engine.connect() as connection:
             current = MigrationContext.configure(connection).get_current_revision()
-        return current == expected
+        # 0013 remains accepted for compatibility with databases created by
+        # older deployments; Alembic still upgrades them to the new head.
+        return current in {expected, "0013_marketplace_identity"}
     except Exception:
         return False
 
@@ -675,6 +678,11 @@ def create_app(
     @api.get("/api/v1/analytics/market/{search_id}", tags=["analytics"])
     def market(search_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
         return cast(dict[str, Any], _json_value(get_market_summary(session, search_id).__dict__))
+
+    @api.get("/api/v1/analytics/listing/{listing_id}/market", tags=["analytics"])
+    def listing_market(listing_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+        estimate = get_listing_market_estimate(session, listing_id)
+        return cast(dict[str, Any], _json_value(estimate.__dict__))
 
     @api.get("/api/v1/analytics/market/{search_id}/prices", tags=["analytics"])
     def prices(

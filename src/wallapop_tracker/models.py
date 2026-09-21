@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,6 +47,13 @@ class ReviewSummary(BaseModel):
     rating_distribution: dict[int, int] | None = None
 
 
+class ListingSaleStatus(StrEnum):
+    UNKNOWN = "unknown"
+    ACTIVE = "active"
+    RESERVED = "reserved"
+    SOLD = "sold"
+
+
 class Listing(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -60,6 +68,7 @@ class Listing(BaseModel):
     category_name: str | None = None
     status: str | None = None
     reserved: bool | None = None
+    sale_status: ListingSaleStatus = ListingSaleStatus.UNKNOWN
     shipping_available: bool | None = None
     seller_allows_shipping: bool | None = None
     condition: str | None = None

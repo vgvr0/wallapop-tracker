@@ -36,6 +36,13 @@ class PresenceState(StrEnum):
     REMOVED = "removed"
 
 
+class ListingSaleStatus(StrEnum):
+    UNKNOWN = "unknown"
+    ACTIVE = "active"
+    RESERVED = "reserved"
+    SOLD = "sold"
+
+
 class Base(DeclarativeBase):
     """Declarative base for the storage schema."""
 
@@ -475,6 +482,9 @@ class ListingSnapshotRecord(Base):
     has_warranty: Mapped[bool | None] = mapped_column()
     is_refurbished: Mapped[bool | None] = mapped_column()
     status: Mapped[str | None] = mapped_column(String(50))
+    sale_status: Mapped[ListingSaleStatus] = mapped_column(
+        String(20), nullable=False, default=ListingSaleStatus.UNKNOWN, server_default="unknown"
+    )
     url: Mapped[str | None] = mapped_column(String(2048))
     image_url: Mapped[str | None] = mapped_column(String(2048))
     created_at_source: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

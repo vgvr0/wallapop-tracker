@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from wallapop_tracker.exceptions import WallapopParseError
-from wallapop_tracker.models import ItemsPage, Listing
+from wallapop_tracker.models import ItemsPage, Listing, ListingSaleStatus
 
 from .common import first_value, parse_condition, parse_timestamp
 
@@ -63,6 +63,15 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
     reserved_raw = first_value(dict(raw), "isReserved", "reserved")
     if isinstance(reserved_raw, Mapping):
         reserved_raw = reserved_raw.get("flag")
+    # Wallapop has used more than one contract. Only explicit sold signals are
+    # accepted; absence from a collection is handled separately as REMOVED.
+    explicit_sold = any(raw.get(key) is True for key in ("sold", "sold_out", "is_sold"))
+    raw_status = raw.get("status")
+    status_value = raw_status.casefold().replace("-", "_").replace(" ", "_") \
+        if isinstance(raw_status, str) else ""
+    sale_status = ListingSaleStatus.SOLD if explicit_sold or status_value in {
+        "sold", "sold_out", "soldout", "completed_sold"
+    } else ListingSaleStatus.RESERVED if reserved_raw is True else ListingSaleStatus.ACTIVE
     url = first_value(dict(raw), "url", "web_url")
     if not isinstance(url, str):
         slug = raw.get("slug")
@@ -89,6 +98,7 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
         else (str(raw["categoryId"]) if raw.get("categoryId") is not None else None),
         status=raw.get("status") if isinstance(raw.get("status"), str) else None,
         reserved=reserved_raw if isinstance(reserved_raw, bool) else None,
+        sale_status=sale_status,
         shipping_available=(
             shipping.get("item_is_shippable")
             if isinstance(shipping, Mapping)

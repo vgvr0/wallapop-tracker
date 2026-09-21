@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from statistics import median
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -94,6 +97,173 @@ class CategoryMarketStats:
     listing_count: int
     active_count: int
     median_price: Decimal | None
+
+
+@dataclass(frozen=True)
+class ComparableListing:
+    listing_id: int
+    price: Decimal
+    sale_status: str
+    condition: str | None
+    match_score: Decimal
+
+
+@dataclass(frozen=True)
+class ListingMarketEstimate:
+    listing_id: int
+    comparable_count: int
+    median_asking_price: Decimal | None
+    average_asking_price: Decimal | None
+    p25_asking_price: Decimal | None
+    p75_asking_price: Decimal | None
+    sold_last_asking_price_count: int
+    sold_last_asking_price_median: Decimal | None
+    listing_price: Decimal | None
+    difference_vs_median: Decimal | None
+    sufficient_comparables: bool
+    comparables: tuple[ComparableListing, ...]
+
+
+def get_listing_market_estimate(
+    session: Session,
+    listing_id: int,
+    *,
+    minimum_score: Decimal = Decimal("0.45"),
+    include_sold: bool = True,
+) -> ListingMarketEstimate:
+    """Estimate a listing's market price from persisted comparable snapshots.
+
+    Condition is deliberately only a bonus signal: missing condition never
+    prevents a match. Only snapshots explicitly marked SOLD contribute to the
+    confirmed-sold dataset; disappearance/presence transitions do not.
+    """
+    target = _latest_snapshot_for_listing(session, listing_id)
+    if target is None:
+        return ListingMarketEstimate(
+            listing_id, 0, None, None, None, None, 0, None, None, None, False, ()
+        )
+    statement = select(ListingSnapshotRecord.listing_id).distinct()
+    if target.category_id:
+        statement = statement.where(ListingSnapshotRecord.category_id == target.category_id)
+    latest = _latest_snapshots(session, set(session.scalars(statement)), None)
+    comparables: list[ComparableListing] = []
+    for candidate_id, candidate in latest.items():
+        if candidate_id == listing_id or candidate.price is None:
+            continue
+        if _hard_incompatible(target, candidate):
+            continue
+        score = _comparable_score(target, candidate)
+        if score >= minimum_score:
+            comparables.append(
+                ComparableListing(
+                    candidate_id,
+                    candidate.price,
+                    str(candidate.sale_status),
+                    _effective_condition(candidate),
+                    score,
+                )
+            )
+    comparables.sort(key=lambda item: (-item.match_score, item.listing_id))
+    prices = [item.price for item in comparables if item.sale_status != "sold"]
+    sold = [item.price for item in comparables if include_sold and item.sale_status == "sold"]
+    stats = _price_stats(prices)
+    median_price = stats[0]
+    listing_price = target.price
+    difference = (
+        (listing_price - median_price) / median_price
+        if listing_price is not None and median_price
+        else None
+    )
+    return ListingMarketEstimate(
+        listing_id,
+        len(prices),
+        stats[0],
+        stats[1],
+        stats[2],
+        stats[3],
+        len(sold),
+        _median(sorted(sold)),
+        listing_price,
+        difference,
+        len(prices) >= 3,
+        tuple(comparables),
+    )
+
+
+def _latest_snapshot_for_listing(session: Session, listing_id: int) -> ListingSnapshotRecord | None:
+    return session.scalars(
+        select(ListingSnapshotRecord)
+        .where(ListingSnapshotRecord.listing_id == listing_id)
+        .order_by(ListingSnapshotRecord.observed_at.desc(), ListingSnapshotRecord.id.desc())
+    ).first()
+
+
+def _comparable_score(target: ListingSnapshotRecord, candidate: ListingSnapshotRecord) -> Decimal:
+    score = Decimal("0")
+    if target.category_id and candidate.category_id == target.category_id:
+        score += Decimal("0.25")
+    if target.brand and candidate.brand and _norm(target.brand) == _norm(candidate.brand):
+        score += Decimal("0.25")
+    target_attrs = _attributes(target.attributes_json)
+    candidate_attrs = _attributes(candidate.attributes_json)
+    for key in ("model", "variant", "capacity", "storage", "size"):
+        left, right = _attribute_text(target_attrs, key), _attribute_text(candidate_attrs, key)
+        if left and right and _norm(left) == _norm(right):
+            score += Decimal("0.15")
+    title_similarity = _token_similarity(target.title, candidate.title)
+    description_similarity = _token_similarity(target.description, candidate.description)
+    score += Decimal("0.20") * title_similarity + Decimal("0.05") * description_similarity
+    target_condition = _effective_condition(target)
+    candidate_condition = _effective_condition(candidate)
+    if (
+        target_condition
+        and candidate_condition
+        and _norm(target_condition) == _norm(candidate_condition)
+    ):
+        score += Decimal("0.05")
+    return score
+
+
+def _effective_condition(snapshot: ListingSnapshotRecord) -> str | None:
+    return getattr(snapshot, "condition_code", None) or snapshot.condition
+
+
+def _hard_incompatible(target: ListingSnapshotRecord, candidate: ListingSnapshotRecord) -> bool:
+    target_attrs = _attributes(target.attributes_json)
+    candidate_attrs = _attributes(candidate.attributes_json)
+    for key in ("model", "variant", "capacity", "storage", "size"):
+        left = _attribute_text(target_attrs, key)
+        right = _attribute_text(candidate_attrs, key)
+        if left and right and _norm(left) != _norm(right):
+            return True
+    return False
+
+
+def _norm(value: str) -> str:
+    return re.sub(r"\s+", " ", value.casefold()).strip()
+
+
+def _token_similarity(left: str | None, right: str | None) -> Decimal:
+    if not left or not right:
+        return Decimal("0")
+    a = set(re.findall(r"[a-z0-9]+", _norm(left)))
+    b = set(re.findall(r"[a-z0-9]+", _norm(right)))
+    return Decimal(str(len(a & b) / len(a | b))) if a and b else Decimal("0")
+
+
+def _attributes(raw: str | None) -> dict[str, Any]:
+    try:
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _attribute_text(attrs: dict[str, Any], key: str) -> str | None:
+    value = attrs.get(key)
+    if isinstance(value, dict):
+        value = value.get("value") or value.get("text")
+    return value if isinstance(value, str) else None
 
 
 def get_market_summary(

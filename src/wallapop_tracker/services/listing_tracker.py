@@ -236,6 +236,14 @@ class TrackedListingTracker:
             return events
         if previous is None or previous.presence_state == PresenceState.REMOVED:
             return events
+        previous_sale_status = getattr(previous.sale_status, "value", previous.sale_status)
+        current_sale_status = getattr(listing.sale_status, "value", listing.sale_status)
+        if previous_sale_status != "sold" and current_sale_status == "sold":
+            events.append(self._create_event(
+                session, tracked, run_id, record, AlertType.LISTING_SOLD,
+                created_at, previous.price, listing.price,
+                {"from": previous_sale_status, "to": "sold"},
+            ))
         for field, event_type in (
             ("title", AlertType.TITLE_CHANGE),
             ("reserved", AlertType.RESERVATION_CHANGE),

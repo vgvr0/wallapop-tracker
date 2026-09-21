@@ -158,6 +158,23 @@ class SearchTracker:
                 snapshots.save_listing_snapshot(
                     record.id, run.id, listing, observed_at=started_at
                 )
+                previous_sale_status = (
+                    getattr(previous_snapshot.sale_status, "value", previous_snapshot.sale_status)
+                    if previous_snapshot is not None else None
+                )
+                current_sale_status = getattr(listing.sale_status, "value", listing.sale_status)
+                if (previous_snapshot is not None
+                        and previous_sale_status != "sold"
+                        and current_sale_status == "sold"):
+                    sold_event, sold_created = events.create_once(
+                        event_type=AlertType.LISTING_SOLD.value,
+                        idempotency_key=self._event_key(AlertType.LISTING_SOLD, listing.item_id),
+                        listing_id=record.id, tracking_run_id=run.id,
+                        tracked_search_id=search_id, old_price=previous_snapshot.price,
+                        new_price=listing.price, created_at=started_at,
+                    )
+                    if sold_created:
+                        alerts.append(self._alert(sold_event, listing, search_id))
 
                 if created:
                     try:

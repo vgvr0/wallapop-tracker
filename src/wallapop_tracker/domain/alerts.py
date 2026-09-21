@@ -16,6 +16,7 @@ class AlertType(StrEnum):
     SHIPPING_CHANGE = "SHIPPING_CHANGE"
     STATUS_CHANGE = "STATUS_CHANGE"
     POSSIBLE_RELISTING = "POSSIBLE_RELISTING"
+    LISTING_SOLD = "listing_sold"
 
 
 @dataclass(frozen=True)

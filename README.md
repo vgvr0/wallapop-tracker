@@ -18,6 +18,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
 - Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
 - Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
+- Explicit sold-listing detection from Wallapop signals, with sold history and last observed asking price.
 - Read-only metadata discovery for observed categories, filters, brands, and models.
 - Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
 - Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
@@ -270,6 +271,16 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 - Search results are intentionally limited to a configurable recent-page window (`max_pages`, default five), rather than being an exhaustive historical search.
 - Notification delivery is intentionally sequential and has no distributed queue or concurrent worker pool.
 - Direct listing detail depends on the observed public endpoint `/api/v3/items/{id}`; its undocumented contract may change and remains covered by offline fixtures.
+
+### Sold listing detection
+
+Wallapop Tracker can detect listings that Wallapop explicitly marks as sold.
+
+The tracker distinguishes between an explicitly sold listing, a listing that is
+no longer visible, a removed or unavailable listing, and an unknown state.
+A disappearing listing is never automatically considered sold. Historical
+snapshots retain the last observed asking price; this is not the final
+transaction price.
 
 ## Development status
 

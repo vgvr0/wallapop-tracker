@@ -10,6 +10,7 @@ from wallapop_tracker.domain.alerts import AlertType
 from wallapop_tracker.reporting.market import (
     get_activity_time_series,
     get_brand_market_stats,
+    get_listing_market_estimate,
     get_market_summary,
     get_price_distribution,
     get_price_time_series,
@@ -236,3 +237,21 @@ def test_market_cli_summary(database, tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "Active listings:" in result.output
     file_db.close()
+
+
+def test_listing_market_sold_requires_explicit_status(database):
+    _, _, _, _ = make_dataset(database)
+    with database.transaction() as session:
+        rows = session.scalars(
+            select(ListingSnapshotRecord).order_by(ListingSnapshotRecord.id)
+        ).all()
+        sold = rows[-1]
+        target = rows[-2]
+        sold.sale_status = "sold"
+        sold.title = target.title
+        sold.brand = target.brand
+        target_id = target.listing_id
+    with database.session() as session:
+        estimate = get_listing_market_estimate(session, target_id)
+        assert estimate.sold_last_asking_price_count == 1
+        assert estimate.sold_last_asking_price_median == Decimal("300")
