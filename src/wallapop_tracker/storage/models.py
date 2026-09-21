@@ -198,6 +198,23 @@ class NotificationDeliveryStatus(StrEnum):
     PENDING = "pending"
     DELIVERED = "delivered"
     FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class AlertRuleRecord(Base):
+    """Persistent, deliberately small event-to-channel rule."""
+    __tablename__ = "alert_rules"
+    __table_args__ = (Index("ix_alert_rules_event_enabled", "event_type", "enabled"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination: Mapped[str] = mapped_column(String(2048), nullable=False)
+    filters_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class NotificationDeliveryRecord(Base):

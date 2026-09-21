@@ -37,6 +37,7 @@ from wallapop_tracker.reporting.queries import get_price_history, get_profile_me
 from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
+    AlertRuleRecord,
     ListingRecord,
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
@@ -60,6 +61,24 @@ class APIModel(BaseModel):
     @field_serializer("*", when_used="json")
     def serialize_decimal(self, value: Any) -> Any:
         return f"{value:.2f}" if isinstance(value, Decimal) else value
+
+
+class AlertRuleCreate(APIModel):
+    event_type: str = Field(min_length=1, max_length=64)
+    channel: str = Field(min_length=1, max_length=32)
+    destination: str = Field(min_length=1, max_length=2048)
+    filters: dict[str, Any] = {}
+    cooldown_seconds: int = Field(default=0, ge=0)
+    enabled: bool = True
+
+
+class AlertRulePatch(APIModel):
+    event_type: str | None = Field(default=None, min_length=1, max_length=64)
+    channel: str | None = Field(default=None, min_length=1, max_length=32)
+    destination: str | None = Field(default=None, min_length=1, max_length=2048)
+    filters: dict[str, Any] | None = None
+    cooldown_seconds: int | None = Field(default=None, ge=0)
+    enabled: bool | None = None
 
 
 class SearchCreate(APIModel):
@@ -792,10 +811,62 @@ def create_app(
             raise _not_found("Relisting", relisting_id)
         return _relisting(row)
 
+    @api.get("/api/v1/alerts/rules", tags=["alerts"])
+    def alert_rules(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+        return [_alert_rule(row) for row in session.scalars(select(AlertRuleRecord).order_by(AlertRuleRecord.id))]
+
+    @api.post("/api/v1/alerts/rules", status_code=201, tags=["alerts"])
+    def create_alert_rule(body: AlertRuleCreate, session: Session = Depends(get_session)) -> dict[str, Any]:
+        if body.channel not in {"webhook", "telegram"}:
+            raise HTTPException(status_code=422, detail="channel must be webhook or telegram")
+        now = datetime.now(UTC)
+        row = AlertRuleRecord(event_type=body.event_type, channel=body.channel,
+            destination=body.destination, filters_json=json.dumps(body.filters),
+            cooldown_seconds=body.cooldown_seconds, enabled=body.enabled,
+            created_at=now, updated_at=now)
+        session.add(row)
+        session.flush()
+        session.commit()
+        return _alert_rule(row)
+
+    @api.get("/api/v1/alerts/rules/{rule_id}", tags=["alerts"])
+    def get_alert_rule(rule_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+        row = session.get(AlertRuleRecord, rule_id)
+        if row is None:
+            raise _not_found("Alert rule", rule_id)
+        return _alert_rule(row)
+
+    @api.patch("/api/v1/alerts/rules/{rule_id}", tags=["alerts"])
+    def patch_alert_rule(rule_id: int, body: AlertRulePatch, session: Session = Depends(get_session)) -> dict[str, Any]:
+        row = session.get(AlertRuleRecord, rule_id)
+        if row is None:
+            raise _not_found("Alert rule", rule_id)
+        if body.channel is not None and body.channel not in {"webhook", "telegram"}:
+            raise HTTPException(status_code=422, detail="channel must be webhook or telegram")
+        values = body.model_dump(exclude_unset=True)
+        if "filters" in values:
+            row.filters_json = json.dumps(values.pop("filters"))
+        for key, value in values.items():
+            setattr(row, key, value)
+        row.updated_at = datetime.now(UTC)
+        session.flush()
+        session.commit()
+        return _alert_rule(row)
+
+    @api.delete("/api/v1/alerts/rules/{rule_id}", status_code=204, tags=["alerts"])
+    def delete_alert_rule(rule_id: int, session: Session = Depends(get_session)) -> None:
+        row = session.get(AlertRuleRecord, rule_id)
+        if row is None:
+            raise _not_found("Alert rule", rule_id)
+        session.delete(row)
+        session.commit()
+
+    @api.get("/api/v1/alerts/deliveries", tags=["alerts"])
     @api.get("/api/v1/notifications", tags=["notifications"])
     def notifications(
         status: str | None = None,
         channel: str | None = None,
+        event_type: str | None = None,
         session: Session = Depends(get_session),
         page: tuple[int, int] = Depends(_page),
     ) -> list[dict[str, Any]]:
@@ -806,6 +877,7 @@ def create_app(
             for row in rows
             if (status is None or row.status.value == status)
             and (channel is None or row.channel == channel)
+            and (event_type is None or row.event.event_type == event_type)
         ]
         return [_notification(row) for row in rows[offset : offset + limit]]
 
@@ -832,6 +904,24 @@ def _tracked_listing(row: TrackedListingRecord) -> dict[str, Any]:
         "last_run_at": _utc(row.last_run_at),
         "last_run_status": row.last_run_status,
         "notes": row.notes,
+    }
+
+
+def _alert_rule(row: AlertRuleRecord) -> dict[str, Any]:
+    try:
+        filters = json.loads(row.filters_json)
+    except json.JSONDecodeError:
+        filters = {}
+    return {
+        "id": row.id,
+        "event_type": row.event_type,
+        "channel": row.channel,
+        "destination": "[redacted]" if row.channel in {"webhook", "telegram"} else row.destination,
+        "filters": filters,
+        "cooldown_seconds": row.cooldown_seconds,
+        "enabled": row.enabled,
+        "created_at": _utc(row.created_at),
+        "updated_at": _utc(row.updated_at),
     }
 
 

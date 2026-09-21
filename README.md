@@ -16,7 +16,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Backward-compatible legacy alert tables remain readable, but new alerts use
   `TrackingEvent` and `NotificationDelivery` exclusively.
 - Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
-- Persistent notification deliveries with idempotent webhook, Discord, and Telegram channels.
+- Persistent notification deliveries with idempotent webhook and Telegram channels.
 - Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
 - Explicit sold-listing detection from Wallapop signals, with sold history and last observed asking price.
 - Read-only metadata discovery for observed categories, filters, brands, and models.

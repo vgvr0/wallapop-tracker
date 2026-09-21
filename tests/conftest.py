@@ -4,6 +4,16 @@ from typing import Any
 
 import pytest
 
+from wallapop_tracker.storage.database import Database
+
+
+@pytest.fixture
+def database():
+    database = Database("sqlite+pysqlite:///:memory:")
+    database.create_all()
+    yield database
+    database.close()
+
 
 @pytest.fixture
 def fixture_data() -> Any:

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -70,13 +71,16 @@ class WebhookNotificationChannel:
         return _notification_payload(notification)
 
     async def send(self, notification: Notification, destination: str) -> DeliveryResult:
+        parsed = urlparse(destination)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+            return DeliveryResult(False, False, "Invalid webhook URL")
         try:
             if self.http_client is not None:
                 response = await self.http_client.post(
-                    destination, json=self.payload(notification), timeout=self.timeout
+                    destination, json=self.payload(notification), timeout=self.timeout, follow_redirects=False
                 )
             else:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
                     response = await client.post(destination, json=self.payload(notification))
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             return DeliveryResult(False, True, type(exc).__name__)
