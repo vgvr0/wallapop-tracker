@@ -134,18 +134,16 @@ def get_current_inventory(session: Session, profile_id: int) -> list[InventoryLi
     if not present_ids:
         return []
     rows = session.scalars(
-        select(ListingRecord).where(
-            ListingRecord.profile_id == profile_id, ListingRecord.id.in_(present_ids)
-        ).order_by(ListingRecord.id)
+        select(ListingRecord)
+        .where(ListingRecord.profile_id == profile_id, ListingRecord.id.in_(present_ids))
+        .order_by(ListingRecord.id)
     ).all()
     snapshots = _latest_listing_snapshots(session, list(present_ids), runs[-1].started_at)
     result = []
     for row in rows:
         title, price = snapshots.get(row.id, (None, None))
         result.append(
-            InventoryListing(
-                row.id, row.external_id or row.wallapop_item_id or "", title, price
-            )
+            InventoryListing(row.id, row.external_id or row.wallapop_item_id or "", title, price)
         )
     return result
 
@@ -209,10 +207,9 @@ def get_price_history(session: Session, listing_id: int) -> list[PricePoint]:
     snapshot_index = 0
     previous: tuple[Decimal | None, PresenceState] | None = None
     for run in runs:
-        while (
-            snapshot_index < len(snapshots)
-            and _utc(snapshots[snapshot_index].observed_at) <= _utc(run.started_at)
-        ):
+        while snapshot_index < len(snapshots) and _utc(
+            snapshots[snapshot_index].observed_at
+        ) <= _utc(run.started_at):
             latest_price = snapshots[snapshot_index].price
             snapshot_index += 1
         state = (
@@ -250,15 +247,13 @@ def get_profile_metrics_history(session: Session, profile_id: int) -> list[Profi
     latest: ProfileSnapshotRecord | None = None
     index = 0
     for run in runs:
-        while (
-            index < len(snapshots)
-            and _utc(snapshots[index].observed_at) <= _utc(run.started_at)
-        ):
+        while index < len(snapshots) and _utc(snapshots[index].observed_at) <= _utc(run.started_at):
             latest = snapshots[index]
             index += 1
         points.append(
             ProfileMetricsPoint(
-                run.id, _utc(run.started_at),
+                run.id,
+                _utc(run.started_at),
                 latest.rating if latest else None,
                 latest.review_count if latest else None,
                 latest.published_count if latest else None,
@@ -278,7 +273,11 @@ def get_approx_active_duration(session: Session, listing_id: int) -> ApproxActiv
         return None
     first, last = active[0], active[-1]
     return ApproxActiveDuration(
-        listing_id, first.run_id, first.observed_at, last.run_id, last.observed_at,
+        listing_id,
+        first.run_id,
+        first.observed_at,
+        last.run_id,
+        last.observed_at,
         last.observed_at - first.observed_at,
     )
 
@@ -291,16 +290,22 @@ def get_search_tracking_metrics(session: Session, search_id: int) -> SearchTrack
         )
     )
     run_ids = [run.id for run in runs]
-    matched = session.scalar(
-        select(func.count())
-        .select_from(SearchListingMatchRecord)
-        .where(SearchListingMatchRecord.tracked_search_id == search_id)
-    ) or 0
-    alerts = session.scalar(
-        select(func.count())
-        .select_from(TrackingEventRecord)
-        .where(TrackingEventRecord.tracked_search_id == search_id)
-    ) or 0
+    matched = (
+        session.scalar(
+            select(func.count())
+            .select_from(SearchListingMatchRecord)
+            .where(SearchListingMatchRecord.tracked_search_id == search_id)
+        )
+        or 0
+    )
+    alerts = (
+        session.scalar(
+            select(func.count())
+            .select_from(TrackingEventRecord)
+            .where(TrackingEventRecord.tracked_search_id == search_id)
+        )
+        or 0
+    )
     discovered = (
         session.scalar(
             select(func.count(func.distinct(TrackingRunListingRecord.listing_id))).where(

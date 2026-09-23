@@ -80,9 +80,7 @@ class ProfileTrackingRunner:
         self._record_run(alias, attempted_at, result.status, result.profile_id)
         if self.notification_service is not None and result.alerts:
             try:
-                self.notification_service.enqueue_events(
-                    alert.event_id for alert in result.alerts
-                )
+                self.notification_service.enqueue_events(alert.event_id for alert in result.alerts)
             except Exception:
                 logger.exception("notification_enqueue_failed profile_alias=%s", alias)
         return ProfileTrackingResult(
@@ -147,9 +145,7 @@ class SearchTrackingRunner:
             )
         if self.notification_service is not None and result.alerts:
             try:
-                self.notification_service.enqueue_events(
-                    alert.event_id for alert in result.alerts
-                )
+                self.notification_service.enqueue_events(alert.event_id for alert in result.alerts)
             except Exception:
                 logger.exception("notification_enqueue_failed search_id=%s", search_id)
         return result
@@ -161,8 +157,9 @@ class ListingTrackingRunner:
         database: Database,
         *,
         client_factory: ClientFactory = WallapopClient,
-        tracker_factory: Callable[[ListingProvider, Database], TrackedListingTracker]
-        = TrackedListingTracker,
+        tracker_factory: Callable[
+            [ListingProvider, Database], TrackedListingTracker
+        ] = TrackedListingTracker,
         notification_service: NotificationService | None = None,
         provider_factory: ListingProviderFactory = WallapopListingProvider,
     ) -> None:
@@ -191,9 +188,7 @@ class ListingTrackingRunner:
             )
         if self.notification_service is not None and result.alerts:
             try:
-                self.notification_service.enqueue_events(
-                    alert.event_id for alert in result.alerts
-                )
+                self.notification_service.enqueue_events(alert.event_id for alert in result.alerts)
             except Exception:
                 logger.exception(
                     "notification_enqueue_failed tracked_listing_id=%s",

@@ -19,9 +19,16 @@ def test_deal_score_snapshots_migration_from_0020(tmp_path):
     command.upgrade(config, "0021_deal_score_snapshots")
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
-        columns = {row[1] for row in connection.execute(text("PRAGMA table_info(deal_score_snapshots)"))}
-        foreign_keys = {row[2] for row in connection.execute(text("PRAGMA foreign_key_list(deal_score_snapshots)"))}
-        indexes = {row[1] for row in connection.execute(text("PRAGMA index_list(deal_score_snapshots)"))}
+        columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(deal_score_snapshots)"))
+        }
+        foreign_keys = {
+            row[2]
+            for row in connection.execute(text("PRAGMA foreign_key_list(deal_score_snapshots)"))
+        }
+        indexes = {
+            row[1] for row in connection.execute(text("PRAGMA index_list(deal_score_snapshots)"))
+        }
     assert columns == {"id", "listing_id", "tracked_search_id", "score", "computed_at"}
     assert foreign_keys == {"listings", "tracked_searches"}
     assert "ix_deal_score_snapshots_context_time" in indexes
@@ -33,24 +40,31 @@ def test_health_migrations_upgrade_from_0015_preserves_existing_rows(tmp_path):
     command.upgrade(config, "0015_listing_condition_codes")
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO profiles (wallapop_user_id, first_seen_at, last_seen_at, created_at, updated_at) "
-            "VALUES ('migration-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-        ))
-        profile_id = connection.execute(text(
-            "SELECT id FROM profiles WHERE wallapop_user_id = 'migration-user'"
-        )).scalar_one()
-        connection.execute(text(
-            "INSERT INTO tracking_runs (profile_id, started_at, finished_at, status, "
-            "profile_ok, stats_ok, reviews_ok, items_ok) "
-            "VALUES (:profile_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'valid', 1, 1, 1, 1)"
-        ), {"profile_id": profile_id})
+        connection.execute(
+            text(
+                "INSERT INTO profiles (wallapop_user_id, first_seen_at, last_seen_at, created_at, updated_at) "
+                "VALUES ('migration-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        profile_id = connection.execute(
+            text("SELECT id FROM profiles WHERE wallapop_user_id = 'migration-user'")
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO tracking_runs (profile_id, started_at, finished_at, status, "
+                "profile_ok, stats_ok, reviews_ok, items_ok) "
+                "VALUES (:profile_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'valid', 1, 1, 1, 1)"
+            ),
+            {"profile_id": profile_id},
+        )
     command.upgrade(config, "0017_schema_drift_events")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT COUNT(*) FROM tracking_runs")).scalar_one() == 1
         columns = {row[1] for row in connection.execute(text("PRAGMA table_info(tracking_runs)"))}
         assert "health_status" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_drift_events")).scalar_one() == 0
+        assert (
+            connection.execute(text("SELECT COUNT(*) FROM schema_drift_events")).scalar_one() == 0
+        )
 
 
 def test_separate_tracking_run_sources_migrates_synthetic_profiles(tmp_path):
@@ -131,17 +145,12 @@ def test_separate_tracking_run_sources_migrates_synthetic_profiles(tmp_path):
             text("SELECT profile_id FROM listings WHERE wallapop_item_id = 'item-1'")
         ).scalar_one()
         synthetic_count = connection.execute(
-            text(
-                "SELECT COUNT(*) FROM profiles "
-                "WHERE wallapop_user_id = 'tracked-search:7'"
-            )
+            text("SELECT COUNT(*) FROM profiles WHERE wallapop_user_id = 'tracked-search:7'")
         ).scalar_one()
         snapshot_count = connection.execute(
             text("SELECT COUNT(*) FROM listing_snapshots")
         ).scalar_one()
-        event_count = connection.execute(
-            text("SELECT COUNT(*) FROM tracking_events")
-        ).scalar_one()
+        event_count = connection.execute(text("SELECT COUNT(*) FROM tracking_events")).scalar_one()
 
     assert run.profile_id is None
     assert run.tracked_search_id == 1
@@ -160,12 +169,10 @@ def test_notification_delivery_migration_from_0008(tmp_path):
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
         columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(notification_deliveries)"))
+            row[1] for row in connection.execute(text("PRAGMA table_info(notification_deliveries)"))
         }
         indexes = {
-            row[1]
-            for row in connection.execute(text("PRAGMA index_list(notification_deliveries)"))
+            row[1] for row in connection.execute(text("PRAGMA index_list(notification_deliveries)"))
         }
 
     assert columns == {
@@ -210,9 +217,7 @@ def test_marketplace_identity_migration_preserves_listing_history(tmp_path):
         )
     command.upgrade(config, "0013_marketplace_identity")
     with engine.connect() as connection:
-        listing = connection.execute(
-            text("SELECT marketplace, external_id FROM listings")
-        ).one()
+        listing = connection.execute(text("SELECT marketplace, external_id FROM listings")).one()
         search_marketplace = connection.execute(
             text("SELECT marketplace FROM tracked_searches")
         ).scalar_one()
@@ -237,16 +242,13 @@ def test_tracked_listing_migration_from_0009(tmp_path):
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
         tracked_columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(tracked_listings)"))
+            row[1] for row in connection.execute(text("PRAGMA table_info(tracked_listings)"))
         }
         run_columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(tracking_runs)"))
+            row[1] for row in connection.execute(text("PRAGMA table_info(tracking_runs)"))
         }
         run_foreign_keys = {
-            row[2]
-            for row in connection.execute(text("PRAGMA foreign_key_list(tracking_runs)"))
+            row[2] for row in connection.execute(text("PRAGMA foreign_key_list(tracking_runs)"))
         }
 
     assert {
@@ -260,17 +262,17 @@ def test_tracked_listing_migration_from_0009(tmp_path):
         "last_tracking_run_id",
         "notes",
         "created_at",
-            "updated_at",
-            "target_price",
-            "percentage_drop_threshold",
-            "deal_score_threshold",
-            "notify_on_30d_low",
-            "notify_on_90d_low",
-            "notify_on_all_time_low",
-            "claimed_at",
-            "claim_expires_at",
-            "claimed_by",
-        } == tracked_columns
+        "updated_at",
+        "target_price",
+        "percentage_drop_threshold",
+        "deal_score_threshold",
+        "notify_on_30d_low",
+        "notify_on_90d_low",
+        "notify_on_all_time_low",
+        "claimed_at",
+        "claim_expires_at",
+        "claimed_by",
+    } == tracked_columns
     assert "tracked_listing_id" in run_columns
     assert "tracked_listings" in run_foreign_keys
 
@@ -304,14 +306,12 @@ def test_search_initial_baseline_migration_from_0010(tmp_path):
     command.upgrade(config, "head")
     with engine.connect() as connection:
         searches = connection.execute(
-            text(
-                "SELECT id, notify_on_first_run FROM tracked_searches ORDER BY id"
-            )
+            text("SELECT id, notify_on_first_run FROM tracked_searches ORDER BY id")
         ).all()
         run_count = connection.execute(text("SELECT COUNT(*) FROM tracking_runs")).scalar_one()
         column = connection.execute(
             text(
-                'SELECT "notnull", dflt_value FROM pragma_table_info(\'tracked_searches\') '
+                "SELECT \"notnull\", dflt_value FROM pragma_table_info('tracked_searches') "
                 "WHERE name = 'notify_on_first_run'"
             )
         ).one()
@@ -331,16 +331,13 @@ def test_possible_relisting_migration_from_0011(tmp_path):
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
         listing_columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(listings)"))
+            row[1] for row in connection.execute(text("PRAGMA table_info(listings)"))
         }
         relisting_columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(possible_relistings)"))
+            row[1] for row in connection.execute(text("PRAGMA table_info(possible_relistings)"))
         }
         indexes = {
-            row[1]
-            for row in connection.execute(text("PRAGMA index_list(possible_relistings)"))
+            row[1] for row in connection.execute(text("PRAGMA index_list(possible_relistings)"))
         }
 
     assert "seller_user_id" in listing_columns

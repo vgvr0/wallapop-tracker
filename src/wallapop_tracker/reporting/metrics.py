@@ -45,9 +45,7 @@ def get_average_active_price(
     presence = _presence_by_run(session, [run_id]).get(run_id, set())
     values = [
         price
-        for _, price in _latest_listing_snapshots(
-            session, list(presence), run.started_at
-        ).values()
+        for _, price in _latest_listing_snapshots(session, list(presence), run.started_at).values()
         if price is not None
     ]
     if not values:
@@ -57,10 +55,7 @@ def get_average_active_price(
 
 def get_weekly_summary(session: Session, profile_id: int) -> list[WeeklyProfileSummary]:
     runs = _valid_runs(session, profile_id)
-    inventory = {
-        point.run_id: point.count
-        for point in get_inventory_history(session, profile_id)
-    }
+    inventory = {point.run_id: point.count for point in get_inventory_history(session, profile_id)}
     metrics = get_profile_metrics_history(session, profile_id)
     presence = _presence_by_run(session, [run.id for run in runs])
     summaries: list[WeeklyProfileSummary] = []
@@ -82,26 +77,34 @@ def get_weekly_summary(session: Session, profile_id: int) -> list[WeeklyProfileS
         average, priced_count = get_average_active_price(session, profile_id, run.id)
         new_count = len(current_ids - previous_ids) if previous_run else 0
         removed_count = len(previous_ids - current_ids) if previous_run else 0
-        summaries.append(WeeklyProfileSummary(
-            run.id, run.started_at, inventory[run.id],
-            new_count, removed_count,
-            price_decreases, price_increases, metric.review_count,
-            (
-                metric.review_count - previous_metrics.review_count
-                if previous_metrics
-                and metric.review_count is not None
-                and previous_metrics.review_count is not None
-                else None
-            ),
-            metric.sold_count,
-            (
-                metric.sold_count - previous_metrics.sold_count
-                if previous_metrics
-                and metric.sold_count is not None
-                and previous_metrics.sold_count is not None
-                else None
-            ),
-            average, priced_count,
-        ))
+        summaries.append(
+            WeeklyProfileSummary(
+                run.id,
+                run.started_at,
+                inventory[run.id],
+                new_count,
+                removed_count,
+                price_decreases,
+                price_increases,
+                metric.review_count,
+                (
+                    metric.review_count - previous_metrics.review_count
+                    if previous_metrics
+                    and metric.review_count is not None
+                    and previous_metrics.review_count is not None
+                    else None
+                ),
+                metric.sold_count,
+                (
+                    metric.sold_count - previous_metrics.sold_count
+                    if previous_metrics
+                    and metric.sold_count is not None
+                    and previous_metrics.sold_count is not None
+                    else None
+                ),
+                average,
+                priced_count,
+            )
+        )
         previous_run, previous_metrics = run, metric
     return summaries

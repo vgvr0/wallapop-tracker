@@ -53,9 +53,11 @@ def listing(item_id: str, price: str = "100") -> Listing:
 
 def create_search(database: Database, *, notify_on_first_run: bool = False) -> int:
     with database.transaction() as session:
-        return TrackedSearchRepository(session).create(
-            "phone", notify_on_first_run=notify_on_first_run
-        ).id
+        return (
+            TrackedSearchRepository(session)
+            .create("phone", notify_on_first_run=notify_on_first_run)
+            .id
+        )
 
 
 @pytest.mark.asyncio
@@ -139,9 +141,9 @@ async def test_silent_baseline_preserves_global_price_drop_from_history(database
     first = create_search(database, notify_on_first_run=True)
     second = create_search(database)
     await SearchTracker(SequenceProvider([listing("ABC", "100")]), database).track_search(first)
-    result = await SearchTracker(
-        SequenceProvider([listing("ABC", "80")]), database
-    ).track_search(second)
+    result = await SearchTracker(SequenceProvider([listing("ABC", "80")]), database).track_search(
+        second
+    )
 
     assert result.new_listings == 0
     assert result.price_changes == 1

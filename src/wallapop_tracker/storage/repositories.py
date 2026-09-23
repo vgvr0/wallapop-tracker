@@ -599,9 +599,7 @@ class NotificationDeliveryRepository:
             .where(
                 NotificationDeliveryRecord.status.in_(statuses),
                 NotificationDeliveryRecord.attempts < max_attempts,
-                (
-                    NotificationDeliveryRecord.status != NotificationDeliveryStatus.PROCESSING
-                )
+                (NotificationDeliveryRecord.status != NotificationDeliveryStatus.PROCESSING)
                 | (NotificationDeliveryRecord.claim_expires_at.is_(None))
                 | (NotificationDeliveryRecord.claim_expires_at <= now),
                 *(

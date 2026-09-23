@@ -238,13 +238,17 @@ def test_change_based_shipping_reconstruction(database):
         snapshots = SnapshotRepository(session)
         first = _run(session, profile.id, 1, (listing.id,))
         snapshots.save_listing_snapshot(
-            listing.id, first.id, _listing().model_copy(update={"shipping_available": True}),
+            listing.id,
+            first.id,
+            _listing().model_copy(update={"shipping_available": True}),
             observed_at=first.started_at,
         )
         middle = _run(session, profile.id, 2, (listing.id,))
         third = _run(session, profile.id, 3, (listing.id,))
         snapshots.save_listing_snapshot(
-            listing.id, third.id, _listing().model_copy(update={"shipping_available": False}),
+            listing.id,
+            third.id,
+            _listing().model_copy(update={"shipping_available": False}),
             observed_at=third.started_at,
         )
         assert DiffService(session).compare_runs(first.id, middle.id) == []
@@ -260,13 +264,17 @@ def test_change_based_brand_reconstruction(database):
         snapshots = SnapshotRepository(session)
         first = _run(session, profile.id, 1, (listing.id,))
         snapshots.save_listing_snapshot(
-            listing.id, first.id, _listing().model_copy(update={"brand": "Apple"}),
+            listing.id,
+            first.id,
+            _listing().model_copy(update={"brand": "Apple"}),
             observed_at=first.started_at,
         )
         middle = _run(session, profile.id, 2, (listing.id,))
         third = _run(session, profile.id, 3, (listing.id,))
         snapshots.save_listing_snapshot(
-            listing.id, third.id, _listing().model_copy(update={"brand": "Samsung"}),
+            listing.id,
+            third.id,
+            _listing().model_copy(update={"brand": "Samsung"}),
             observed_at=third.started_at,
         )
         assert DiffService(session).compare_runs(first.id, middle.id) == []

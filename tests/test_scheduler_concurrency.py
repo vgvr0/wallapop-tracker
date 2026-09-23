@@ -144,9 +144,7 @@ async def test_scheduler_mixes_all_sources_under_one_limit(database):
         listing_record, _ = ListingRepository(session).get_or_create_global_listing(
             Listing(item_id="listing", user_id="seller", price=Decimal("10")), None
         )
-        tracked_listing = TrackedListingRepository(session).create(
-            listing_record.id, "listing"
-        )
+        tracked_listing = TrackedListingRepository(session).create(listing_record.id, "listing")
         search_id = search.id
         listing_id = tracked_listing.id
     profile_runner = MeasuredProfileRunner()
@@ -192,9 +190,7 @@ async def test_real_runner_sessions_persist_concurrent_sqlite_runs(database):
 
     from wallapop_tracker.services.runner import ProfileTrackingRunner
 
-    runner = ProfileTrackingRunner(
-        database, client_factory=FakeClient, tracker_factory=FakeTracker
-    )
+    runner = ProfileTrackingRunner(database, client_factory=FakeClient, tracker_factory=FakeTracker)
     scheduler = TrackingScheduler(
         database, timedelta(hours=24), runner=runner, max_concurrency=3, clock=lambda: NOW
     )

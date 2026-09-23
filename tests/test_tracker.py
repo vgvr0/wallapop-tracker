@@ -198,16 +198,18 @@ async def test_valid_capture_is_atomic_on_storage_failure(database, monkeypatch)
         raise RuntimeError("storage failure")
 
     monkeypatch.setattr(
-        __import__("wallapop_tracker.storage.repositories", fromlist=["SnapshotRepository"])
-        .SnapshotRepository,
+        __import__(
+            "wallapop_tracker.storage.repositories", fromlist=["SnapshotRepository"]
+        ).SnapshotRepository,
         "save_listing_snapshot",
         fail,
     )
     result = await tracker.track_profile("https://wallapop.test/user/ana")
     assert result.status.value == "failed"
     monkeypatch.setattr(
-        __import__("wallapop_tracker.storage.repositories", fromlist=["SnapshotRepository"])
-        .SnapshotRepository,
+        __import__(
+            "wallapop_tracker.storage.repositories", fromlist=["SnapshotRepository"]
+        ).SnapshotRepository,
         "save_listing_snapshot",
         original,
     )

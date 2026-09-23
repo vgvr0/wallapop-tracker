@@ -44,13 +44,21 @@ def test_empty_history_is_not_suspicious_and_three_positive_runs_are():
         search = TrackedSearchRecord(query="x", created_at=now, updated_at=now)
         session.add(search)
         session.flush()
-        assert not suspicious_zero(session, TrackingRunRecord.tracked_search_id, search.id, current=0)
+        assert not suspicious_zero(
+            session, TrackingRunRecord.tracked_search_id, search.id, current=0
+        )
         for index in range(3):
-            session.add(TrackingRunRecord(
-                tracked_search_id=search.id, started_at=now - timedelta(minutes=index + 1),
-                finished_at=now - timedelta(minutes=index + 1), status=TrackingRunStatus.VALID,
-                items_fetched=4, items_scanned=4, health_status="SUCCESS",
-            ))
+            session.add(
+                TrackingRunRecord(
+                    tracked_search_id=search.id,
+                    started_at=now - timedelta(minutes=index + 1),
+                    finished_at=now - timedelta(minutes=index + 1),
+                    status=TrackingRunStatus.VALID,
+                    items_fetched=4,
+                    items_scanned=4,
+                    health_status="SUCCESS",
+                )
+            )
         session.flush()
         assert suspicious_zero(session, TrackingRunRecord.tracked_search_id, search.id, current=0)
     database.close()
@@ -67,11 +75,19 @@ def test_consecutive_failures_recovery_and_aggregates():
         statuses = [("FAILED", 400), ("FAILED", 300), ("FAILED", 200), ("SUCCESS", 100)]
         for index, (status, duration) in enumerate(statuses):
             timestamp = now - timedelta(minutes=index + 1)
-            session.add(TrackingRunRecord(
-                tracked_search_id=search.id, started_at=timestamp, finished_at=timestamp,
-                status=TrackingRunStatus.FAILED if status == "FAILED" else TrackingRunStatus.VALID,
-                health_status=status, duration_ms=duration, items_scanned=1,
-            ))
+            session.add(
+                TrackingRunRecord(
+                    tracked_search_id=search.id,
+                    started_at=timestamp,
+                    finished_at=timestamp,
+                    status=TrackingRunStatus.FAILED
+                    if status == "FAILED"
+                    else TrackingRunStatus.VALID,
+                    health_status=status,
+                    duration_ms=duration,
+                    items_scanned=1,
+                )
+            )
         session.flush()
         summary = health_summary(session, search_id=search.id)
         assert summary["status"] == "FAILING"
@@ -83,10 +99,16 @@ def test_consecutive_failures_recovery_and_aggregates():
         assert summary["p95_duration_ms_24h"] == 385
         assert summary["last_success_at"] is not None
         assert summary["last_failure_at"] is not None
-        session.add(TrackingRunRecord(
-            tracked_search_id=search.id, started_at=now, finished_at=now,
-            status=TrackingRunStatus.VALID, health_status="SUCCESS", duration_ms=100,
-        ))
+        session.add(
+            TrackingRunRecord(
+                tracked_search_id=search.id,
+                started_at=now,
+                finished_at=now,
+                status=TrackingRunStatus.VALID,
+                health_status="SUCCESS",
+                duration_ms=100,
+            )
+        )
         session.flush()
         recovered = health_summary(session, search_id=search.id)
         assert recovered["consecutive_failures"] == 0

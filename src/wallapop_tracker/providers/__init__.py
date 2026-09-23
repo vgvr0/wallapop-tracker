@@ -3,4 +3,3 @@
 from .search import SearchProvider, SearchRequest, WallapopSearchProvider
 
 __all__ = ["SearchProvider", "SearchRequest", "WallapopSearchProvider"]
-

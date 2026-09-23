@@ -58,9 +58,9 @@ class FailingSearchProvider:
 
 def create_search(database: Database, query: str) -> int:
     with database.transaction() as session:
-        return TrackedSearchRepository(session).create(
-            query, name=query, notify_on_first_run=True
-        ).id
+        return (
+            TrackedSearchRepository(session).create(query, name=query, notify_on_first_run=True).id
+        )
 
 
 @pytest.mark.asyncio
@@ -90,13 +90,25 @@ async def test_overlapping_searches_share_listing_and_new_alert(database):
 
 
 @pytest.mark.asyncio
-async def test_deal_score_alerts_are_independent_per_search_and_disable_cleanly(database, monkeypatch):
+async def test_deal_score_alerts_are_independent_per_search_and_disable_cleanly(
+    database, monkeypatch
+):
     scores = iter([70, 70, 85, 85, 85, 85])
-    monkeypatch.setattr("wallapop_tracker.services.search_tracker.DealScoringService.score_listing",
-                        lambda self, listing_id, search_id: SimpleNamespace(score=Decimal(next(scores))))
+    monkeypatch.setattr(
+        "wallapop_tracker.services.search_tracker.DealScoringService.score_listing",
+        lambda self, listing_id, search_id: SimpleNamespace(score=Decimal(next(scores))),
+    )
     with database.transaction() as session:
-        first = TrackedSearchRepository(session).create("camera-a", deal_score_threshold=Decimal("80")).id
-        second = TrackedSearchRepository(session).create("camera-b", deal_score_threshold=Decimal("80")).id
+        first = (
+            TrackedSearchRepository(session)
+            .create("camera-a", deal_score_threshold=Decimal("80"))
+            .id
+        )
+        second = (
+            TrackedSearchRepository(session)
+            .create("camera-b", deal_score_threshold=Decimal("80"))
+            .id
+        )
     provider = FakeSearchProvider(item())
     await SearchTracker(provider, database).track_search(first)
     await SearchTracker(provider, database).track_search(second)
@@ -105,14 +117,19 @@ async def test_deal_score_alerts_are_independent_per_search_and_disable_cleanly(
     assert [alert.type for alert in crossed_a.alerts].count(AlertType.DEAL_SCORE_THRESHOLD) == 1
     assert [alert.type for alert in crossed_b.alerts].count(AlertType.DEAL_SCORE_THRESHOLD) == 1
     with database.session() as session:
-        events = session.scalars(select(TrackingEventRecord).where(
-            TrackingEventRecord.event_type == AlertType.DEAL_SCORE_THRESHOLD.value)).all()
+        events = session.scalars(
+            select(TrackingEventRecord).where(
+                TrackingEventRecord.event_type == AlertType.DEAL_SCORE_THRESHOLD.value
+            )
+        ).all()
         assert {event.tracked_search_id for event in events} == {first, second}
         assert len({event.idempotency_key for event in events}) == 2
         TrackedSearchRepository(session).update(first, enabled=False)
     disabled_result = await SearchTracker(provider, database).track_search(first)
     assert AlertType.DEAL_SCORE_THRESHOLD not in [alert.type for alert in disabled_result.alerts]
-    assert (await SearchTracker(provider, database).track_search(second)).status == TrackingRunStatus.VALID
+    assert (
+        await SearchTracker(provider, database).track_search(second)
+    ).status == TrackingRunStatus.VALID
 
 
 @pytest.mark.asyncio
@@ -144,18 +161,16 @@ async def test_price_increase_after_a_new_drop_is_a_new_global_event(database):
 
     await SearchTracker(FakeSearchProvider(item("100")), database).track_search(search_id)
     dropped = await SearchTracker(FakeSearchProvider(item("80")), database).track_search(search_id)
-    increased = await SearchTracker(
-        FakeSearchProvider(item("90")), database
-    ).track_search(search_id)
+    increased = await SearchTracker(FakeSearchProvider(item("90")), database).track_search(
+        search_id
+    )
 
     assert [alert.type for alert in dropped.alerts] == [AlertType.PRICE_DROP]
     assert [alert.type for alert in increased.alerts] == [AlertType.PRICE_INCREASE]
     assert increased.alerts[0].old_price == Decimal("80")
     assert increased.alerts[0].new_price == Decimal("90")
     with database.session() as session:
-        events = session.scalars(
-            select(TrackingEventRecord).order_by(TrackingEventRecord.id)
-        ).all()
+        events = session.scalars(select(TrackingEventRecord).order_by(TrackingEventRecord.id)).all()
         assert [event.event_type for event in events] == [
             AlertType.NEW_LISTING,
             AlertType.PRICE_DROP,

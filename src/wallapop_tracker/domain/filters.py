@@ -574,7 +574,12 @@ def filters_from_config(config: Mapping[str, object]) -> FilterEngine:
     category = config.get("category_id")
     if category is not None:
         filters.append(CategoryFilter(str(category)))
-    for key, attribute in (("brands", "brand"), ("brand", "brand"), ("models", "model"), ("model", "model")):
+    for key, attribute in (
+        ("brands", "brand"),
+        ("brand", "brand"),
+        ("models", "model"),
+        ("model", "model"),
+    ):
         values = config.get(key)
         if isinstance(values, str):
             values = (values,)

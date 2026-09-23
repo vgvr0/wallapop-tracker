@@ -17,9 +17,7 @@ def upgrade() -> None:
         "tracked_searches",
         sa.Column("notify_on_first_run", sa.Boolean(), nullable=False, server_default="1"),
     )
-    op.execute(
-        sa.text("UPDATE tracked_searches SET notify_on_first_run = TRUE")
-    )
+    op.execute(sa.text("UPDATE tracked_searches SET notify_on_first_run = TRUE"))
     if op.get_bind().dialect.name == "postgresql":
         op.alter_column(
             "tracked_searches",
