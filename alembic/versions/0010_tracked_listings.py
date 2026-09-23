@@ -113,11 +113,15 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
         "price_changes",
         "duplicates_suppressed",
     ]
-    target_columns = source_columns if downgrade else [
-        *source_columns[:3],
-        "tracked_listing_id",
-        *source_columns[3:],
-    ]
+    target_columns = (
+        source_columns
+        if downgrade
+        else [
+            *source_columns[:3],
+            "tracked_listing_id",
+            *source_columns[3:],
+        ]
+    )
     source_sql = ", ".join(source_columns)
     target_sql = ", ".join(target_columns)
     exact_one = (
@@ -133,7 +137,7 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
         id INTEGER NOT NULL PRIMARY KEY,
         profile_id INTEGER REFERENCES profiles (id),
         tracked_search_id INTEGER REFERENCES tracked_searches (id),
-        {'' if downgrade else 'tracked_listing_id INTEGER REFERENCES tracked_listings (id),'}
+        {"" if downgrade else "tracked_listing_id INTEGER REFERENCES tracked_listings (id),"}
         started_at DATETIME NOT NULL,
         finished_at DATETIME,
         status VARCHAR(20) NOT NULL,
@@ -162,8 +166,7 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
     )
     if downgrade:
         copy_sql = (
-            f"INSERT INTO tracking_runs_new ({target_sql}) "
-            f"SELECT {source_sql} FROM tracking_runs"
+            f"INSERT INTO tracking_runs_new ({target_sql}) SELECT {source_sql} FROM tracking_runs"
         )
     else:
         copy_sql = (
@@ -177,11 +180,9 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
     bind.exec_driver_sql("DROP TABLE tracking_runs")
     bind.exec_driver_sql("ALTER TABLE tracking_runs_new RENAME TO tracking_runs")
     bind.exec_driver_sql(
-        "CREATE INDEX ix_tracking_runs_profile_started "
-        "ON tracking_runs (profile_id, started_at)"
+        "CREATE INDEX ix_tracking_runs_profile_started ON tracking_runs (profile_id, started_at)"
     )
     bind.exec_driver_sql(
-        "CREATE INDEX ix_tracking_runs_status_finished "
-        "ON tracking_runs (status, finished_at)"
+        "CREATE INDEX ix_tracking_runs_status_finished ON tracking_runs (status, finished_at)"
     )
     bind.exec_driver_sql("PRAGMA foreign_keys=ON")

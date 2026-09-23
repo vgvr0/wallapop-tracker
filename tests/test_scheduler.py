@@ -85,9 +85,7 @@ async def test_scheduler_runs_profiles_without_last_run_and_overdue(database):
     set_last_run(database, "overdue", NOW - timedelta(hours=25))
     set_last_run(database, "current", NOW - timedelta(hours=23))
     fake = FakeRunner()
-    scheduler = TrackingScheduler(
-        database, timedelta(hours=24), runner=fake, clock=lambda: NOW
-    )
+    scheduler = TrackingScheduler(database, timedelta(hours=24), runner=fake, clock=lambda: NOW)
 
     result = await scheduler.run_once()
 
@@ -117,6 +115,7 @@ async def test_scheduler_skips_disabled_and_continues_after_failure(database):
 @pytest.mark.asyncio
 async def test_scheduler_updates_last_run_after_real_runner_execution(database):
     add_profiles(database, "andrey")
+
     class FakeClient:
         async def __aenter__(self):
             return self
@@ -136,9 +135,7 @@ async def test_scheduler_updates_last_run_after_real_runner_execution(database):
     service = ProfileTrackingRunner(
         database, client_factory=FakeClient, tracker_factory=FakeTracker
     )
-    scheduler = TrackingScheduler(
-        database, timedelta(hours=24), runner=service, clock=lambda: NOW
-    )
+    scheduler = TrackingScheduler(database, timedelta(hours=24), runner=service, clock=lambda: NOW)
 
     await scheduler.run_once()
 

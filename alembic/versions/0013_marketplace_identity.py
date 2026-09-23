@@ -34,12 +34,8 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         )
-        with op.batch_alter_table(
-            "listings", recreate="always", copy_from=legacy
-        ) as batch:
-            batch.add_column(
-                sa.Column("external_id", sa.String(100), nullable=True)
-            )
+        with op.batch_alter_table("listings", recreate="always", copy_from=legacy) as batch:
+            batch.add_column(sa.Column("external_id", sa.String(100), nullable=True))
             if "marketplace" not in listing_columns:
                 batch.add_column(
                     sa.Column(
@@ -47,10 +43,7 @@ def upgrade() -> None:
                     )
                 )
         op.execute(
-            sa.text(
-                "UPDATE listings SET external_id = wallapop_item_id "
-                "WHERE external_id IS NULL"
-            )
+            sa.text("UPDATE listings SET external_id = wallapop_item_id WHERE external_id IS NULL")
         )
         op.create_unique_constraint(
             "uq_listings_marketplace_external_id", "listings", ["marketplace", "external_id"]

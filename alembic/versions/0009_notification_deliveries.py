@@ -45,4 +45,3 @@ def downgrade() -> None:
         table_name="notification_deliveries",
     )
     op.drop_table("notification_deliveries")
-

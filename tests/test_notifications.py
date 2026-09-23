@@ -67,9 +67,7 @@ class SearchProvider:
 
 def create_search(database: Database) -> int:
     with database.transaction() as session:
-        return TrackedSearchRepository(session).create(
-            "cámara", notify_on_first_run=True
-        ).id
+        return TrackedSearchRepository(session).create("cámara", notify_on_first_run=True).id
 
 
 async def create_event(database: Database) -> int:
@@ -94,9 +92,14 @@ async def test_delivery_is_persisted_once_and_fk_is_enforced(database):
     assert first[0].id == second[0].id
     with database.session() as session:
         assert session.scalar(select(func.count()).select_from(NotificationDeliveryRecord)) == 1
-        assert session.scalar(select(NotificationDeliveryRecord).where(
-            NotificationDeliveryRecord.id == first[0].id
-        )).status == NotificationDeliveryStatus.PENDING
+        assert (
+            session.scalar(
+                select(NotificationDeliveryRecord).where(
+                    NotificationDeliveryRecord.id == first[0].id
+                )
+            ).status
+            == NotificationDeliveryStatus.PENDING
+        )
 
     with pytest.raises(IntegrityError):
         with database.transaction() as session:
@@ -245,8 +248,13 @@ async def test_http_channels_serialize_money_utc_and_unicode():
 
 def test_common_notification_payload_explains_advanced_alert():
     notification = Notification(
-        event_id=8, event_type=AlertType.DEAL_SCORE_THRESHOLD, listing_id="item-1",
-        title="Camera", url=None, old_price=Decimal("100"), new_price=Decimal("80"),
+        event_id=8,
+        event_type=AlertType.DEAL_SCORE_THRESHOLD,
+        listing_id="item-1",
+        title="Camera",
+        url=None,
+        old_price=Decimal("100"),
+        new_price=Decimal("80"),
         created_at=datetime(2026, 1, 2, tzinfo=UTC),
         details="Score 70 -> 85; threshold 80",
     )
@@ -256,25 +264,51 @@ def test_common_notification_payload_explains_advanced_alert():
     assert payload["details"] == "Score 70 -> 85; threshold 80"
 
 
-@pytest.mark.parametrize("event_type", [
-    AlertType.TARGET_PRICE_REACHED.value, AlertType.PERCENTAGE_DROP.value,
-    AlertType.NEW_30D_LOW.value, AlertType.NEW_90D_LOW.value,
-    AlertType.NEW_ALL_TIME_LOW.value, AlertType.DEAL_SCORE_THRESHOLD.value,
-])
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        AlertType.TARGET_PRICE_REACHED.value,
+        AlertType.PERCENTAGE_DROP.value,
+        AlertType.NEW_30D_LOW.value,
+        AlertType.NEW_90D_LOW.value,
+        AlertType.NEW_ALL_TIME_LOW.value,
+        AlertType.DEAL_SCORE_THRESHOLD.value,
+    ],
+)
 def test_advanced_event_formatter_includes_metadata(database, event_type):
     now = datetime(2026, 1, 1, tzinfo=UTC)
     with database.transaction() as session:
-        listing = ListingRecord(wallapop_item_id="item-1", external_id="item-1",
-                                first_seen_at=now, last_seen_at=now, created_at=now, updated_at=now)
+        listing = ListingRecord(
+            wallapop_item_id="item-1",
+            external_id="item-1",
+            first_seen_at=now,
+            last_seen_at=now,
+            created_at=now,
+            updated_at=now,
+        )
         session.add(listing)
         session.flush()
-        session.add(TrackingRunRecord(id=1, started_at=now, finished_at=now,
-                                      tracked_search_id=3, status=TrackingRunStatus.VALID))
+        session.add(
+            TrackingRunRecord(
+                id=1,
+                started_at=now,
+                finished_at=now,
+                tracked_search_id=3,
+                status=TrackingRunStatus.VALID,
+            )
+        )
         session.add(TrackedSearchRecord(id=3, query="camera", created_at=now, updated_at=now))
-        event = TrackingEventRecord(event_type=event_type, idempotency_key=event_type,
-            listing_id=listing.id, tracking_run_id=1, tracked_search_id=3,
-            old_price=Decimal("100"), new_price=Decimal("80"), created_at=now,
-            metadata_json=json.dumps({"threshold": 80, "tracked_search_id": 3}))
+        event = TrackingEventRecord(
+            event_type=event_type,
+            idempotency_key=event_type,
+            listing_id=listing.id,
+            tracking_run_id=1,
+            tracked_search_id=3,
+            old_price=Decimal("100"),
+            new_price=Decimal("80"),
+            created_at=now,
+            metadata_json=json.dumps({"threshold": 80, "tracked_search_id": 3}),
+        )
         session.add(event)
         session.flush()
         notification = NotificationService._notification(session, event)

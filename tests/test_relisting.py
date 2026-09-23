@@ -236,9 +236,7 @@ async def test_cross_origin_search_then_profile_uses_same_global_listing_store(d
             return [item("profile-new", "iPhone 15 Pro 256 GB", "840")]
 
     with database.transaction() as session:
-        search_id = TrackedSearchRepository(session).create(
-            "iphone", notify_on_first_run=True
-        ).id
+        search_id = TrackedSearchRepository(session).create("iphone", notify_on_first_run=True).id
     await SearchTracker(SearchProvider(), database).track_search(search_id)
     old_at = datetime.now(UTC) - timedelta(days=1)
     with database.transaction() as session:
@@ -254,9 +252,9 @@ async def test_cross_origin_search_then_profile_uses_same_global_listing_store(d
         snapshot.observed_at = old_at
         snapshot.presence_state = PresenceState.REMOVED
 
-    result = await ProfileTracker(
-        ProfileClient(), database
-    ).track_profile("https://es.wallapop.com/user/seller-1")
+    result = await ProfileTracker(ProfileClient(), database).track_profile(
+        "https://es.wallapop.com/user/seller-1"
+    )
     assert result.alerts
     assert result.alerts[0].type == AlertType.POSSIBLE_RELISTING
     with database.session() as session:

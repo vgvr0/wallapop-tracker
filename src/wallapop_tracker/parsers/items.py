@@ -67,11 +67,18 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
     # accepted; absence from a collection is handled separately as REMOVED.
     explicit_sold = any(raw.get(key) is True for key in ("sold", "sold_out", "is_sold"))
     raw_status = raw.get("status")
-    status_value = raw_status.casefold().replace("-", "_").replace(" ", "_") \
-        if isinstance(raw_status, str) else ""
-    sale_status = ListingSaleStatus.SOLD if explicit_sold or status_value in {
-        "sold", "sold_out", "soldout", "completed_sold"
-    } else ListingSaleStatus.RESERVED if reserved_raw is True else ListingSaleStatus.ACTIVE
+    status_value = (
+        raw_status.casefold().replace("-", "_").replace(" ", "_")
+        if isinstance(raw_status, str)
+        else ""
+    )
+    sale_status = (
+        ListingSaleStatus.SOLD
+        if explicit_sold or status_value in {"sold", "sold_out", "soldout", "completed_sold"}
+        else ListingSaleStatus.RESERVED
+        if reserved_raw is True
+        else ListingSaleStatus.ACTIVE
+    )
     url = first_value(dict(raw), "url", "web_url")
     if not isinstance(url, str):
         slug = raw.get("slug")
@@ -101,8 +108,7 @@ def _listing(raw: Mapping[str, Any], user_id: str) -> Listing | None:
         sale_status=sale_status,
         shipping_available=(
             shipping.get("item_is_shippable")
-            if isinstance(shipping, Mapping)
-            and isinstance(shipping.get("item_is_shippable"), bool)
+            if isinstance(shipping, Mapping) and isinstance(shipping.get("item_is_shippable"), bool)
             else None
         ),
         seller_allows_shipping=(

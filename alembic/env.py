@@ -32,7 +32,9 @@ for _foreign_key in list(_tracked_listing_column.foreign_keys):
     if _foreign_key.target_fullname == "tracked_listings.id":
         _tracked_listing_column.foreign_keys.remove(_foreign_key)
         _tracked_listing_column.table.constraints.discard(_foreign_key.constraint)
-        _removed_foreign_keys.append((_tracked_listing_column, _foreign_key, _foreign_key.constraint))
+        _removed_foreign_keys.append(
+            (_tracked_listing_column, _foreign_key, _foreign_key.constraint)
+        )
 
 # ``tracked_searches`` is also introduced after revision 0001. Hide its ORM
 # FK while the historical initial migration creates ``tracking_runs``.
@@ -41,7 +43,9 @@ for _foreign_key in list(_tracked_search_column.foreign_keys):
     if _foreign_key.target_fullname == "tracked_searches.id":
         _tracked_search_column.foreign_keys.remove(_foreign_key)
         _tracked_search_column.table.constraints.discard(_foreign_key.constraint)
-        _removed_foreign_keys.append((_tracked_search_column, _foreign_key, _foreign_key.constraint))
+        _removed_foreign_keys.append(
+            (_tracked_search_column, _foreign_key, _foreign_key.constraint)
+        )
 
 target_metadata = Base.metadata
 

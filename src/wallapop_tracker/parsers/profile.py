@@ -23,9 +23,7 @@ def parse_profile(data: Mapping[str, Any]) -> Profile:
         location_city = (
             location_raw.get("city") if isinstance(location_raw.get("city"), str) else None
         )
-        postal_code = (
-            location_raw.get("zip") if isinstance(location_raw.get("zip"), str) else None
-        )
+        postal_code = location_raw.get("zip") if isinstance(location_raw.get("zip"), str) else None
         country_code = (
             location_raw.get("country_code")
             if isinstance(location_raw.get("country_code"), str)

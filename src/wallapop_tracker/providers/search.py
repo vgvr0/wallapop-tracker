@@ -55,4 +55,3 @@ class WallapopSearchProvider:
             distance=request.distance,
             max_pages=request.max_pages,
         )
-

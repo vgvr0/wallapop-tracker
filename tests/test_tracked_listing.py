@@ -64,9 +64,7 @@ def listing(
 
 def create_tracked_listing(database: Database) -> int:
     with database.transaction() as session:
-        global_listing, _ = ListingRepository(session).get_or_create_global_listing(
-            listing(), None
-        )
+        global_listing, _ = ListingRepository(session).get_or_create_global_listing(listing(), None)
         return TrackedListingRepository(session).create(global_listing.id, "camera").id
 
 
@@ -170,11 +168,14 @@ async def test_transient_failure_does_not_mark_listing_removed(database):
 
     assert failed.status == TrackingRunStatus.FAILED
     with database.session() as session:
-        assert session.scalar(
-            select(func.count())
-            .select_from(ListingSnapshotRecord)
-            .where(ListingSnapshotRecord.presence_state == PresenceState.REMOVED)
-        ) == 0
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ListingSnapshotRecord)
+                .where(ListingSnapshotRecord.presence_state == PresenceState.REMOVED)
+            )
+            == 0
+        )
 
 
 @pytest.mark.asyncio
@@ -201,9 +202,7 @@ async def test_search_discovered_listing_is_reused_by_tracked_listing(database):
     with database.transaction() as session:
         global_listing = session.scalar(select(ListingRecord))
         assert global_listing is not None
-        tracked_id = TrackedListingRepository(session).create(
-            global_listing.id, "from-search"
-        ).id
+        tracked_id = TrackedListingRepository(session).create(global_listing.id, "from-search").id
     result = await TrackedListingTracker(FakeProvider(listing()), database).track_listing(
         tracked_id
     )
@@ -222,9 +221,7 @@ def test_profile_discovered_listing_is_reused_by_tracked_listing(database):
         global_listing = ListingRepository(session).get_or_create_listing(
             listing(), profile.id, tracking_run_id=run.id
         )
-        tracked_id = TrackedListingRepository(session).create(
-            global_listing.id, "from-profile"
-        ).id
+        tracked_id = TrackedListingRepository(session).create(global_listing.id, "from-profile").id
     with database.session() as session:
         tracked = session.get(TrackedListingRecord, tracked_id)
         assert tracked is not None

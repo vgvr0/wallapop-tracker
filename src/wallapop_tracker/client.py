@@ -535,7 +535,8 @@ class WallapopClient:
                     category_name=raw.get("category_name"),
                     brand=raw.get("brand"),
                     model=(raw.get("model") or (raw.get("attributes") or {}).get("model"))
-                    if isinstance(raw.get("attributes") or {}, Mapping) else None,
+                    if isinstance(raw.get("attributes") or {}, Mapping)
+                    else None,
                     latitude=_listing_coordinate(raw, "latitude"),
                     longitude=_listing_coordinate(raw, "longitude"),
                     condition=condition_code or condition_label,

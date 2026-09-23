@@ -63,8 +63,14 @@ def downgrade() -> None:
     listing_columns = _columns("listing_snapshots")
     with op.batch_alter_table("listing_snapshots") as batch:
         for name in (
-            "attributes_json", "images_json", "is_refurbished", "has_warranty", "brand",
-            "condition", "seller_allows_shipping", "shipping_available",
+            "attributes_json",
+            "images_json",
+            "is_refurbished",
+            "has_warranty",
+            "brand",
+            "condition",
+            "seller_allows_shipping",
+            "shipping_available",
         ):
             if name in listing_columns:
                 batch.drop_column(name)
@@ -84,8 +90,14 @@ def downgrade() -> None:
     profile_columns = _columns("profiles")
     with op.batch_alter_table("profiles") as batch:
         for name in (
-            "is_top_profile", "verified", "seller_type", "country_code", "postal_code",
-            "location_city", "avatar_url", "registered_at",
+            "is_top_profile",
+            "verified",
+            "seller_type",
+            "country_code",
+            "postal_code",
+            "location_city",
+            "avatar_url",
+            "registered_at",
         ):
             if name in profile_columns:
                 batch.drop_column(name)

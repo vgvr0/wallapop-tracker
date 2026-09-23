@@ -99,9 +99,7 @@ class ProfileTracker:
 
         if capture.profile_ok and capture.stats_ok and capture.reviews_ok and capture.items_ok:
             try:
-                return self._persist_valid(
-                    capture, profile_url, profile_id, started_at, user_id
-                )
+                return self._persist_valid(capture, profile_url, profile_id, started_at, user_id)
             except Exception as exc:
                 logger.exception("valid_capture_persistence_failed user_id=%s", user_id)
                 return self._persist_terminal(
@@ -114,9 +112,11 @@ class ProfileTracker:
                     exc,
                 )
 
-        status = TrackingRunStatus.PARTIAL if any(
-            (capture.profile_ok, capture.stats_ok, capture.reviews_ok, capture.items_ok)
-        ) else TrackingRunStatus.FAILED
+        status = (
+            TrackingRunStatus.PARTIAL
+            if any((capture.profile_ok, capture.stats_ok, capture.reviews_ok, capture.items_ok))
+            else TrackingRunStatus.FAILED
+        )
         return self._persist_terminal(
             profile_url,
             user_id,
@@ -206,9 +206,12 @@ class ProfileTracker:
                 error_message=str(error) if error else None,
                 health_status=health_status,
                 duration_ms=max(0, int((finished_at - started_at).total_seconds() * 1000)),
-                http_requests=counters.get("http_requests"), http_errors=counters.get("http_errors"),
-                http_403=counters.get("http_403"), http_429=counters.get("http_429"),
-                http_5xx=counters.get("http_5xx"), parse_errors=counters.get("parse_errors"),
+                http_requests=counters.get("http_requests"),
+                http_errors=counters.get("http_errors"),
+                http_403=counters.get("http_403"),
+                http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"),
+                parse_errors=counters.get("parse_errors"),
             )
             return TrackingResult(
                 run_id=run.id,
@@ -234,17 +237,22 @@ class ProfileTracker:
         with self.session_factory.begin() as session:
             self._persist_schema_observations(session)
             if profile_id is None:
-                profile_id = self._identity_profile(
-                    session, user_id, profile_url, started_at
-                ).id
+                profile_id = self._identity_profile(session, user_id, profile_url, started_at).id
             runs = TrackingRunRepository(session)
             run = runs.start_profile_run(profile_id, started_at=started_at)
             counters = getattr(self.client, "health_counters", {})
-            suspicious = suspicious_zero(session, TrackingRunRecord.profile_id, profile_id, current=len(listings))
+            suspicious = suspicious_zero(
+                session, TrackingRunRecord.profile_id, profile_id, current=len(listings)
+            )
             finished_at = datetime.now(UTC)
-            health_status = classify_run(completed=True, suspicious_result=suspicious,
-                http_errors=counters.get("http_errors"), http_429=counters.get("http_429"),
-                http_5xx=counters.get("http_5xx"), parse_errors=counters.get("parse_errors"))
+            health_status = classify_run(
+                completed=True,
+                suspicious_result=suspicious,
+                http_errors=counters.get("http_errors"),
+                http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"),
+                parse_errors=counters.get("parse_errors"),
+            )
             runs.mark_valid(
                 run.id,
                 items_fetched=len(listings),
@@ -252,10 +260,14 @@ class ProfileTracker:
                 stats_ok=True,
                 reviews_ok=True,
                 items_ok=True,
-                health_status=health_status, duration_ms=max(0, int((finished_at-started_at).total_seconds()*1000)),
-                suspicious_result=suspicious, http_requests=counters.get("http_requests"),
-                http_errors=counters.get("http_errors"), http_403=counters.get("http_403"),
-                http_429=counters.get("http_429"), http_5xx=counters.get("http_5xx"),
+                health_status=health_status,
+                duration_ms=max(0, int((finished_at - started_at).total_seconds() * 1000)),
+                suspicious_result=suspicious,
+                http_requests=counters.get("http_requests"),
+                http_errors=counters.get("http_errors"),
+                http_403=counters.get("http_403"),
+                http_429=counters.get("http_429"),
+                http_5xx=counters.get("http_5xx"),
                 parse_errors=counters.get("parse_errors"),
             )
             profiles = ProfileRepository(session)
@@ -283,9 +295,7 @@ class ProfileTracker:
                 )
                 current_ids.add(record.id)
                 snapshots.mark_listing_seen(run.id, record.id, observed_at=started_at)
-                snapshots.save_listing_snapshot(
-                    record.id, run.id, listing, observed_at=started_at
-                )
+                snapshots.save_listing_snapshot(record.id, run.id, listing, observed_at=started_at)
                 if existing is None:
                     new_listings.append((record, listing))
             previous = self._previous_complete_run(session, profile_record.id, run.id)
@@ -294,9 +304,7 @@ class ProfileTracker:
                     session.scalars(
                         select(ListingRecord.id)
                         .join(TrackingRunListingRecord)
-                        .where(
-                            TrackingRunListingRecord.tracking_run_id == previous.id
-                        )
+                        .where(TrackingRunListingRecord.tracking_run_id == previous.id)
                     )
                 )
                 for listing_id in previous_ids - current_ids:
@@ -387,9 +395,7 @@ class ProfileTracker:
             return self._identity_profile(session, user_id, profile_url, observed_at).id
 
     @staticmethod
-    def _warn_on_discrepancy(
-        stats: ProfileStats, reviews: ReviewSummary, user_id: str
-    ) -> None:
+    def _warn_on_discrepancy(stats: ProfileStats, reviews: ReviewSummary, user_id: str) -> None:
         if (
             stats.rating is not None
             and reviews.rating is not None

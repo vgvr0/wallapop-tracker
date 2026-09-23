@@ -79,9 +79,7 @@ class RelistingDetectionService:
             if scored is None:
                 continue
             score, reasons = scored
-            if score >= self.policy.threshold and (
-                best is None or score > best[0]
-            ):
+            if score >= self.policy.threshold and (best is None or score > best[0]):
                 best = (score, previous, reasons)
         if best is None:
             return None
@@ -157,9 +155,7 @@ class RelistingDetectionService:
             delta, similarity = price
             if similarity <= 0:
                 return None
-            signals.append(
-                (0.15, RelistingReason("price_delta", delta, 0.15 * similarity))
-            )
+            signals.append((0.15, RelistingReason("price_delta", delta, 0.15 * similarity)))
         category = self._same_text(snapshot.category_id, current.category_id)
         if category is not None:
             signals.append((0.10, RelistingReason("same_category", category, 0.10)))
@@ -203,6 +199,4 @@ class RelistingDetectionService:
     def _same_text(first: str | None, second: str | None) -> bool | None:
         if not first or not second:
             return None
-        return RelistingDetectionService._tokens(first) == RelistingDetectionService._tokens(
-            second
-        )
+        return RelistingDetectionService._tokens(first) == RelistingDetectionService._tokens(second)
