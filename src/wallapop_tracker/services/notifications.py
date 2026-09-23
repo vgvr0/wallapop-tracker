@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
+import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -245,6 +247,10 @@ class NotificationService:
         settings: NotificationSettings | None = None,
     ) -> None:
         self.database = database
+        self.worker_id = os.getenv(
+            "WALLAPOP_WORKER_ID", f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+        )
+        self.lease_seconds = max(1, int(os.getenv("WALLAPOP_NOTIFICATION_LEASE_SECONDS", "300")))
         self.settings = settings or NotificationSettings.from_env()
         if channels is None:
             if self.settings.webhook_enabled and not self.settings.webhook_url:
@@ -334,9 +340,13 @@ class NotificationService:
             )
 
     def _next_delivery_id(self, *, include_failed: bool = False) -> int | None:
-        with self.database.session() as session:
-            record = NotificationDeliveryRepository(session).next_pending(
-                self.settings.max_attempts, include_failed=include_failed
+        with self.database.transaction() as session:
+            record = NotificationDeliveryRepository(session).claim_next(
+                now=datetime.now(UTC),
+                worker_id=self.worker_id,
+                lease_seconds=self.lease_seconds,
+                max_attempts=self.settings.max_attempts,
+                include_failed=include_failed,
             )
             return record.id if record is not None else None
 
@@ -345,6 +355,8 @@ class NotificationService:
         with self.database.transaction() as session:
             delivery = session.get(NotificationDeliveryRecord, delivery_id)
             if delivery is None or delivery.status == NotificationDeliveryStatus.DELIVERED:
+                return False
+            if delivery.claimed_by != self.worker_id:
                 return False
             delivery.attempts += 1
             delivery.updated_at = datetime.now(UTC)
@@ -380,6 +392,9 @@ class NotificationService:
                 delivery.status = NotificationDeliveryStatus.DELIVERED
                 delivery.delivered_at = datetime.now(UTC)
                 delivery.last_error = None
+                delivery.next_attempt_at = None
+                delivery.claimed_by = None
+                delivery.claim_expires_at = None
                 logger.info(
                     "notification_delivery_succeeded delivery_id=%s event_id=%s "
                     "channel=%s attempts=%s",
@@ -392,6 +407,9 @@ class NotificationService:
                 return True
             delivery.status = NotificationDeliveryStatus.FAILED
             delivery.last_error = result.error or "notification channel failed"
+            delivery.next_attempt_at = datetime.now(UTC) + self._retry_delay(delivery.attempts)
+            delivery.claimed_by = None
+            delivery.claim_expires_at = None
             logger.warning(
                 "notification_delivery_failed delivery_id=%s event_id=%s channel=%s attempts=%s",
                 delivery_id,
@@ -402,6 +420,10 @@ class NotificationService:
             metrics.notification_deliveries_total.labels(delivery.channel, "failed").inc()
             metrics.notification_failures_total.labels(delivery.channel).inc()
             return False
+
+    @staticmethod
+    def _retry_delay(attempt: int) -> Any:
+        return timedelta(seconds=min(1800, 30 * (2 ** max(0, attempt - 1))))
 
     @staticmethod
     def _notification(session: Any, event: TrackingEventRecord) -> Notification:

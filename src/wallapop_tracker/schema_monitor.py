@@ -1,4 +1,5 @@
 """Cheap, value-independent payload schema fingerprints."""
+
 from __future__ import annotations
 
 import hashlib
@@ -41,28 +42,45 @@ def schema_diff(previous: set[str], current: set[str]) -> dict[str, list[str]]:
     return {"missing_paths": sorted(previous - current), "new_paths": sorted(current - previous)}
 
 
-def observe_schema(session: Session, source: str, payload: Any, *, observed_at: datetime | None = None) -> SchemaDriftEventRecord | None:
+def observe_schema(
+    session: Session, source: str, payload: Any, *, observed_at: datetime | None = None
+) -> SchemaDriftEventRecord | None:
     signature, paths = schema_fingerprint(payload)
     now = observed_at or datetime.now(UTC)
-    observation = session.scalar(select(SchemaObservationRecord).where(SchemaObservationRecord.source == source))
+    observation = session.scalar(
+        select(SchemaObservationRecord).where(SchemaObservationRecord.source == source)
+    )
     if observation is None:
-        session.add(SchemaObservationRecord(source=source, signature=signature,
-                                            paths_json=json.dumps(paths), detected_at=now))
+        session.add(
+            SchemaObservationRecord(
+                source=source, signature=signature, paths_json=json.dumps(paths), detected_at=now
+            )
+        )
         return None
     if observation.signature == signature:
         return None
     previous_paths = set(json.loads(observation.paths_json))
     diff = schema_diff(previous_paths, set(paths))
-    event: SchemaDriftEventRecord | None = SchemaDriftEventRecord(source=source, previous_signature=observation.signature,
-        current_signature=signature, missing_paths_json=json.dumps(diff["missing_paths"]),
-        new_paths_json=json.dumps(diff["new_paths"]), changed_types_json=json.dumps([]), detected_at=now)
+    event: SchemaDriftEventRecord | None = SchemaDriftEventRecord(
+        source=source,
+        previous_signature=observation.signature,
+        current_signature=signature,
+        missing_paths_json=json.dumps(diff["missing_paths"]),
+        new_paths_json=json.dumps(diff["new_paths"]),
+        changed_types_json=json.dumps([]),
+        detected_at=now,
+    )
     try:
         with session.begin_nested():
             session.add(event)
             session.flush()
     except IntegrityError:
         event = None
-    observation.signature, observation.paths_json, observation.detected_at = signature, json.dumps(paths), now
+    observation.signature, observation.paths_json, observation.detected_at = (
+        signature,
+        json.dumps(paths),
+        now,
+    )
     return event
 
 

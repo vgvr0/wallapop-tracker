@@ -1,6 +1,7 @@
 """Add tracked listing source and monitoring configuration."""
 
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 from alembic import op
 
@@ -41,20 +42,28 @@ def upgrade() -> None:
     if op.get_bind().dialect.name == "sqlite":
         _rebuild_sqlite_tracking_runs()
     else:
-        with op.batch_alter_table("tracking_runs", recreate="always") as batch:
-            batch.add_column(sa.Column("tracked_listing_id", sa.Integer(), nullable=True))
-            batch.create_foreign_key(
-                "fk_tracking_runs_tracked_listing",
-                "tracked_listings",
-                ["tracked_listing_id"],
-                ["id"],
+        existing_columns = {
+            column["name"] for column in inspect(op.get_bind()).get_columns("tracking_runs")
+        }
+        if "tracked_listing_id" not in existing_columns:
+            op.add_column(
+                "tracking_runs", sa.Column("tracked_listing_id", sa.Integer(), nullable=True)
             )
-            batch.drop_constraint("ck_tracking_runs_exactly_one_source", type_="check")
-            batch.create_check_constraint(
-                "ck_tracking_runs_exactly_one_source",
-                "((profile_id IS NOT NULL) + (tracked_search_id IS NOT NULL) + "
-                "(tracked_listing_id IS NOT NULL)) = 1",
-            )
+        op.create_foreign_key(
+            "fk_tracking_runs_tracked_listing",
+            "tracking_runs",
+            "tracked_listings",
+            ["tracked_listing_id"],
+            ["id"],
+        )
+        op.drop_constraint("ck_tracking_runs_exactly_one_source", "tracking_runs", type_="check")
+        op.create_check_constraint(
+            "ck_tracking_runs_exactly_one_source",
+            "tracking_runs",
+            "((CASE WHEN profile_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_search_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_listing_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
+        )
 
 
 def downgrade() -> None:
@@ -104,11 +113,15 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
         "price_changes",
         "duplicates_suppressed",
     ]
-    target_columns = source_columns if downgrade else [
-        *source_columns[:3],
-        "tracked_listing_id",
-        *source_columns[3:],
-    ]
+    target_columns = (
+        source_columns
+        if downgrade
+        else [
+            *source_columns[:3],
+            "tracked_listing_id",
+            *source_columns[3:],
+        ]
+    )
     source_sql = ", ".join(source_columns)
     target_sql = ", ".join(target_columns)
     exact_one = (
@@ -124,7 +137,7 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
         id INTEGER NOT NULL PRIMARY KEY,
         profile_id INTEGER REFERENCES profiles (id),
         tracked_search_id INTEGER REFERENCES tracked_searches (id),
-        {'' if downgrade else 'tracked_listing_id INTEGER REFERENCES tracked_listings (id),'}
+        {"" if downgrade else "tracked_listing_id INTEGER REFERENCES tracked_listings (id),"}
         started_at DATETIME NOT NULL,
         finished_at DATETIME,
         status VARCHAR(20) NOT NULL,
@@ -153,8 +166,7 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
     )
     if downgrade:
         copy_sql = (
-            f"INSERT INTO tracking_runs_new ({target_sql}) "
-            f"SELECT {source_sql} FROM tracking_runs"
+            f"INSERT INTO tracking_runs_new ({target_sql}) SELECT {source_sql} FROM tracking_runs"
         )
     else:
         copy_sql = (
@@ -168,11 +180,9 @@ def _rebuild_sqlite_tracking_runs(*, downgrade: bool = False) -> None:
     bind.exec_driver_sql("DROP TABLE tracking_runs")
     bind.exec_driver_sql("ALTER TABLE tracking_runs_new RENAME TO tracking_runs")
     bind.exec_driver_sql(
-        "CREATE INDEX ix_tracking_runs_profile_started "
-        "ON tracking_runs (profile_id, started_at)"
+        "CREATE INDEX ix_tracking_runs_profile_started ON tracking_runs (profile_id, started_at)"
     )
     bind.exec_driver_sql(
-        "CREATE INDEX ix_tracking_runs_status_finished "
-        "ON tracking_runs (status, finished_at)"
+        "CREATE INDEX ix_tracking_runs_status_finished ON tracking_runs (status, finished_at)"
     )
     bind.exec_driver_sql("PRAGMA foreign_keys=ON")

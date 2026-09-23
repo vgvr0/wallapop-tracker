@@ -14,8 +14,12 @@ depends_on = None
 
 def upgrade() -> None:
     with op.batch_alter_table("tracked_searches") as batch:
-        batch.create_check_constraint("ck_tracked_search_min_price_nonnegative", "min_price IS NULL OR min_price >= 0")
-        batch.create_check_constraint("ck_tracked_search_max_price_nonnegative", "max_price IS NULL OR max_price >= 0")
+        batch.create_check_constraint(
+            "ck_tracked_search_min_price_nonnegative", "min_price IS NULL OR min_price >= 0"
+        )
+        batch.create_check_constraint(
+            "ck_tracked_search_max_price_nonnegative", "max_price IS NULL OR max_price >= 0"
+        )
 
 
 def downgrade() -> None:

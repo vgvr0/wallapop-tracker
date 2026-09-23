@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -57,6 +58,8 @@ from wallapop_tracker.storage.repositories import (
     TrackedListingRepository,
     TrackedSearchRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class APIModel(BaseModel):
@@ -310,9 +313,12 @@ def _search(record: TrackedSearchRecord) -> SearchResponse:
         last_run_at=_utc(record.last_run_at),
         last_run_status=record.last_run_status,
         last_run_id=record.last_run_id,
-        target_price=record.target_price, percentage_drop_threshold=record.percentage_drop_threshold,
-        deal_score_threshold=record.deal_score_threshold, notify_on_30d_low=record.notify_on_30d_low,
-        notify_on_90d_low=record.notify_on_90d_low, notify_on_all_time_low=record.notify_on_all_time_low,
+        target_price=record.target_price,
+        percentage_drop_threshold=record.percentage_drop_threshold,
+        deal_score_threshold=record.deal_score_threshold,
+        notify_on_30d_low=record.notify_on_30d_low,
+        notify_on_90d_low=record.notify_on_90d_low,
+        notify_on_all_time_low=record.notify_on_all_time_low,
     )
 
 
@@ -428,6 +434,11 @@ def _schema_is_ready(database: Database) -> bool:
     try:
         project_root = Path(__file__).resolve().parents[3]
         config_path = project_root / "alembic.ini"
+        if not config_path.exists():
+            # In the container the package is installed under site-packages,
+            # while the migration files are copied to the application root.
+            project_root = Path.cwd()
+            config_path = project_root / "alembic.ini"
         config = Config(str(config_path if config_path.exists() else Path("alembic.ini")))
         config.set_main_option("script_location", str(project_root / "alembic"))
         script = ScriptDirectory.from_config(config)
@@ -438,6 +449,7 @@ def _schema_is_ready(database: Database) -> bool:
         # older deployments; Alembic still upgrades them to the new head.
         return current in {expected, "0013_marketplace_identity"}
     except Exception:
+        logger.exception("Readiness schema check failed")
         return False
 
 
@@ -459,7 +471,10 @@ def create_app(
         "off",
     }
     try:
-        database.create_all()
+        # Local SQLite remains convenient for development/tests. Production
+        # databases are provisioned exclusively through ``alembic upgrade head``.
+        if database.engine.dialect.name == "sqlite":
+            database.create_all()
     except Exception:
         # /health must remain available while /ready reports the outage.
         pass
@@ -608,9 +623,12 @@ def create_app(
                 interval_seconds=payload.interval_seconds,
                 notify_on_first_run=payload.notify_on_first_run,
                 marketplace=payload.marketplace,
-                target_price=payload.target_price, percentage_drop_threshold=payload.percentage_drop_threshold,
-                deal_score_threshold=payload.deal_score_threshold, notify_on_30d_low=payload.notify_on_30d_low,
-                notify_on_90d_low=payload.notify_on_90d_low, notify_on_all_time_low=payload.notify_on_all_time_low,
+                target_price=payload.target_price,
+                percentage_drop_threshold=payload.percentage_drop_threshold,
+                deal_score_threshold=payload.deal_score_threshold,
+                notify_on_30d_low=payload.notify_on_30d_low,
+                notify_on_90d_low=payload.notify_on_90d_low,
+                notify_on_all_time_low=payload.notify_on_all_time_low,
             )
             row.enabled = payload.enabled
             session.commit()
@@ -628,8 +646,14 @@ def create_app(
             row = TrackedSearchRepository(session).update(
                 search_id, **payload.model_dump(exclude_unset=True)
             )
-            for field in ("target_price", "percentage_drop_threshold", "deal_score_threshold",
-                          "notify_on_30d_low", "notify_on_90d_low", "notify_on_all_time_low"):
+            for field in (
+                "target_price",
+                "percentage_drop_threshold",
+                "deal_score_threshold",
+                "notify_on_30d_low",
+                "notify_on_90d_low",
+                "notify_on_all_time_low",
+            ):
                 if field in payload.model_fields_set:
                     setattr(row, field, getattr(payload, field))
             session.commit()
@@ -729,9 +753,12 @@ def create_app(
                 payload.alias,
                 interval_seconds=payload.interval_seconds,
                 notes=payload.notes,
-                target_price=payload.target_price, percentage_drop_threshold=payload.percentage_drop_threshold,
-                deal_score_threshold=payload.deal_score_threshold, notify_on_30d_low=payload.notify_on_30d_low,
-                notify_on_90d_low=payload.notify_on_90d_low, notify_on_all_time_low=payload.notify_on_all_time_low,
+                target_price=payload.target_price,
+                percentage_drop_threshold=payload.percentage_drop_threshold,
+                deal_score_threshold=payload.deal_score_threshold,
+                notify_on_30d_low=payload.notify_on_30d_low,
+                notify_on_90d_low=payload.notify_on_90d_low,
+                notify_on_all_time_low=payload.notify_on_all_time_low,
             )
             session.commit()
             return _tracked_listing(row)
@@ -752,8 +779,14 @@ def create_app(
             row = TrackedListingRepository(session).update(
                 tracked_listing_id, **payload.model_dump(exclude_unset=True)
             )
-            for field in ("target_price", "percentage_drop_threshold", "deal_score_threshold",
-                          "notify_on_30d_low", "notify_on_90d_low", "notify_on_all_time_low"):
+            for field in (
+                "target_price",
+                "percentage_drop_threshold",
+                "deal_score_threshold",
+                "notify_on_30d_low",
+                "notify_on_90d_low",
+                "notify_on_all_time_low",
+            ):
                 if field in payload.model_fields_set:
                     setattr(row, field, getattr(payload, field))
             session.commit()
@@ -934,17 +967,28 @@ def create_app(
 
     @api.get("/api/v1/alerts/rules", tags=["alerts"])
     def alert_rules(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
-        return [_alert_rule(row) for row in session.scalars(select(AlertRuleRecord).order_by(AlertRuleRecord.id))]
+        return [
+            _alert_rule(row)
+            for row in session.scalars(select(AlertRuleRecord).order_by(AlertRuleRecord.id))
+        ]
 
     @api.post("/api/v1/alerts/rules", status_code=201, tags=["alerts"])
-    def create_alert_rule(body: AlertRuleCreate, session: Session = Depends(get_session)) -> dict[str, Any]:
+    def create_alert_rule(
+        body: AlertRuleCreate, session: Session = Depends(get_session)
+    ) -> dict[str, Any]:
         if body.channel not in {"webhook", "telegram"}:
             raise HTTPException(status_code=422, detail="channel must be webhook or telegram")
         now = datetime.now(UTC)
-        row = AlertRuleRecord(event_type=body.event_type, channel=body.channel,
-            destination=body.destination, filters_json=json.dumps(body.filters),
-            cooldown_seconds=body.cooldown_seconds, enabled=body.enabled,
-            created_at=now, updated_at=now)
+        row = AlertRuleRecord(
+            event_type=body.event_type,
+            channel=body.channel,
+            destination=body.destination,
+            filters_json=json.dumps(body.filters),
+            cooldown_seconds=body.cooldown_seconds,
+            enabled=body.enabled,
+            created_at=now,
+            updated_at=now,
+        )
         session.add(row)
         session.flush()
         session.commit()
@@ -958,7 +1002,9 @@ def create_app(
         return _alert_rule(row)
 
     @api.patch("/api/v1/alerts/rules/{rule_id}", tags=["alerts"])
-    def patch_alert_rule(rule_id: int, body: AlertRulePatch, session: Session = Depends(get_session)) -> dict[str, Any]:
+    def patch_alert_rule(
+        rule_id: int, body: AlertRulePatch, session: Session = Depends(get_session)
+    ) -> dict[str, Any]:
         row = session.get(AlertRuleRecord, rule_id)
         if row is None:
             raise _not_found("Alert rule", rule_id)
@@ -1025,9 +1071,12 @@ def _tracked_listing(row: TrackedListingRecord) -> dict[str, Any]:
         "last_run_at": _utc(row.last_run_at),
         "last_run_status": row.last_run_status,
         "notes": row.notes,
-        "target_price": row.target_price, "percentage_drop_threshold": row.percentage_drop_threshold,
-        "deal_score_threshold": row.deal_score_threshold, "notify_on_30d_low": row.notify_on_30d_low,
-        "notify_on_90d_low": row.notify_on_90d_low, "notify_on_all_time_low": row.notify_on_all_time_low,
+        "target_price": row.target_price,
+        "percentage_drop_threshold": row.percentage_drop_threshold,
+        "deal_score_threshold": row.deal_score_threshold,
+        "notify_on_30d_low": row.notify_on_30d_low,
+        "notify_on_90d_low": row.notify_on_90d_low,
+        "notify_on_all_time_low": row.notify_on_all_time_low,
     }
 
 

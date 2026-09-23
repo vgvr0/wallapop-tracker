@@ -4,17 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import socket
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func, select
+
 from ..observability import get_metrics
 from ..storage.database import Database
-from ..storage.models import TrackingRunStatus
+from ..storage.models import (
+    TrackedListingRecord,
+    TrackedProfileRecord,
+    TrackedSearchRecord,
+    TrackingRunStatus,
+)
 from ..storage.repositories import (
-    TrackedListingRepository,
-    TrackedProfileRepository,
-    TrackedSearchRepository,
+    claim_tracking_jobs,
+    release_tracking_claim,
 )
 from .listing_tracker import ListingTrackingResult
 from .notifications import NotificationService
@@ -76,30 +85,27 @@ class TrackingScheduler:
         self.notification_service = notification_service or NotificationService(database)
         self.clock = clock or (lambda: datetime.now(UTC))
         self.max_concurrency = max_concurrency
+        self.worker_id = os.getenv(
+            "WALLAPOP_WORKER_ID", f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+        )
+        self.lease_seconds = max(1, int(os.getenv("WALLAPOP_JOB_LEASE_SECONDS", "900")))
 
     async def run_once(self, *, now: datetime | None = None) -> SchedulerResult:
         metrics = get_metrics()
         metrics.scheduler_polls_total.inc()
         current = _as_utc(now or self.clock())
-        with self.database.session() as session:
-            records = TrackedProfileRepository(session).list_enabled()
-            searches = TrackedSearchRepository(session).list_enabled()
-            listings = TrackedListingRepository(session).list_enabled()
-        due = [record for record in records if _is_due(record.last_run_at, current, self.interval)]
-        due_searches = [
-            search
-            for search in searches
-            if _is_due(
-                search.last_run_at,
-                current,
-                timedelta(seconds=search.interval_seconds),
+        with self.database.transaction() as session:
+            evaluated = sum(
+                session.scalar(select(func.count()).select_from(model).where(model.enabled)) or 0
+                for model in (TrackedProfileRecord, TrackedSearchRecord, TrackedListingRecord)
             )
-        ]
-        due_listings = [
-            listing
-            for listing in listings
-            if _is_due(listing.last_run_at, current, timedelta(seconds=listing.interval_seconds))
-        ]
+            due, due_searches, due_listings = claim_tracking_jobs(
+                session,
+                now=current,
+                worker_id=self.worker_id,
+                lease_seconds=self.lease_seconds,
+                interval=self.interval,
+            )
         total_jobs = len(due) + len(due_searches) + len(due_listings)
         semaphore = asyncio.Semaphore(self.max_concurrency)
         results: list[
@@ -122,6 +128,14 @@ class TrackingScheduler:
                         error=str(exc),
                     )
                 finally:
+                    with self.database.transaction() as session:
+                        record = session.scalar(
+                            select(TrackedProfileRecord).where(TrackedProfileRecord.alias == alias)
+                        )
+                        if record is not None and record.claimed_by == self.worker_id:
+                            release_tracking_claim(
+                                session, TrackedProfileRecord, record.id, self.worker_id
+                            )
                     metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
@@ -135,6 +149,10 @@ class TrackingScheduler:
                         search_id, None, TrackingRunStatus.FAILED, 0, error=str(exc)
                     )
                 finally:
+                    with self.database.transaction() as session:
+                        release_tracking_claim(
+                            session, TrackedSearchRecord, search_id, self.worker_id
+                        )
                     metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
@@ -148,6 +166,10 @@ class TrackingScheduler:
                         listing_id, None, TrackingRunStatus.FAILED, error=str(exc)
                     )
                 finally:
+                    with self.database.transaction() as session:
+                        release_tracking_claim(
+                            session, TrackedListingRecord, listing_id, self.worker_id
+                        )
                     metrics.scheduler_active_jobs.dec()
                 results[index] = result
 
@@ -204,7 +226,7 @@ class TrackingScheduler:
         except Exception:
             logger.exception("notification_delivery_cycle_failed")
         return SchedulerResult(
-            evaluated=len(records) + len(searches) + len(listings),
+            evaluated=evaluated,
             executed=len(ordered_results),
             succeeded=len(ordered_results) - failed,
             failed=failed,

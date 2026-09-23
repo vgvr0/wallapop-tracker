@@ -81,7 +81,10 @@ def test_score_is_explainable_and_deterministic(database):
         assert first.score is not None and first.score > 50
         assert first.score == second.score
         assert {reason.name for reason in first.reasons} >= {
-            "price_below_median", "price_below_p25", "fresh_listing", "market_depth"
+            "price_below_median",
+            "price_below_p25",
+            "fresh_listing",
+            "market_depth",
         }
         assert first.confidence > 0
 

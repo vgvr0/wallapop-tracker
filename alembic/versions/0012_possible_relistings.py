@@ -54,9 +54,7 @@ def upgrade() -> None:
         "possible_relistings",
         ["score", "detected_at"],
     )
-    op.create_index(
-        "ix_possible_relistings_current", "possible_relistings", ["current_listing_id"]
-    )
+    op.create_index("ix_possible_relistings_current", "possible_relistings", ["current_listing_id"])
 
 
 def downgrade() -> None:

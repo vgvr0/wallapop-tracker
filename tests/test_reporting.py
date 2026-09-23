@@ -78,9 +78,10 @@ def test_reporting_reconstructs_history_and_excludes_partial(database):
         session.commit()
 
         assert [point.count for point in get_inventory_history(session, profile.id)] == [2, 3, 2]
-        assert {
-            item.wallapop_item_id for item in get_current_inventory(session, profile.id)
-        } == {"a", "c"}
+        assert {item.wallapop_item_id for item in get_current_inventory(session, profile.id)} == {
+            "a",
+            "c",
+        }
         assert get_new_listings_between_runs(session, all_runs[0].id, all_runs[1].id) == [
             listing_records["c"].id
         ]
@@ -93,11 +94,13 @@ def test_reporting_reconstructs_history_and_excludes_partial(database):
         summary = get_weekly_summary(session, profile.id)
         assert [point.sold_count_delta for point in summary] == [None, 1, 1]
         assert (summary[1].price_decreases, summary[1].average_active_price) == (
-            1, Decimal("73.33333333333333333333333333")
+            1,
+            Decimal("73.33333333333333333333333333"),
         )
         assert summary[1].priced_listing_count == 3
         assert get_average_active_price(session, profile.id, all_runs[1].id) == (
-            Decimal("73.33333333333333333333333333"), 3
+            Decimal("73.33333333333333333333333333"),
+            3,
         )
 
 
@@ -124,10 +127,15 @@ def test_price_and_presence_history_include_reappearance(database):
         session.commit()
 
         assert [point.present for point in get_presence_history(session, listing.id)] == [
-            True, False, False, True
+            True,
+            False,
+            False,
+            True,
         ]
         assert [point.presence_state.value for point in get_price_history(session, listing.id)] == [
-            "active", "removed", "active"
+            "active",
+            "removed",
+            "active",
         ]
         duration = get_approx_active_duration(session, listing.id)
         assert duration is not None

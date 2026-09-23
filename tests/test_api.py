@@ -48,10 +48,16 @@ def test_health_api_endpoints_work_with_data(api_client):
     created = api_client.post("/api/v1/searches", json={"query": "phone"}).json()
     now = datetime.now(UTC)
     with api_client._health_database.transaction() as session:
-        session.add(TrackingRunRecord(
-            tracked_search_id=created["id"], started_at=now, finished_at=now,
-            status=TrackingRunStatus.VALID, health_status="SUCCESS", duration_ms=100,
-        ))
+        session.add(
+            TrackingRunRecord(
+                tracked_search_id=created["id"],
+                started_at=now,
+                finished_at=now,
+                status=TrackingRunStatus.VALID,
+                health_status="SUCCESS",
+                duration_ms=100,
+            )
+        )
     assert api_client.get("/api/v1/health").json()["runs_24h"] == 1
     assert api_client.get("/api/v1/health/runs").json()[0]["status"] == "SUCCESS"
     assert api_client.get(f"/api/v1/health/searches/{created['id']}").json()["status"] == "HEALTHY"
@@ -218,8 +224,14 @@ def test_advanced_alert_configuration_round_trips_for_search(api_client):
     assert created["deal_score_threshold"] is None
     updated = api_client.patch(
         f"/api/v1/searches/{created['id']}",
-        json={"target_price": "500", "percentage_drop_threshold": "10", "deal_score_threshold": "80",
-              "notify_on_30d_low": True, "notify_on_90d_low": True, "notify_on_all_time_low": True},
+        json={
+            "target_price": "500",
+            "percentage_drop_threshold": "10",
+            "deal_score_threshold": "80",
+            "notify_on_30d_low": True,
+            "notify_on_90d_low": True,
+            "notify_on_all_time_low": True,
+        },
     )
     assert updated.status_code == 200
     body = updated.json()
@@ -237,26 +249,43 @@ def test_tracked_listing_advanced_alerts_patch_preserves_unmodified_fields(api_c
 
     with api_client._health_database.transaction() as session:
         listing, _ = ListingRepository(session).get_or_create_global_listing(
-            Listing(item_id="item-1", user_id="seller", title="Camera", price=Decimal("100"),
-                    currency="EUR", url="https://example/item-1"), None
+            Listing(
+                item_id="item-1",
+                user_id="seller",
+                title="Camera",
+                price=Decimal("100"),
+                currency="EUR",
+                url="https://example/item-1",
+            ),
+            None,
         )
         listing_id = listing.id
-    created = api_client.post("/api/v1/tracked-listings", json={
-        "listing_id": listing_id, "alias": "camera", "target_price": "50",
-        "percentage_drop_threshold": "10", "deal_score_threshold": "80",
-        "notify_on_30d_low": True, "notify_on_90d_low": True,
-    })
+    created = api_client.post(
+        "/api/v1/tracked-listings",
+        json={
+            "listing_id": listing_id,
+            "alias": "camera",
+            "target_price": "50",
+            "percentage_drop_threshold": "10",
+            "deal_score_threshold": "80",
+            "notify_on_30d_low": True,
+            "notify_on_90d_low": True,
+        },
+    )
     assert created.status_code == 201
     tracked_id = created.json()["id"]
-    patched = api_client.patch(f"/api/v1/tracked-listings/{tracked_id}",
-                               json={"target_price": "40"})
+    patched = api_client.patch(
+        f"/api/v1/tracked-listings/{tracked_id}", json={"target_price": "40"}
+    )
     assert patched.status_code == 200
     body = patched.json()
     assert body["target_price"] in {"40", "40.00"}
     assert body["percentage_drop_threshold"] in {"10", "10.00"}
     assert body["deal_score_threshold"] in {"80", "80.00"}
-    cleared = api_client.patch(f"/api/v1/tracked-listings/{tracked_id}",
-                               json={"target_price": None, "deal_score_threshold": None})
+    cleared = api_client.patch(
+        f"/api/v1/tracked-listings/{tracked_id}",
+        json={"target_price": None, "deal_score_threshold": None},
+    )
     assert cleared.status_code == 200
     assert cleared.json()["target_price"] is None
     assert cleared.json()["deal_score_threshold"] is None

@@ -95,8 +95,10 @@ class DealScoringService:
             score += self.policy.price_weight * 12 / 55
             reasons.append(
                 DealScoreReason(
-                    "price_below_p25", round(self.policy.price_weight * 12 / 55, 2),
-                    snapshot.price, "Price is at or below market P25",
+                    "price_below_p25",
+                    round(self.policy.price_weight * 12 / 55, 2),
+                    snapshot.price,
+                    "Price is at or below market P25",
                 )
             )
 
@@ -106,7 +108,9 @@ class DealScoringService:
             score += freshness
             reasons.append(
                 DealScoreReason(
-                    "fresh_listing", freshness, age.total_seconds(),
+                    "fresh_listing",
+                    freshness,
+                    age.total_seconds(),
                     f"First seen {self._age_text(age)} ago",
                 )
             )
@@ -128,7 +132,9 @@ class DealScoringService:
             score += history_points
             reasons.append(
                 DealScoreReason(
-                    "price_drop", history_points, drop_count,
+                    "price_drop",
+                    history_points,
+                    drop_count,
                     f"{drop_count} observed price drop(s)",
                 )
             )
@@ -138,20 +144,24 @@ class DealScoringService:
             score += seller_points
             reasons.append(
                 DealScoreReason(
-                    "seller_history", seller_points, seller_description or "seller metrics",
+                    "seller_history",
+                    seller_points,
+                    seller_description or "seller metrics",
                     seller_description or "Seller metrics available",
                 )
             )
 
         relisting = self.session.scalar(
-            select(PossibleRelistingRecord.id).where(
-                PossibleRelistingRecord.current_listing_id == listing_id
-            ).limit(1)
+            select(PossibleRelistingRecord.id)
+            .where(PossibleRelistingRecord.current_listing_id == listing_id)
+            .limit(1)
         )
         if relisting is not None:
             reasons.append(
                 DealScoreReason(
-                    "possible_relisting", 0.0, True,
+                    "possible_relisting",
+                    0.0,
+                    True,
                     "Listing has a possible relisting signal",
                 )
             )
@@ -159,30 +169,42 @@ class DealScoringService:
         confidence = self._confidence(market.priced_listing_count, len(history_runs))
         reasons.append(
             DealScoreReason(
-                "market_depth", 0.0, market.priced_listing_count,
+                "market_depth",
+                0.0,
+                market.priced_listing_count,
                 f"{market.priced_listing_count} priced comparables; confidence {confidence:.0%}",
             )
         )
         return DealScore(
-            listing_id, search_id, int(round(_clamp(score, 0, 100))), confidence,
-            DealScoreStatus.SCORED, tuple(reasons), now,
+            listing_id,
+            search_id,
+            int(round(_clamp(score, 0, 100))),
+            confidence,
+            DealScoreStatus.SCORED,
+            tuple(reasons),
+            now,
         )
 
     def score_search(self, search_id: int, *, limit: int | None = None) -> list[DealScore]:
-        runs = list(self.session.scalars(
-            select(TrackingRunRecord)
-            .where(
-                TrackingRunRecord.tracked_search_id == search_id,
-                TrackingRunRecord.status == TrackingRunStatus.VALID,
+        runs = list(
+            self.session.scalars(
+                select(TrackingRunRecord)
+                .where(
+                    TrackingRunRecord.tracked_search_id == search_id,
+                    TrackingRunRecord.status == TrackingRunStatus.VALID,
+                )
+                .order_by(TrackingRunRecord.started_at, TrackingRunRecord.id)
             )
-            .order_by(TrackingRunRecord.started_at, TrackingRunRecord.id)
-        ))
+        )
         if not runs:
             return []
-        listing_ids = list(self.session.scalars(
-            select(TrackingRunListingRecord.listing_id)
-            .where(TrackingRunListingRecord.tracking_run_id == runs[-1].id)
-        ))
+        listing_ids = list(
+            self.session.scalars(
+                select(TrackingRunListingRecord.listing_id).where(
+                    TrackingRunListingRecord.tracking_run_id == runs[-1].id
+                )
+            )
+        )
         scores = [self.score_listing(listing_id, search_id) for listing_id in listing_ids]
         scores.sort(key=lambda item: (item.score is None, -(item.score or 0), item.listing_id))
         return scores[:limit] if limit is not None else scores
@@ -219,12 +241,16 @@ class DealScoringService:
         return 0.0, None
 
     def _history_runs(self, search_id: int) -> list[TrackingRunRecord]:
-        return list(self.session.scalars(
-            select(TrackingRunRecord).where(
-                TrackingRunRecord.tracked_search_id == search_id,
-                TrackingRunRecord.status == TrackingRunStatus.VALID,
-            ).order_by(TrackingRunRecord.started_at, TrackingRunRecord.id)
-        ))
+        return list(
+            self.session.scalars(
+                select(TrackingRunRecord)
+                .where(
+                    TrackingRunRecord.tracked_search_id == search_id,
+                    TrackingRunRecord.status == TrackingRunStatus.VALID,
+                )
+                .order_by(TrackingRunRecord.started_at, TrackingRunRecord.id)
+            )
+        )
 
     def _confidence(self, comparables: int, history_runs: int) -> float:
         depth = min(1.0, comparables / 20)
@@ -250,11 +276,11 @@ class DealScoringService:
     @staticmethod
     def _insufficient(listing_id: int, search_id: int, now: datetime, reason: str) -> DealScore:
         return DealScore(
-            listing_id, search_id, None, 0.0, DealScoreStatus.INSUFFICIENT_DATA,
-            (
-                DealScoreReason(
-                    reason, 0.0, None, "Not enough reliable data to calculate a score"
-                ),
-            ),
+            listing_id,
+            search_id,
+            None,
+            0.0,
+            DealScoreStatus.INSUFFICIENT_DATA,
+            (DealScoreReason(reason, 0.0, None, "Not enough reliable data to calculate a score"),),
             now,
         )

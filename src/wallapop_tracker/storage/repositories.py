@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -580,6 +580,107 @@ class NotificationDeliveryRepository:
             .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
             .limit(1)
         )
+
+    def claim_next(
+        self,
+        *,
+        now: datetime,
+        worker_id: str,
+        lease_seconds: int,
+        max_attempts: int,
+        include_failed: bool = False,
+    ) -> NotificationDeliveryRecord | None:
+        """Claim one delivery in a short transaction; PostgreSQL skips locked rows."""
+        statuses = [NotificationDeliveryStatus.PENDING, NotificationDeliveryStatus.PROCESSING]
+        if include_failed:
+            statuses.append(NotificationDeliveryStatus.FAILED)
+        query = (
+            select(NotificationDeliveryRecord)
+            .where(
+                NotificationDeliveryRecord.status.in_(statuses),
+                NotificationDeliveryRecord.attempts < max_attempts,
+                (NotificationDeliveryRecord.status != NotificationDeliveryStatus.PROCESSING)
+                | (NotificationDeliveryRecord.claim_expires_at.is_(None))
+                | (NotificationDeliveryRecord.claim_expires_at <= now),
+                *(
+                    ()
+                    if include_failed
+                    else (
+                        (NotificationDeliveryRecord.next_attempt_at.is_(None))
+                        | (NotificationDeliveryRecord.next_attempt_at <= now),
+                    )
+                ),
+            )
+            .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
+            .limit(1)
+        )
+        if self.session.bind is not None and self.session.bind.dialect.name == "postgresql":
+            query = query.with_for_update(skip_locked=True)
+        record = self.session.scalar(query)
+        if record is None:
+            return None
+        record.status = NotificationDeliveryStatus.PROCESSING
+        record.claimed_by = worker_id
+        record.processing_started_at = now
+        record.claim_expires_at = now + timedelta(seconds=lease_seconds)
+        record.updated_at = now
+        self.session.flush()
+        return record
+
+
+def claim_tracking_jobs(
+    session: Session,
+    *,
+    now: datetime,
+    worker_id: str,
+    lease_seconds: int,
+    interval: timedelta,
+) -> tuple[list[TrackedProfileRecord], list[TrackedSearchRecord], list[TrackedListingRecord]]:
+    """Claim due tracking sources without holding a DB lock during HTTP I/O."""
+    claimed: list[list[Any]] = [[], [], []]
+    definitions = (
+        (TrackedProfileRecord, TrackedProfileRepository, interval),
+        (TrackedSearchRecord, TrackedSearchRepository, None),
+        (TrackedListingRecord, TrackedListingRepository, None),
+    )
+    for index, (model, _repository, fixed_interval) in enumerate(definitions):
+        # Read candidate ids without locks, then lock one candidate at a time.
+        # This prevents a worker from locking the complete table while it scans
+        # due state and lets another worker make progress on other rows.
+        candidate_ids = session.scalars(
+            select(model.id).where(model.enabled).order_by(model.id)
+        ).all()
+        for candidate_id in candidate_ids:
+            query = select(model).where(model.id == candidate_id)
+            if session.bind is not None and session.bind.dialect.name == "postgresql":
+                query = query.with_for_update(skip_locked=True)
+            record = session.scalar(query)
+            if record is None:
+                continue
+            due_interval = fixed_interval or timedelta(seconds=record.interval_seconds)
+            last = (
+                record.last_run_at.astimezone(UTC)
+                if record.last_run_at and record.last_run_at.tzinfo
+                else record.last_run_at.replace(tzinfo=UTC)
+                if record.last_run_at
+                else None
+            )
+            available = record.claim_expires_at is None or record.claim_expires_at <= now
+            if available and (last is None or last + due_interval <= now):
+                record.claimed_at = now
+                record.claim_expires_at = now + timedelta(seconds=lease_seconds)
+                record.claimed_by = worker_id
+                claimed[index].append(record)
+        session.flush()
+    return claimed[0], claimed[1], claimed[2]
+
+
+def release_tracking_claim(session: Session, model: Any, record_id: int, worker_id: str) -> None:
+    record = session.get(model, record_id)
+    if record is not None and record.claimed_by == worker_id:
+        record.claimed_at = None
+        record.claim_expires_at = None
+        record.claimed_by = None
 
 
 class TrackedProfileRepository:

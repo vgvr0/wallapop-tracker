@@ -1,10 +1,49 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wallapop}
+      POSTGRES_USER: ${POSTGRES_USER:-wallapop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wallapop-local-only}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   tracker:
     build:
       context: .
+    # The image CMD starts the FastAPI service on port 8000. Pass your own
+    # command to run the CLI instead, e.g.:
+    #   docker compose run --rm tracker wallapop-track list
     ports:
       - "8000:8000"
     environment:
-      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-sqlite:///data/wallapop_tracker.db}
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+  scheduler:
+    build:
+      context: .
+    command: ["wallapop-track", "worker", "tracking"]
+    environment:
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+  notification-worker:
+    build:
+      context: .
+    command: ["wallapop-track", "worker", "notifications"]
+    environment:
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data

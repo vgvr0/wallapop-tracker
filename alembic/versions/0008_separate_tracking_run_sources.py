@@ -27,28 +27,20 @@ def upgrade() -> None:
     with op.batch_alter_table("tracking_runs") as batch:
         if "ck_tracking_runs_exactly_one_source" in existing_checks:
             batch.drop_constraint("ck_tracking_runs_exactly_one_source", type_="check")
-        batch.alter_column(
-            "profile_id", existing_type=sa.Integer(), nullable=True
-        )
+        batch.alter_column("profile_id", existing_type=sa.Integer(), nullable=True)
     with op.batch_alter_table("listings") as batch:
-        batch.alter_column(
-            "profile_id", existing_type=sa.Integer(), nullable=True
-        )
+        batch.alter_column("profile_id", existing_type=sa.Integer(), nullable=True)
 
     bind = op.get_bind()
     synthetic_ids = sa.text(
         "SELECT id FROM profiles WHERE wallapop_user_id LIKE 'tracked-search:%'"
     )
     bind.execute(
-        sa.text(
-            "UPDATE tracking_runs SET profile_id = NULL "
-            "WHERE tracked_search_id IS NOT NULL"
-        )
+        sa.text("UPDATE tracking_runs SET profile_id = NULL WHERE tracked_search_id IS NOT NULL")
     )
     bind.execute(
         sa.text(
-            "UPDATE listings SET profile_id = NULL "
-            "WHERE profile_id IN (" + str(synthetic_ids) + ")"
+            "UPDATE listings SET profile_id = NULL WHERE profile_id IN (" + str(synthetic_ids) + ")"
         )
     )
     bind.execute(
@@ -92,17 +84,11 @@ def downgrade() -> None:
         sa.text("SELECT COUNT(*) FROM listings WHERE profile_id IS NULL")
     ).scalar_one()
     if null_runs or null_listings:
-        raise RuntimeError(
-            "Cannot downgrade while search runs or unanchored listings exist"
-        )
+        raise RuntimeError("Cannot downgrade while search runs or unanchored listings exist")
 
     with op.batch_alter_table("tracking_runs") as batch:
         batch.drop_constraint("ck_tracking_runs_exactly_one_source", type_="check")
         batch.drop_constraint("fk_tracking_runs_tracked_search", type_="foreignkey")
-        batch.alter_column(
-            "profile_id", existing_type=sa.Integer(), nullable=False
-        )
+        batch.alter_column("profile_id", existing_type=sa.Integer(), nullable=False)
     with op.batch_alter_table("listings") as batch:
-        batch.alter_column(
-            "profile_id", existing_type=sa.Integer(), nullable=False
-        )
+        batch.alter_column("profile_id", existing_type=sa.Integer(), nullable=False)

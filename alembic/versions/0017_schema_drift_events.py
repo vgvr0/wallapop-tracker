@@ -1,4 +1,5 @@
 """Persist idempotent schema drift transitions."""
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -20,8 +21,9 @@ def upgrade() -> None:
         sa.Column("new_paths_json", sa.Text(), nullable=False),
         sa.Column("changed_types_json", sa.Text(), nullable=False),
         sa.Column("detected_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("source", "previous_signature", "current_signature",
-                            name="uq_schema_drift_transition"),
+        sa.UniqueConstraint(
+            "source", "previous_signature", "current_signature", name="uq_schema_drift_transition"
+        ),
     )
 
 

@@ -17,16 +17,23 @@ def upgrade() -> None:
         "tracked_searches",
         sa.Column("notify_on_first_run", sa.Boolean(), nullable=False, server_default="1"),
     )
-    op.execute(
-        sa.text("UPDATE tracked_searches SET notify_on_first_run = 1")
-    )
-    with op.batch_alter_table("tracked_searches", recreate="always") as batch:
-        batch.alter_column(
+    op.execute(sa.text("UPDATE tracked_searches SET notify_on_first_run = TRUE"))
+    if op.get_bind().dialect.name == "postgresql":
+        op.alter_column(
+            "tracked_searches",
             "notify_on_first_run",
-            server_default="0",
+            server_default=sa.text("false"),
             existing_type=sa.Boolean(),
             existing_nullable=False,
         )
+    else:
+        with op.batch_alter_table("tracked_searches", recreate="always") as batch:
+            batch.alter_column(
+                "notify_on_first_run",
+                server_default="0",
+                existing_type=sa.Boolean(),
+                existing_nullable=False,
+            )
 
 
 def downgrade() -> None:
