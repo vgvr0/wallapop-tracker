@@ -7,6 +7,7 @@ Wallapop Tracker is a read-only tracker for authorized monitoring of public Wall
 - Asynchronous HTTP client for public profile, statistics, review-summary, listing, and search data.
 - Tracked-search monitoring with configurable query, price range, filters, enable/disable state, and per-search interval.
 - Pure filters for price, case-insensitive include ANY/ALL, exclusions, and regular expressions.
+- Independent title/description text filters (`title_include`, `description_include`, `title_exclude`, `description_exclude`) plus exact first-word title filters.
 - Profile URL resolution through the public profile page or a locally recognizable canonical ID.
 - Cursor-based listing pagination with duplicate and repeated-cursor protection.
 - Historical SQLite/SQLAlchemy storage for profiles, listings, tracking runs, presence, and snapshots.
@@ -130,6 +131,9 @@ wallapop-track schedule --interval-hours 168
 wallapop-track schedule --once --max-concurrency 4
 wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
 wallapop-track search add --name "iphone con avisos iniciales" --query "iphone 15 pro" --notify-on-first-run
+wallapop-track search add --name "iphone limpio" --query "iphone" --title-include iphone --title-include "15 pro" --title-include-mode all --description-include factura --title-exclude funda --description-exclude "para piezas" --title-first-word-include iphone --title-first-word-exclude lote
+wallapop-track search update 1 --description-include garantia --title-exclude carcasa
+wallapop-track search update 1 --clear-text-filters
 wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato" --notify-on-first-run
 wallapop-track metadata categories
 wallapop-track metadata filters --query iphone --category-id 24200
@@ -160,7 +164,7 @@ wallapop-track listing disable camera
 wallapop-track listing remove camera --yes
 ```
 
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
+`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. The advanced text filters are repeatable too: `--title-include`, `--description-include`, `--title-exclude`, `--description-exclude`, `--title-first-word-include` and `--title-first-word-exclude`, with `--title-include-mode` / `--description-include-mode` selecting ANY or ALL. `search update <id>` replaces only the text filters you pass, keeps the rest of the stored configuration, and `--clear-text-filters` removes them; see [Search filters](#search-filters) for the exact semantics. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
 The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
 
@@ -172,6 +176,60 @@ The scheduler runs due profiles, searches, and tracked listings with bounded
 global concurrency (default `4`), while the shared Wallapop client limiter
 continues to control HTTP request rate. SQLite file databases use WAL and a
 busy timeout; multiple scheduler processes are not coordinated.
+
+## Search filters
+
+Tracked searches store their structured filters as validated JSON (`filters_json`), so the advanced text filters are additive: existing rows keep working without migration, and price bounds stay on the `TrackedSearch` row. The CLI, the REST API (`filters` in `POST /api/v1/searches` and `PATCH /api/v1/searches/{id}`) and the repository accept the same keys.
+
+| Filter | Scope | Behaviour |
+| --- | --- | --- |
+| `include` / `include_mode` | title + description | Legacy combined search; the mode selects ANY or ALL |
+| `exclude` | title + description | Rejects the listing when any term appears |
+| `title_include` | title | Requires every / at least one term, per `title_include_mode` |
+| `description_include` | description | Requires every / at least one term, per `description_include_mode` |
+| `title_exclude` | title | Rejects the listing when any term appears in the title |
+| `description_exclude` | description | Rejects the listing when any term appears in the description |
+| `title_first_word_include` | first title word | Keeps the listing only when the first normalized word equals one of the terms |
+| `title_first_word_exclude` | first title word | Rejects the listing when the first normalized word equals one of the terms |
+
+Aliases accepted for backwards/convenience compatibility (they are the same filters, not additional ones):
+
+```text
+title_must_include -> title_include
+description_must_include -> description_include
+```
+
+Title and description filters are independent: a term configured for the title is only satisfied by the title, and a term configured for the description only by the description. `ANY` means at least one term must be present and `ALL` means every term must be present.
+
+Text comparisons are case-insensitive and whitespace-tolerant, and they never modify the stored text: filters normalize a copy of the title or description (casefold plus collapsed spaces) and the original snapshot keeps the Wallapop value. Accents are not folded, because the current normalization does not fold them, so `camión` and `camion` remain different terms. `None` and empty values simply never match an include term and never trigger an exclude.
+
+### First word matching
+
+The first word is the first whitespace-delimited token of the normalized title with surrounding punctuation removed, so `¡iPhone 15!` and `iPhone, 15` both yield `iphone`, while `iPhone-15 Pro` yields `iphone-15`. Matching is exact over that word (`iph` does not match `iphone`) and ignores letter case and leading spaces. Titles that are missing, empty or punctuation-only normalize to an empty word: they never satisfy `title_first_word_include` and are never rejected by `title_first_word_exclude`. Only the first word of each configured term is considered, so a multi-word term behaves like its first word.
+
+### Evaluation order
+
+Every configured filter is combined with AND, and the evaluation order is:
+
+```text
+price
+→ structured filters (condition, category, brand, model, distance)
+→ include / include_mode (legacy, title + description)
+→ NOT exclude (legacy, title + description)
+→ title_include
+→ description_include
+→ NOT title_exclude
+→ NOT description_exclude
+→ title_first_word_include
+→ NOT title_first_word_exclude
+→ regex
+```
+
+Every step is ANDed, so the order is descriptive: a listing must satisfy all configured filters. The same term in an include and an exclude list is resolved by the exclude, which always wins.
+
+### Description availability
+
+Wallapop's search response already carries a `description` field and the normalized `Listing` keeps it, so `description_include` and `description_exclude` run on the search payload itself and no extra per-listing detail request is issued. Filters can only see what the search payload exposes: when Wallapop omits or shortens a description there, description terms will not match it (and description excludes will not reject it). Re-run `wallapop-track search run <id>` and inspect the stored snapshots if a description filter behaves unexpectedly.
 
 ## Scheduling
 
@@ -291,6 +349,7 @@ The client itself also accepts runtime options such as base URLs, timeout, retry
 - The project is read-only. It does not automate purchases, messages, listing edits, or any other action on Wallapop.
 - It is intended for authorized, moderate-volume monitoring, not for mass scraping.
 - Search results are intentionally limited to a configurable recent-page window (`max_pages`, default five), rather than being an exhaustive historical search.
+- Description filters use the `description` returned by the search payload; the tracker does not issue one detail request per listing to complete or extend it.
 - Notification delivery is intentionally sequential and has no distributed queue or concurrent worker pool.
 - Direct listing detail depends on the observed public endpoint `/api/v3/items/{id}`; its undocumented contract may change and remains covered by offline fixtures.
 

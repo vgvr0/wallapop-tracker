@@ -30,6 +30,14 @@ at 200. Score search uses `limit` capped at 100. Money is serialized as a
 two-decimal string and datetimes are UTC ISO-8601 values. Analytics durations
 are serialized as seconds.
 
+`POST /api/v1/searches` and `PATCH /api/v1/searches/{id}` accept the tracked
+search `filters` object verbatim. It is the same JSON configuration the CLI
+writes, including the advanced text filters `title_include`,
+`description_include`, `title_exclude`, `description_exclude`,
+`title_first_word_include`, `title_first_word_exclude` and their
+`title_include_mode` / `description_include_mode` (`any` or `all`) policies.
+See [`../README.md`](../README.md#search-filters) for the exact semantics.
+
 Known missing entities return 404, invalid input returns 422, and local
 configuration conflicts such as duplicate tracked-listing aliases return 409.
 Notification destinations are redacted. No authentication is implemented in

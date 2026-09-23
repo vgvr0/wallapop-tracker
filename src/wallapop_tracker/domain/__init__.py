@@ -3,22 +3,30 @@
 from .changes import ChangeType, DetectedChange
 from .filters import (
     ExcludeTextFilter,
+    FieldExcludeFilter,
+    FieldIncludeFilter,
     FilterEngine,
     IncludeMode,
     IncludeTextFilter,
     ListingFilter,
     PriceFilter,
     RegexFilter,
+    TextField,
+    TitleFirstWordFilter,
 )
 
 __all__ = [
     "ChangeType",
     "DetectedChange",
     "ExcludeTextFilter",
+    "FieldExcludeFilter",
+    "FieldIncludeFilter",
     "FilterEngine",
     "IncludeMode",
     "IncludeTextFilter",
     "ListingFilter",
     "PriceFilter",
     "RegexFilter",
+    "TextField",
+    "TitleFirstWordFilter",
 ]

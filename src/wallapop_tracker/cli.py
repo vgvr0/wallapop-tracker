@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
@@ -106,6 +107,31 @@ def _decimal_option(value: str | None, name: str) -> Decimal | None:
         return Decimal(value)
     except Exception as exc:
         raise typer.BadParameter(f"{name} must be numeric") from exc
+
+
+_TEXT_FILTER_KEYS = (
+    "title_include",
+    "description_include",
+    "title_exclude",
+    "description_exclude",
+    "title_first_word_include",
+    "title_first_word_exclude",
+)
+
+
+def _text_filter_summary(filters: Mapping[str, object]) -> list[str]:
+    """Human-readable summary of the advanced text filters that are in use."""
+
+    lines: list[str] = []
+    for key in _TEXT_FILTER_KEYS:
+        value = filters.get(key)
+        terms = [str(item) for item in value] if isinstance(value, list) else []
+        if not terms:
+            continue
+        mode = filters.get(f"{key}_mode")
+        suffix = f" ({mode})" if isinstance(mode, str) else ""
+        lines.append(f"{key}: {', '.join(terms)}{suffix}")
+    return lines
 
 
 @analytics_app.command("market")
@@ -548,6 +574,18 @@ def search_add(
     include: list[str] = typer.Option([], "--include"),  # noqa: B008
     exclude: list[str] = typer.Option([], "--exclude"),  # noqa: B008
     include_all: bool = typer.Option(False, "--include-all"),
+    title_include: list[str] = typer.Option([], "--title-include"),  # noqa: B008
+    title_include_mode: str = typer.Option("any", "--title-include-mode"),
+    description_include: list[str] = typer.Option([], "--description-include"),  # noqa: B008
+    description_include_mode: str = typer.Option("any", "--description-include-mode"),
+    title_exclude: list[str] = typer.Option([], "--title-exclude"),  # noqa: B008
+    description_exclude: list[str] = typer.Option([], "--description-exclude"),  # noqa: B008
+    title_first_word_include: list[str] = typer.Option(  # noqa: B008
+        [], "--title-first-word-include"
+    ),
+    title_first_word_exclude: list[str] = typer.Option(  # noqa: B008
+        [], "--title-first-word-exclude"
+    ),
     regex: str | None = typer.Option(None, "--regex"),
     regex_target: str = typer.Option("both", "--regex-target"),
     category_id: str | None = typer.Option(None, "--category-id"),
@@ -564,6 +602,14 @@ def search_add(
         "include": include,
         "exclude": exclude,
         "include_mode": "all" if include_all else "any",
+        "title_include": title_include,
+        "title_include_mode": title_include_mode,
+        "description_include": description_include,
+        "description_include_mode": description_include_mode,
+        "title_exclude": title_exclude,
+        "description_exclude": description_exclude,
+        "title_first_word_include": title_first_word_include,
+        "title_first_word_exclude": title_first_word_exclude,
         "regex": regex,
         "regex_target": regex_target,
         "category_id": category_id,
@@ -592,8 +638,79 @@ def search_add(
         database.close()
     typer.echo(f"id: {record.id}")
     typer.echo(f"query: {record.query}")
+    for line in _text_filter_summary(filters):
+        typer.echo(line)
     typer.echo(f"initial notifications: {'enabled' if record.notify_on_first_run else 'disabled'}")
     typer.echo("enabled: true")
+
+
+@search_app.command("update")
+def search_update(
+    search_id: int,
+    name: str | None = typer.Option(None, "--name"),
+    title_include: list[str] | None = typer.Option(None, "--title-include"),  # noqa: B008
+    title_include_mode: str | None = typer.Option(None, "--title-include-mode"),
+    description_include: list[str] | None = typer.Option(  # noqa: B008
+        None, "--description-include"
+    ),
+    description_include_mode: str | None = typer.Option(None, "--description-include-mode"),
+    title_exclude: list[str] | None = typer.Option(None, "--title-exclude"),  # noqa: B008
+    description_exclude: list[str] | None = typer.Option(  # noqa: B008
+        None, "--description-exclude"
+    ),
+    title_first_word_include: list[str] | None = typer.Option(  # noqa: B008
+        None, "--title-first-word-include"
+    ),
+    title_first_word_exclude: list[str] | None = typer.Option(  # noqa: B008
+        None, "--title-first-word-exclude"
+    ),
+    clear_text_filters: bool = typer.Option(False, "--clear-text-filters"),
+) -> None:
+    """Update the advanced text filters of an existing tracked search."""
+    overrides: dict[str, object] = {
+        "title_include": title_include,
+        "title_include_mode": title_include_mode,
+        "description_include": description_include,
+        "description_include_mode": description_include_mode,
+        "title_exclude": title_exclude,
+        "description_exclude": description_exclude,
+        "title_first_word_include": title_first_word_include,
+        "title_first_word_exclude": title_first_word_exclude,
+    }
+    provided = {key: value for key, value in overrides.items() if value is not None}
+    if not provided and not clear_text_filters and name is None:
+        raise typer.BadParameter("provide at least one option to update")
+    database = _db()
+    try:
+        with database.transaction() as session:
+            repository = TrackedSearchRepository(session)
+            record = repository.get(search_id)
+            if record is None:
+                raise typer.BadParameter(f"Unknown search: {search_id}")
+            filters: dict[str, object] = (
+                json.loads(record.filters_json) if record.filters_json else {}
+            )
+            if not isinstance(filters, dict):
+                raise typer.BadParameter("stored search filters are not a JSON object")
+            if clear_text_filters:
+                for key in (
+                    *_TEXT_FILTER_KEYS,
+                    "title_include_mode",
+                    "description_include_mode",
+                ):
+                    filters.pop(key, None)
+            filters |= provided
+            record = repository.update(search_id, name=name, filters=filters)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"id: {record.id}")
+    typer.echo(f"name: {record.name or '-'}")
+    typer.echo(f"query: {record.query}")
+    for line in _text_filter_summary(filters):
+        typer.echo(line)
+    typer.echo(f"enabled: {record.enabled}")
 
 
 @search_app.command("list")

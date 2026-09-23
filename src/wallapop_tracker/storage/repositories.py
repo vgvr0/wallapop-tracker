@@ -701,6 +701,30 @@ def _validate_search_filters(filters: dict[str, Any] | None) -> None:
         value = filters.get(key)
         if isinstance(value, list) and len(value) != len(set(value)):
             raise ValueError(f"{key} must not contain duplicates")
+    for key in ("title_include_mode", "description_include_mode"):
+        value = filters.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or value.casefold() not in {"any", "all"}:
+            raise ValueError(f"{key} must be 'any' or 'all'")
+    for key in _TEXT_FILTER_KEYS:
+        value = filters.get(key)
+        if value is None or isinstance(value, str):
+            continue
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"{key} must be a string or a list of strings")
+
+
+_TEXT_FILTER_KEYS = (
+    "title_include",
+    "title_must_include",
+    "description_include",
+    "description_must_include",
+    "title_exclude",
+    "description_exclude",
+    "title_first_word_include",
+    "title_first_word_exclude",
+)
 
 
 def _json_text(value: Any) -> str | None:

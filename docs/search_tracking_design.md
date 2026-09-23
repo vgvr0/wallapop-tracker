@@ -70,11 +70,77 @@ estructurada equivalente a `(event_type, item_id, old_price, new_price)`.
 
 * `domain/filters.py`: `PriceFilter`, inclusión/exclusión de texto, regex y
   composición determinista.
+* `domain/filters.py`: filtros de texto por campo (`FieldIncludeFilter`,
+  `FieldExcludeFilter`) y filtros exactos de primera palabra del título
+  (`TitleFirstWordFilter`).
 * `services/search_tracker.py`: captura, filtrado, snapshots, asociaciones y
   eventos de búsquedas.
 * Repositorios para búsquedas, asociaciones y eventos, más una migración
   Alembic posterior a `0006`.
-* Comandos `search add/list/show/enable/disable/delete/run/run-all`.
+* Comandos `search add/update/list/show/enable/disable/delete/run/run-all`.
 
 La deduplicación es persistente, transaccional y protegida por una restricción
 única. No se realizan acciones de escritura en Wallapop.
+
+## Filtros avanzados de texto
+
+Los filtros estructurados se guardan en `tracked_searches.filters_json`, el
+mismo límite JSON compatible que ya existía. Por eso no hace falta ninguna
+migración: las búsquedas antiguas siguen funcionando sin los campos nuevos y
+los campos nuevos se validan en el repositorio antes de persistirse.
+
+Claves admitidas:
+
+```text
+include / include_mode            (heredado: título + descripción)
+exclude                           (heredado: título + descripción)
+title_include
+title_include_mode = any | all
+description_include
+description_include_mode = any | all
+title_exclude
+description_exclude
+title_first_word_include
+title_first_word_exclude
+```
+
+Alias aceptados por compatibilidad/conveniencia (son los mismos filtros, no
+filtros adicionales):
+
+```text
+title_must_include -> title_include
+description_must_include -> description_include
+```
+
+Normalización única: `normalize_text` pasa a minúsculas (`casefold`) y colapsa
+espacios; `normalize_first_word` toma el primer token y recorta la puntuación
+de los extremos. Los filtros comparan siempre sobre una copia normalizada, por
+lo que el texto almacenado en `listings` y `listing_snapshots` nunca se
+reescribe. Los acentos no se pliegan porque la normalización actual tampoco lo
+hacía.
+
+Orden lógico explícito (todos los términos se combinan con AND):
+
+```text
+price
+→ structured filters (condición, categoría, marca, modelo, distancia)
+→ include / include_mode (heredado, título + descripción)
+→ NOT exclude (heredado, título + descripción)
+→ title_include
+→ description_include
+→ NOT title_exclude
+→ NOT description_exclude
+→ title_first_word_include
+→ NOT title_first_word_exclude
+→ regex
+```
+
+La primera palabra es exacta, no substring: `iph` no coincide con `iphone`.
+Un título `None`, vacío o solo con símbolos normaliza a cadena vacía, de modo
+que nunca satisface una lista de inclusión y nunca es rechazado por una lista
+de exclusión.
+
+La descripción se toma del propio payload de búsqueda (`description` ya está
+presente en las respuestas observadas y `Listing` la conserva). No se añaden
+peticiones de detalle por anuncio: si el payload omite o acorta la
+descripción, los términos de descripción simplemente no coinciden.
