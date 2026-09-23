@@ -1,501 +1,416 @@
 # Wallapop Tracker
 
-Wallapop Tracker is a read-only tracker for authorized monitoring of public Wallapop profiles and searches. It stores historical snapshots, applies reusable filters, derives changes, and deduplicates global listing alerts across overlapping searches. It does not write to Wallapop.
+**Read-only marketplace monitoring and deal intelligence for authorized public Wallapop data.**
 
-## Key features
+Wallapop Tracker watches public Wallapop profiles, saved searches and individual listings; stores
+their history in SQLite; derives changes; explains why a listing matched or failed a search; scores
+deals in context; and delivers deduplicated alerts through webhook, Discord and Telegram. It never
+writes to Wallapop: no purchases, no messages, no listing edits.
 
-- Asynchronous HTTP client for public profile, statistics, review-summary, listing, and search data.
-- Tracked-search monitoring with configurable query, price range, filters, enable/disable state, and per-search interval.
-- Pure filters for price, case-insensitive include ANY/ALL, exclusions, and regular expressions.
-- Independent title/description text filters (`title_include`, `description_include`, `title_exclude`, `description_exclude`) plus exact first-word title filters.
-- Profile URL resolution through the public profile page or a locally recognizable canonical ID.
-- Cursor-based listing pagination with duplicate and repeated-cursor protection.
-- Historical SQLite/SQLAlchemy storage for profiles, listings, tracking runs, presence, and snapshots.
-- Valid, partial, and failed tracking-run outcomes with component-level capture flags.
-- Deterministic diffing for new, removed, and reappeared listings; prices; titles; reservation; shipping; brand; rating; review count; and sold count.
-- Read-only reporting queries for current inventory, inventory history, price history, presence history, profile metrics, active duration, and weekly summaries.
-- Backward-compatible legacy alert tables remain readable, but new alerts use
-  `TrackingEvent` and `NotificationDelivery` exclusively.
-- Persistent global event idempotency: one new-listing or price-change alert per listing transition, even across overlapping searches and process restarts.
-- Persistent notification deliveries with idempotent webhook and Telegram channels.
-- Direct listing monitoring with shared listing identity, snapshots, events, and notifications.
-- Explicit sold-listing detection from Wallapop signals, with sold history and last observed asking price.
-- Read-only metadata discovery for observed categories, filters, brands, and models.
-- Conservative rate limiting, retries, `Retry-After` handling, and optional RAW response capture for contract investigation.
-- Typer CLI for tracked-profile administration, manual runs, batch runs, and scheduling.
-- Alembic migrations for the historical schema and alert-related tables.
+| | |
+| --- | --- |
+| Version | `1.0.0` |
+| Python | `>=3.12` |
+| Interfaces | `wallapop-track` CLI, local/private FastAPI service, Prometheus-compatible `/metrics` |
+| Storage | SQLite local or PostgreSQL via SQLAlchemy 2, Alembic migrations `0001`–`0022` |
+| Status | Private repository, MIT licensed — see [Release status](#release-status) |
+
+## What it does
+
+- Tracks public profiles and their historical metrics (rating, reviews, published, sales, sold).
+- Tracks saved searches with query, price bounds, structured filters and a per-search interval.
+- Deduplicates new-listing and price-change alerts globally across overlapping searches, including
+  across process restarts.
+- Tracks individual listings with their own interval, target price, percentage-drop and deal-score
+  alerts.
+- Parses profile, stats, reviews, item, search and metadata payloads through fixture-backed parsers.
+- Detects changes deterministically: new, removed and reappeared listings; price, title, reservation,
+  shipping, brand and condition changes; profile metric changes.
+- Detects explicitly sold listings, and heuristic possible relistings without merging identities.
+- Reports read-only market analytics (summary, prices, activity, sellers, brands) and contextual deal
+  scores.
+- Persists and retries notification deliveries per channel, with secrets redacted from logs.
+- Exposes a FastAPI transport layer plus `/health`, `/ready` and Prometheus `/metrics`.
+- Runs one-shot, scheduled or manual tracking through a bounded-concurrency scheduler.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [First safe demo](#first-safe-demo)
+- [Common CLI commands](#common-cli-commands)
+- [Configuration](#configuration)
+- [Testing and CI](#testing-and-ci)
+- [Docker](#docker)
+- [Troubleshooting](#troubleshooting)
+- [Limitations](#limitations)
+
+## Quick start
+
+### 1. Install
+
+```bash
+git clone https://github.com/vgvr0/wallapop-tracker.git
+cd wallapop-tracker
+python -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+```
+
+### 2. Create the schema before the first run
+
+```bash
+export WALLAPOP_TRACKER_DB_URL=sqlite:///data/wallapop_tracker.db   # optional; this is the default
+mkdir -p data                                                       # PowerShell: New-Item -ItemType Directory -Force data
+alembic upgrade head
+```
+
+In Windows PowerShell use `$env:WALLAPOP_TRACKER_DB_URL = "sqlite:///data/wallapop_tracker.db"`
+instead of `export`.
+
+Apply migrations before the first CLI or API start. The application can also create missing tables
+from SQLAlchemy metadata, but such a database has no `alembic_version` row, so `GET /ready` reports
+`503` until it is stamped with `alembic stamp head`. Do not run `alembic upgrade head` against a
+database the application created that way: SQLite DDL is not transactional, the migration fails
+half-way and leaves a misleading revision behind.
+
+### 3. Confirm the installation without live requests
+
+```bash
+wallapop-track --help
+pytest
+```
+
+The default test command excludes opt-in live tests and uses checked-in fixtures. The tracking
+commands below contact Wallapop and are not part of the safe installation check.
+
+## First safe demo
+
+```bash
+mkdir -p data                    # PowerShell: New-Item -ItemType Directory -Force data
+alembic upgrade head
+wallapop-track --help
+wallapop-track list
+pytest
+```
+
+To check the local API, run `uvicorn wallapop_tracker.api.app:app --host 127.0.0.1 --port 8000` in
+another terminal and request `/health`, `/ready`, `/metrics` and `/docs`. Read endpoints use the
+local database and do not request Wallapop data.
+
+### 4. First tracking commands
+
+```bash
+wallapop-track add https://es.wallapop.com/user/<profile> --alias seller
+wallapop-track list
+wallapop-track run seller
+wallapop-track search add --name "iphone 15 pro" --query "iphone 15 pro" --max-price 650
+wallapop-track search run-all
+```
+
+### 5. REST API (local/private)
+
+```bash
+uvicorn wallapop_tracker.api.app:app --host 127.0.0.1 --port 8000
+curl http://127.0.0.1:8000/health     # {"status":"ok"}
+curl http://127.0.0.1:8000/ready      # 200 only when the schema is at the Alembic head
+curl http://127.0.0.1:8000/metrics
+```
+
+Interactive API documentation is served at `/docs`; the endpoint reference is
+[`docs/api.md`](docs/api.md).
+
+### 6. Docker
+
+The image installs the package into a Python 3.12 slim base and runs as the non-root `app` user. Its
+default process is the FastAPI service. The checked-in Compose file also starts PostgreSQL and two
+worker services; it is not the SQLite quick-start path:
+
+```text
+uvicorn wallapop_tracker.api.app:app --host 0.0.0.0 --port 8000
+```
+
+```bash
+docker build -t wallapop-tracker .
+docker compose config
+docker compose run --rm tracker alembic upgrade head
+docker compose up                                      # API on :8000, plus postgres and workers
+docker compose run --rm tracker wallapop-track list    # CLI instead of the default process
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+```
+
+`docker-compose.yml` publishes port `8000`, defaults `WALLAPOP_TRACKER_DB_URL` to its PostgreSQL
+service, and defines `tracker`, `scheduler` and `notification-worker`. The `./data` mount is kept
+for local artifacts. The PostgreSQL/worker implementation is a separate workstream and is not
+claimed as part of the SQLite quick-start validation.
+
+Docker was not executed while preparing this release (no Docker runtime was available in that
+environment), so the container was validated by inspection only. Treat the commands above as the
+supported flow and confirm the first start through `/health` and `/ready`.
+
+## Security and deployment scope
+
+- **REST API for local/private deployments.** No authentication or authorization is implemented: bind
+  it to localhost or a trusted network, put your own access control in front of it, and do not publish
+  it as an internet-facing API.
+- **Wallapop access is read-only** and relies on internal/undocumented endpoints, so the project is
+  intended for authorized, moderate-volume monitoring rather than mass scraping.
+- **Secrets stay in the environment.** Delivery destinations, tokens and headers are read from
+  environment variables and redacted from logs and stored delivery errors. `.env` is git-ignored and
+  `.env.example` lists names with placeholder defaults only.
+- **The API serves local data.** Serving read queries performs no Wallapop request.
+
+## Configuration
+
+These are the only variables read by the code. All are optional and have a working default except the
+destinations of the channels you explicitly enable.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `WALLAPOP_TRACKER_DB_URL` | `sqlite:///data/wallapop_tracker.db` | SQLAlchemy URL used by the CLI, the API and `alembic` |
+| `WALLAPOP_LOG_LEVEL` | `INFO` | Standard logging level |
+| `WALLAPOP_LOG_FORMAT` | `human` | `human` or `json` structured logging |
+| `WALLAPOP_METRICS_ENABLED` | `true` | Enables `/metrics` and HTTP request metrics |
+| `WALLAPOP_NOTIFY_WEBHOOK_ENABLED` | `false` | Enables the generic webhook channel |
+| `WALLAPOP_NOTIFY_DISCORD_ENABLED` | `false` | Enables the Discord webhook channel |
+| `WALLAPOP_NOTIFY_TELEGRAM_ENABLED` | `false` | Enables the Telegram Bot API channel |
+| `WALLAPOP_WEBHOOK_URL` | — | Webhook destination, required to enable the webhook channel |
+| `WALLAPOP_WEBHOOK_HEADERS` | `{}` | Optional JSON object of extra webhook headers |
+| `WALLAPOP_DISCORD_WEBHOOK_URL` | — | Discord destination, required to enable Discord |
+| `WALLAPOP_TELEGRAM_BOT_TOKEN` | — | Telegram bot token, required to enable Telegram |
+| `WALLAPOP_TELEGRAM_CHAT_ID` | — | Telegram chat ID, required to enable Telegram |
+| `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS` | `3` | Delivery attempt limit before a delivery is left failed |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | — | Legacy aliases for the two Telegram variables above |
+| `WALLAPOP_TEST_PROFILE_URL` | — | Opt-in profile URL for `pytest -m live` |
+| `WALLAPOP_E2E_PROFILE_URL_1`, `WALLAPOP_E2E_PROFILE_URL_2` | — | Profile URLs required by `scripts/run_e2e_validation.py` |
+| `WALLAPOP_WORKER_ID` | generated | Optional identity used by worker lease code |
+| `WALLAPOP_JOB_LEASE_SECONDS` | `900` | Tracking job lease duration in seconds |
+| `WALLAPOP_NOTIFICATION_LEASE_SECONDS` | `300` | Notification delivery lease duration in seconds |
+
+See [`.env.example`](.env.example). HTTP client options such as base URLs, timeout, retry limits,
+rate-limit interval, user agent and RAW capture directory are Python constructor arguments, not
+environment variables.
+
+## Common CLI commands
+
+```bash
+# Profiles
+wallapop-track add https://es.wallapop.com/user/<profile> --alias seller [--notes "..."]
+wallapop-track list | enable seller | disable seller | remove seller --yes
+wallapop-track run seller | run-all
+wallapop-track schedule --once [--interval-hours 168 --poll-seconds 60 --max-concurrency 4]
+
+# Searches
+wallapop-track search add --name "iphone 15 pro" --query "iphone 15 pro" --max-price 650 \
+  --include 256gb --exclude roto --title-include iphone --description-exclude "para piezas" \
+  [--notify-on-first-run] [--interval-seconds 600] [--category-id 24200]
+wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&max_sale_price=650" \
+  --name "iPhone 15"
+wallapop-track search list | show 1 | update 1 --title-exclude carcasa | run 1 | run-all
+wallapop-track search explain 1 42 [--json]
+wallapop-track search alerts set 1 --percentage-drop 10 --notify-30d-low
+
+# Listings
+wallapop-track listing add https://es.wallapop.com/item/<slug>-<id> --alias camera
+wallapop-track listing list | show camera | run camera | enable camera | remove camera --yes
+wallapop-track listing alerts set camera --target-price 250 --deal-score-threshold 70
+
+# Read-only insight
+wallapop-track analytics market 1 [--json] | prices 1 | activity 1 --weekly | sellers 1 | brands 1
+wallapop-track score listing 42 --search-id 1 | score search 1 [--limit 20]
+wallapop-track relistings list --min-score 0.75 | relistings show 1
+
+# Notifications and metadata
+wallapop-track notify [--dry-run] | notifications list | notifications retry
+wallapop-track metadata categories | filters --query iphone [--category-id 24200] | brands | models
+
+# PostgreSQL worker commands (only when that workstream is present)
+wallapop-track worker tracking | worker notifications
+```
+
+New searches suppress `NEW_LISTING` on their first valid run unless `--notify-on-first-run` is given.
+Metadata commands are read-only and use discovery endpoints validated by RAW fixtures. The complete
+command reference is [`docs/cli.md`](docs/cli.md).
+
+## Search filters
+
+Tracked searches store their structured filters as validated JSON; the CLI, the REST API and the
+repository accept the same keys, and every configured filter is combined with AND:
+
+| Filter | Scope | Behaviour |
+| --- | --- | --- |
+| `min_price`, `max_price` | price | Inclusive bounds |
+| `include` / `include_mode` | title + description | Legacy combined search, ANY (default) or ALL |
+| `exclude` | title + description | Rejects the listing when any term appears |
+| `title_include`, `description_include` | title / description | Requires every or at least one term, per mode |
+| `title_exclude`, `description_exclude` | title / description | Rejects the listing when any term appears |
+| `title_first_word_include`, `title_first_word_exclude` | first title word | Exact match on the normalized first word |
+| `condition`, `category_id`, `brand`, `model`, `distance` | listing attributes | Structured filters |
+| `regex` / `regex_target` | title, description or both | Regular-expression filter |
+
+Matching is case-insensitive and whitespace-tolerant, accents are not folded, the stored text is never
+modified, and an exclude always wins over an include of the same term. Description filters use the
+description carried by the search payload; no per-listing detail request is issued. Exact semantics,
+aliases, evaluation order and first-word rules are documented in
+[`docs/search_tracking_design.md`](docs/search_tracking_design.md#filtros-avanzados-de-texto).
+
+### Filter explanations
+
+`FilterEngine.matches(listing)` keeps returning a short-circuiting `bool`. The same engine can explain
+a verdict with `evaluate(listing)`, which never short-circuits and returns one trace per configured
+filter with three states: PASS (`True`), FAIL (`False`) and UNKNOWN (`None`, not enough data). The
+global verdict follows from the traces: a known failure wins over an unknown condition, and an unknown
+condition prevents asserting a match. Traces are runtime diagnostics and are never persisted.
+
+```bash
+wallapop-track search explain 1 42            # human-readable traces
+wallapop-track search explain 1 42 --json     # structured payload
+```
+
+`GET /api/v1/searches/{id}/listings/{listing_id}/explain` exposes the same explanation. Trace design
+and the storage-artifact rules (such as `model` and distance traces being UNKNOWN when rebuilding from
+persisted snapshots) are documented in
+[`docs/search_tracking_design.md`](docs/search_tracking_design.md#explicación-de-matching-traces).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     CLI[wallapop-track CLI] --> Scheduler[TrackingScheduler]
-    CLI --> Runner[ProfileTrackingRunner]
-    Scheduler --> Runner
-    Runner --> Tracker[ProfileTracker]
-    Tracker --> Client[WallapopClient]
-    Client --> API[Wallapop public/frontend API]
-    Client --> Parsers[Profile, stats, reviews, item parsers]
-    Parsers --> Tracker
-    Tracker --> DB[(SQLAlchemy database)]
-    DB --> Notifications[NotificationService and deliveries]
-    Notifications --> Channels[Webhook / Discord / Telegram]
-    CLI --> Listing[TrackedListing commands]
-    Listing --> ListingTracker[TrackedListingTracker]
-    ListingTracker --> DB
+    CLI --> Runners[Profile / search / listing runners]
+    Scheduler --> Runners
+    Runners --> Client[WallapopClient, read-only]
+    Runners --> Filters[FilterEngine]
+    Runners --> DB[(SQLite + Alembic)]
     DB --> Diff[DiffService]
-    DB --> Reporting[Reporting queries and metrics]
-    DB --> Alerts[Legacy alert tables, read-only compatibility]
-    Migrations[Alembic migrations] -. schema evolution .-> DB
+    DB --> Ledger[TrackingEvent ledger]
+    Ledger --> Notifications[NotificationDelivery]
+    DB --> Reporting[Analytics, scoring, metrics]
+    DB --> API[FastAPI, local/private]
 ```
 
-The client performs extraction asynchronously. Profile and search trackers persist valid captures atomically. The shared scheduler selects due profiles and searches, while the event ledger makes global alerts idempotent.
+Profiles, searches and tracked listings share one listing identity, one event ledger and one
+notification queue. A valid capture is persisted in a single transaction; partial and failed captures
+keep their diagnostic run metadata and never overwrite the last valid state.
 
-The active path is:
+Background reading: [`docs/architecture.md`](docs/architecture.md),
+[`docs/database-schema.md`](docs/database-schema.md),
+[`docs/history-architecture.md`](docs/history-architecture.md),
+[`docs/tracking_run_model.md`](docs/tracking_run_model.md).
 
-```text
-Wallapop adapters/client
-  -> ProfileTracker / SearchTracker / TrackedListingTracker
-  -> SQLAlchemy + Alembic persistence
-  -> snapshots / presence / TrackingEvent
-  -> NotificationDelivery, analytics, scoring
-```
+## Documentation map
 
-```text
-               ┌── Profile Tracker
-Wallapop ──────┤
-               └── Search Tracker
-                        │
-                     Filters
-                        │
-                     Storage
-                        │
-                       Diff
-                        │
-                  Deduplication
-                        │
-                      Alerts
-```
+| Document | Contents |
+| --- | --- |
+| [`docs/cli.md`](docs/cli.md) | Complete CLI command reference |
+| [`docs/api.md`](docs/api.md) | FastAPI endpoints, filters payload, error model, private scope |
+| [`docs/observability.md`](docs/observability.md) | Logging, `/health`, `/ready`, metrics and their limits |
+| [`docs/search_tracking_design.md`](docs/search_tracking_design.md) | Search tracking, advanced text filters, filter traces |
+| [`docs/search_url_import.md`](docs/search_url_import.md) | Search URL import and unsupported parameters |
+| [`docs/search_baseline.md`](docs/search_baseline.md) | First-run notification baseline per search |
+| [`docs/search_provider_architecture.md`](docs/search_provider_architecture.md) | Search provider abstraction |
+| [`docs/notification_architecture.md`](docs/notification_architecture.md) | Event vs delivery, idempotency, retries, channels |
+| [`docs/alert_architecture.md`](docs/alert_architecture.md) | Alert routing and the event ledger |
+| [`docs/advanced_alerts.md`](docs/advanced_alerts.md) | Advanced alert rules and thresholds |
+| [`docs/market_analytics.md`](docs/market_analytics.md) | Market summaries, series, seller and brand stats |
+| [`docs/deal_scoring.md`](docs/deal_scoring.md) | Score signals, confidence and persistence |
+| [`docs/relisting_detection.md`](docs/relisting_detection.md) | Relisting signals, score and candidate status |
+| [`docs/tracked_listing_architecture.md`](docs/tracked_listing_architecture.md) | Direct listing monitoring lifecycle |
+| [`docs/sold-listing-detection.md`](docs/sold-listing-detection.md) | Explicit sold detection |
+| [`docs/tracking-semantics.md`](docs/tracking-semantics.md) | Presence and listing state semantics |
+| [`docs/condition-discovery.md`](docs/condition-discovery.md) | Product condition codes and labels |
+| [`docs/discovery_endpoints.md`](docs/discovery_endpoints.md) | Read-only metadata discovery endpoints |
+| [`docs/scheduler_concurrency.md`](docs/scheduler_concurrency.md) | Bounded scheduler concurrency |
+| [`docs/multi_marketplace_architecture.md`](docs/multi_marketplace_architecture.md) | Marketplace-scoped identity preparation |
+| [`docs/api-stability.md`](docs/api-stability.md) | Upstream endpoint stability strategy |
+| [`docs/architecture.md`](docs/architecture.md) | Historical persistence architecture |
+| [`docs/database-schema.md`](docs/database-schema.md) | Historical schema design |
+| [`docs/history-architecture.md`](docs/history-architecture.md) | Historical model responsibilities |
+| [`docs/tracking_run_model.md`](docs/tracking_run_model.md) | `TrackingRun` model and outcomes |
+| [`docs/stats-vs-reviews.md`](docs/stats-vs-reviews.md), [`docs/research.md`](docs/research.md) | Capture research and validation notes |
+| [`docs/platform_evolution_plan.md`](docs/platform_evolution_plan.md), [`docs/platform_evolution_summary.md`](docs/platform_evolution_summary.md) | Evolution plan and summary |
 
-## Project structure
+## Project layout
 
 ```text
 .
 ├── src/wallapop_tracker/
-│   ├── client.py             # Async read-only HTTP client
-│   ├── cli.py                # Typer application
-│   ├── parsers/              # API response normalization
-│   ├── services/             # Tracking, running, scheduling, diffing, alerts
-│   ├── reporting/            # Historical queries and derived metrics
-│   ├── storage/              # SQLAlchemy models, database, repositories
-│   └── domain/               # Change and alert value objects
-├── alembic/                  # Versioned schema migrations
-├── tests/                    # Unit, contract, integration-style, and live tests
-├── scripts/                  # Manual E2E and fixture validation utilities
-├── Dockerfile
-├── docker-compose.yml
+│   ├── client.py        # Async read-only HTTP client
+│   ├── cli.py           # Typer application (wallapop-track)
+│   ├── api/             # FastAPI transport layer
+│   ├── parsers/         # Response normalization
+│   ├── providers/       # Search and listing providers
+│   ├── services/        # Tracking, runners, scheduler, diff, alerts, notifications
+│   ├── reporting/       # Historical queries, market analytics, metrics
+│   ├── storage/         # SQLAlchemy models, database, repositories
+│   └── domain/          # Filters, alerts, scoring, marketplace, relisting rules
+├── alembic/             # Versioned schema migrations (0001–0021)
+├── tests/               # Unit, contract, integration-style and opt-in live tests
+├── scripts/             # Manual E2E and fixture validation utilities
+├── docs/                # Design and operational documentation
+├── Dockerfile, docker-compose.yml
 └── pyproject.toml
 ```
 
-## Installation
+## Testing and CI
 
 ```bash
-git clone <repository-url>
-cd wallapop-tracker
-python -m venv .venv
-pip install -e ".[dev]"
-```
-
-For an existing database, apply migrations before starting the API or CLI:
-
-```bash
-alembic upgrade head
-```
-
-The package requires Python 3.12 or newer. The default database URL is `sqlite:///data/wallapop_tracker.db`; the `data/` directory is created when the CLI initializes the database.
-
-## CLI usage
-
-The installed entry point is `wallapop-track`.
-
-```bash
-wallapop-track add https://es.wallapop.com/user/<profile> --alias seller
-wallapop-track list
-wallapop-track run seller
-wallapop-track run-all
-wallapop-track enable seller
-wallapop-track disable seller
-wallapop-track remove seller --yes
-wallapop-track schedule --once
-wallapop-track schedule --interval-hours 168
-wallapop-track schedule --once --max-concurrency 4
-wallapop-track search add --name "iphone barato" --query "iphone 15 pro" --max-price 650 --include 256gb --exclude roto
-wallapop-track search add --name "iphone con avisos iniciales" --query "iphone 15 pro" --notify-on-first-run
-wallapop-track search add --name "iphone limpio" --query "iphone" --title-include iphone --title-include "15 pro" --title-include-mode all --description-include factura --title-exclude funda --description-exclude "para piezas" --title-first-word-include iphone --title-first-word-exclude lote
-wallapop-track search update 1 --description-include garantia --title-exclude carcasa
-wallapop-track search update 1 --clear-text-filters
-wallapop-track search import "https://es.wallapop.com/app/search?keywords=iphone+15&min_sale_price=300&max_sale_price=650" --name "iPhone 15 barato" --notify-on-first-run
-wallapop-track metadata categories
-wallapop-track metadata filters --query iphone --category-id 24200
-wallapop-track metadata brands --category-id 24200
-wallapop-track metadata models --category-id 24200 --query iphone
-wallapop-track search list
-wallapop-track search show 1
-wallapop-track search explain 1 42
-wallapop-track search run 1
-wallapop-track search run-all
-wallapop-track search disable 1
-wallapop-track search delete 1 --yes
-wallapop-track notifications list
-wallapop-track notifications retry
-wallapop-track relistings list --min-score 0.75
-wallapop-track relistings show 1
-wallapop-track analytics market 1
-wallapop-track analytics market 1 --json
-wallapop-track analytics prices 1
-wallapop-track analytics activity 1 --weekly
-wallapop-track analytics sellers 1
-wallapop-track analytics brands 1
-wallapop-track listing add https://es.wallapop.com/item/<slug>-<id> --alias camera
-wallapop-track listing list
-wallapop-track listing show camera
-wallapop-track listing run camera
-wallapop-track listing enable camera
-wallapop-track listing disable camera
-wallapop-track listing remove camera --yes
-```
-
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. The advanced text filters are repeatable too: `--title-include`, `--description-include`, `--title-exclude`, `--description-exclude`, `--title-first-word-include` and `--title-first-word-exclude`, with `--title-include-mode` / `--description-include-mode` selecting ANY or ALL. `search update <id>` replaces only the text filters you pass, keeps the rest of the stored configuration, and `--clear-text-filters` removes them; see [Search filters](#search-filters) for the exact semantics. `search explain <search_id> <listing_id>` prints the runtime trace of one stored listing against a stored search (`--json` for the structured payload); see [Filter explanations](#filter-explanations). `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
-
-The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
-
-Metadata commands are read-only and use only discovery endpoints validated by
-RAW fixtures. Suggestions/autocomplete remain pending because the observed
-endpoint did not return a reproducible public contract.
-
-The scheduler runs due profiles, searches, and tracked listings with bounded
-global concurrency (default `4`), while the shared Wallapop client limiter
-continues to control HTTP request rate. SQLite file databases use WAL and a
-busy timeout; multiple scheduler processes are not coordinated.
-
-## Search filters
-
-Tracked searches store their structured filters as validated JSON (`filters_json`), so the advanced text filters are additive: existing rows keep working without migration, and price bounds stay on the `TrackedSearch` row. The CLI, the REST API (`filters` in `POST /api/v1/searches` and `PATCH /api/v1/searches/{id}`) and the repository accept the same keys.
-
-| Filter | Scope | Behaviour |
-| --- | --- | --- |
-| `include` / `include_mode` | title + description | Legacy combined search; the mode selects ANY or ALL |
-| `exclude` | title + description | Rejects the listing when any term appears |
-| `title_include` | title | Requires every / at least one term, per `title_include_mode` |
-| `description_include` | description | Requires every / at least one term, per `description_include_mode` |
-| `title_exclude` | title | Rejects the listing when any term appears in the title |
-| `description_exclude` | description | Rejects the listing when any term appears in the description |
-| `title_first_word_include` | first title word | Keeps the listing only when the first normalized word equals one of the terms |
-| `title_first_word_exclude` | first title word | Rejects the listing when the first normalized word equals one of the terms |
-
-Aliases accepted for backwards/convenience compatibility (they are the same filters, not additional ones):
-
-```text
-title_must_include -> title_include
-description_must_include -> description_include
-```
-
-Title and description filters are independent: a term configured for the title is only satisfied by the title, and a term configured for the description only by the description. `ANY` means at least one term must be present and `ALL` means every term must be present.
-
-Text comparisons are case-insensitive and whitespace-tolerant, and they never modify the stored text: filters normalize a copy of the title or description (casefold plus collapsed spaces) and the original snapshot keeps the Wallapop value. Accents are not folded, because the current normalization does not fold them, so `camión` and `camion` remain different terms. `None` and empty values simply never match an include term and never trigger an exclude.
-
-### First word matching
-
-The first word is the first whitespace-delimited token of the normalized title with surrounding punctuation removed, so `¡iPhone 15!` and `iPhone, 15` both yield `iphone`, while `iPhone-15 Pro` yields `iphone-15`. Matching is exact over that word (`iph` does not match `iphone`) and ignores letter case and leading spaces. Titles that are missing, empty or punctuation-only normalize to an empty word: they never satisfy `title_first_word_include` and are never rejected by `title_first_word_exclude`. Only the first word of each configured term is considered, so a multi-word term behaves like its first word.
-
-### Evaluation order
-
-Every configured filter is combined with AND, and the evaluation order is:
-
-```text
-price
-→ structured filters (condition, category, brand, model, distance)
-→ include / include_mode (legacy, title + description)
-→ NOT exclude (legacy, title + description)
-→ title_include
-→ description_include
-→ NOT title_exclude
-→ NOT description_exclude
-→ title_first_word_include
-→ NOT title_first_word_exclude
-→ regex
-```
-
-Every step is ANDed, so the order is descriptive: a listing must satisfy all configured filters. The same term in an include and an exclude list is resolved by the exclude, which always wins.
-
-### Description availability
-
-Wallapop's search response already carries a `description` field and the normalized `Listing` keeps it, so `description_include` and `description_exclude` run on the search payload itself and no extra per-listing detail request is issued. Filters can only see what the search payload exposes: when Wallapop omits or shortens a description there, description terms will not match it (and description excludes will not reject it). Re-run `wallapop-track search run <id>` and inspect the stored snapshots if a description filter behaves unexpectedly.
-
-### Filter explanations
-
-`FilterEngine.matches(listing)` keeps its contract: it returns a plain `bool`, never `None`, and still short-circuits. The same engine can also explain the verdict, which is what the CLI and the API use for debugging, UI and explicability:
-
-```python
-from wallapop_tracker.domain.filters import filters_from_config
-
-engine = filters_from_config({"max_price": "500", "title_include": ["rtx 4070"]})
-
-engine.matches(listing)  # unchanged, short-circuiting bool
-evaluation = engine.evaluate(listing)
-
-evaluation.matched  # True / False for a real listing
-evaluation.complete  # False as soon as one condition is unknown
-evaluation.traces  # one FilterTrace per configured filter
-```
-
-Each trace is a frozen `FilterTrace`:
-
-| Field | Meaning |
-| --- | --- |
-| `filter_name` | Canonical filter name (`min_price`, `max_price`, `condition`, `category_id`, `brand`, `model`, `distance`, `include`, `exclude`, `title_include`, `description_include`, `title_exclude`, `description_exclude`, `title_first_word_include`, `title_first_word_exclude`, `regex`) |
-| `passed` | `True` = PASS, `False` = FAIL, `None` = UNKNOWN (not enough data to evaluate it) |
-| `actual_value` | Value observed on the listing; missing data stays `None` and a regex trace stores the evaluated target (`title`, `description` or `both`) |
-| `expected_value` | Configured expectation |
-| `matched_values` | Configured terms that were found |
-| `reason` | Short hint when the values alone are ambiguous, such as `price missing` or `model is not persisted in listing snapshots` |
-
-The three per-filter states are:
-
-| State | `passed` | Meaning |
-| --- | --- | --- |
-| PASS | `True` | The filter could be evaluated and the listing satisfies it |
-| FAIL | `False` | The filter could be evaluated and the listing does not satisfy it |
-| UNKNOWN | `None` | There is not enough data to evaluate the filter |
-
-Rules that follow from the design:
-
-* `evaluate()` never short-circuits: every configured filter is traced even after a failure, so a single rejection never hides the rest of the diagnosis.
-* The global verdict is derived in one place (`FilterEvaluation.from_traces`) with these rules: `matched=True` means every condition passed, `matched=False` means at least one condition failed, and `matched=None` means there is no known failure but some condition is unknown. A known failure wins over an unknown condition, while an unknown condition only prevents asserting a match; `complete=False` as soon as there is at least one UNKNOWN.
-* `FilterEngine.evaluate()` on a real listing stays two-valued: the engine itself never invents UNKNOWN, and for those listings `engine.matches(listing) == engine.evaluate(listing).matched` (with `complete=True`). UNKNOWN comes from callers that know their input is incomplete, such as the storage-backed explanation service.
-* A filter that is not configured emits no trace, and the trace order is the documented evaluation order above. A price filter configured with both bounds emits `min_price` and `max_price`.
-* Traces are runtime diagnostics. They are not persisted, no column or migration is added, and explaining a listing issues no extra Wallapop request.
-
-Realistic output:
-
-```text
-$ wallapop-track search explain 1 42
-NOT MATCHED
-
-✓ min_price: 400 >= 300
-✓ max_price: 400 <= 500
-✓ title_include: matched "rtx 4070"
-✗ description_include: missing "garantia"
-✓ title_exclude: no excluded terms found
-✓ title_first_word_include: "asus"
-```
-
-When persisted data is not enough to evaluate a condition, the trace is UNKNOWN and the global verdict becomes `INCOMPLETE` (or `NOT MATCHED (INCOMPLETE)` when another condition already failed):
-
-```text
-$ wallapop-track search explain 1 42
-INCOMPLETE
-
-✓ max_price: 400 <= 500
-? model: model is not persisted in listing snapshots
-? distance: distance cannot be evaluated because coordinates are not persisted
-✓ title_include: matched "iphone"
-```
-
-Storage keeps price, category, condition, brand and the text fields, which is exactly what those filters read. `model` and the coordinates used by a distance filter have no column in `listing_snapshots`, so when the explanation rebuilds a listing from storage it marks those two traces UNKNOWN instead of reporting a false FAIL, and summarizes them in `warnings`. That knowledge lives in the explanation service, not in the domain: during tracking a real listing without coordinates is still rejected by the distance filter (`FAIL`), because there the missing value is a fact about the listing rather than a storage artifact.
-
-## Scheduling
-
-Scheduling operates on tracked profiles with `enabled = true`. A profile is due when it has never run or when its `last_run_at` is at least the configured interval in the past. The runner writes the attempt time and resulting status back to the tracked-profile record.
-
-Profiles are executed sequentially. A failure is recorded for the affected profile and does not prevent later due profiles from being attempted. Scheduler and tracking timestamps are handled in UTC; naive input datetimes are normalized to UTC. The interval is configured with `--interval-hours` and defaults to 168 hours (one week). `--once` performs a single due-profile evaluation, which is useful for one-shot jobs and external schedulers.
-
-## Historical model
-
-- **Profiles** represent the normalized Wallapop identity and stable profile attributes.
-- **Tracked profiles** are user-managed configurations with a profile URL, unique alias, enabled flag, notes, and scheduling metadata.
-- **Tracking runs** record each capture attempt, timestamps, status, fetched-item counts, component success flags, and errors. Terminal statuses are `valid`, `partial`, and `failed`.
-- **Listings** represent normalized Wallapop items associated with a profile.
-- Listing identity is scoped by `(marketplace, external_id)`; `wallapop` is the
-  only supported marketplace in this phase and legacy `wallapop_item_id` is
-  retained as a migration bridge.
-- **Profile snapshots** store change-based profile metrics such as rating, review count, published count, purchases, sales, sold count, reports, and rating distribution.
-- **Listing snapshots** store change-based listing fields such as title, price, status, reservation, shipping, brand, condition, and source timestamps.
-- **Presence rows** associate listings with valid runs. Listing snapshots use `ACTIVE` or `REMOVED` to preserve lifecycle state.
-- **Tracked searches** store query, price bounds, structured filters, enablement, interval metadata and the configurable first-run notification policy. A silent first valid run establishes inventory without `NEW_LISTING` alerts.
-- **Search matches** associate each global listing with every search that detected it, including first/last seen timestamps and detection count.
-- **Tracking events** store globally idempotent `NEW_LISTING`, `PRICE_DROP`, and `PRICE_INCREASE` alerts.
-- **Tracked listings** monitor one global listing by alias and interval, including price, title, reservation, shipping, status, removal, and reappearance changes.
-- **Possible relistings** are explainable candidate links between a recently removed listing and a new listing from the same known seller. They never merge identities.
-- **Market analytics** provide read-only search summaries, price distributions, daily/weekly activity series, and objective seller/brand/category aggregations. Removed listings are not treated as sold.
-
-Snapshots are written only for valid runs. Partial or failed captures are retained as run outcomes but cannot establish new profile/listing presence or overwrite the last valid historical state.
-
-The repository contains Alembic revisions `0001` through `0013`, with `0007_search_tracking` adding the persistent event ledger, `0009_notification_deliveries` adding the delivery queue, `0010_tracked_listings` adding direct listing monitoring, `0011_search_initial_baseline` adding the per-search baseline policy, `0012_possible_relistings` adding heuristic candidate persistence, and `0013_marketplace_identity` adding marketplace-scoped listing and search identity. The CLI initializes new databases through SQLAlchemy metadata; Alembic remains the migration path for existing deployments.
-
-## Change detection
-
-`DiffService` compares valid runs for the same profile and derives:
-
-- new listings;
-- removed listings;
-- listings that reappeared after an absent run;
-- price, title, reservation, shipping-availability, and brand changes;
-- profile rating, review-count, and sold-count changes.
-
-Presence is derived from the listing-to-run association rather than from a missing snapshot. Reporting queries expose related inventory, price, presence, and metric histories without modifying the database.
-
-## Reliability
-
-The asynchronous client applies a minimum request interval and serializes rate-limit waits. Transient network and timeout errors are retried. HTTP `429` and `500`, `502`, `503`, and `504` responses use exponential backoff and honor a numeric or HTTP-date `Retry-After` value, capped by the configured maximum. Other HTTP errors are surfaced without retrying.
-
-The tracker distinguishes complete captures from partial and failed captures. A valid capture is persisted in a database transaction; partial and failed captures retain diagnostic run metadata while preserving the last valid historical state. Optional RAW response capture writes response bodies before normalization and treats filesystem failures as warnings.
-
-The parser contract tests use checked-in RAW fixtures under `tests/fixtures/raw/`, so API-shape regressions can be detected without network access. The fixture scripts and manual E2E validation are separate from the default test suite.
-
-## Testing
-
-Install development dependencies and run:
-
-```bash
-pytest
+pytest          # 347 tests; the default marker excludes live tests
 ruff check .
+ruff format --check .
 mypy src
 ```
 
-The default pytest configuration excludes tests marked `live`. Live tests are explicitly authorized integration checks and can be selected with `pytest -m live` when `WALLAPOP_TEST_PROFILE_URL` is configured. The manual E2E script requires both `WALLAPOP_E2E_PROFILE_URL_1` and `WALLAPOP_E2E_PROFILE_URL_2` and stores its separate history in `data/e2e_validation.db`.
-
-## CI
-
-GitHub Actions runs on pushes and pull requests using Python 3.12. The workflow installs the package with development dependencies, then runs Ruff, mypy, and pytest. Since the default pytest marker excludes live tests, CI does not require Wallapop network access or live profile URLs.
-
-## Docker
-
-The image installs the package into a Python 3.12 slim image and runs as a non-root `app` user. Docker Compose mounts the local `data/` directory at `/app/data` and passes `WALLAPOP_TRACKER_DB_URL`, defaulting to the SQLite database under that mount.
-
-```bash
-docker build -t wallapop-tracker .
-docker compose run --rm tracker wallapop-track --help
-docker compose run --rm tracker wallapop-track list
-docker compose run --rm --service-ports tracker uvicorn wallapop_tracker.api.app:app --host 0.0.0.0
-```
-
-## Configuration
-
-The application reads the following environment variables:
-
-- `WALLAPOP_TRACKER_DB_URL`: SQLAlchemy database URL used by the CLI. It defaults to `sqlite:///data/wallapop_tracker.db`.
-- `WALLAPOP_TEST_PROFILE_URL`: optional profile URL used by the opt-in live pytest.
-- `WALLAPOP_E2E_PROFILE_URL_1` and `WALLAPOP_E2E_PROFILE_URL_2`: the two optional profile URLs required by `scripts/run_e2e_validation.py`.
-- `WALLAPOP_NOTIFY_WEBHOOK_ENABLED`, `WALLAPOP_NOTIFY_DISCORD_ENABLED`, and `WALLAPOP_NOTIFY_TELEGRAM_ENABLED`: explicit `true`/`false` channel switches (all disabled by default).
-- `WALLAPOP_WEBHOOK_URL` and optional JSON `WALLAPOP_WEBHOOK_HEADERS`: generic webhook destination and headers.
-- `WALLAPOP_DISCORD_WEBHOOK_URL`: Discord webhook destination.
-- `WALLAPOP_TELEGRAM_BOT_TOKEN` and `WALLAPOP_TELEGRAM_CHAT_ID`: Telegram Bot API configuration (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` remain compatible aliases).
-- `WALLAPOP_NOTIFICATION_MAX_ATTEMPTS`: delivery attempt limit, default `3`.
-
-### External notifications
-
-Tracking persists each alert before creating one `NotificationDelivery` per
-channel and destination. The dispatcher skips delivered rows, retries pending
-or failed rows up to the configured attempt limit, and isolates failures across
-channels. Webhook, Telegram, and Discord use the existing `httpx` dependency;
-secrets and complete webhook URLs are never written to delivery errors or logs.
-
-Enable a channel and dispatch persisted deliveries with:
-
-```bash
-export WALLAPOP_NOTIFY_TELEGRAM_ENABLED=true
-export WALLAPOP_TELEGRAM_BOT_TOKEN=replace-me
-export WALLAPOP_TELEGRAM_CHAT_ID=replace-me
-wallapop-track notify
-```
-
-The generic webhook and Discord adapters use the same pattern with their
-respective URLs. `wallapop-track notify --dry-run` reports pending deliveries
-without contacting an external provider.
-
-The client itself also accepts runtime options such as base URLs, timeout, retry limits, rate-limit interval, user agent, and an optional RAW data directory through its Python constructor; these are not environment variables.
+`pytest` is the offline/default suite. `pytest -m live` selects explicitly marked live tests and
+requires `WALLAPOP_TEST_PROFILE_URL`; it contacts Wallapop and should only be run with an authorized,
+read-only, moderate-volume test profile. The default `addopts` excludes that marker. CI
+(`.github/workflows/ci.yml`) runs Ruff, format check, mypy and pytest on Python 3.12 for pushes
+and pull requests without Wallapop network access, because parser contracts are covered by checked-in
+RAW fixtures in `tests/fixtures/raw/`. Live tests are opt-in (`pytest -m live` with
+`WALLAPOP_TEST_PROFILE_URL`), and `scripts/run_e2e_validation.py` stores its history separately in
+`data/e2e_validation.db`.
 
 ## Limitations
 
-- The integration relies on internal or undocumented Wallapop endpoints and frontend response shapes, which may change without notice.
-- The project is read-only. It does not automate purchases, messages, listing edits, or any other action on Wallapop.
-- It is intended for authorized, moderate-volume monitoring, not for mass scraping.
-- Search results are intentionally limited to a configurable recent-page window (`max_pages`, default five), rather than being an exhaustive historical search.
-- Description filters use the `description` returned by the search payload; the tracker does not issue one detail request per listing to complete or extend it.
-- Notification delivery is intentionally sequential and has no distributed queue or concurrent worker pool.
-- Direct listing detail depends on the observed public endpoint `/api/v3/items/{id}`; its undocumented contract may change and remains covered by offline fixtures.
+- The Wallapop integration depends on internal/undocumented endpoints and frontend response shapes that
+  may change without notice.
+- Read-only by design: no purchases, messages, listing edits or any other write action.
+- Intended for authorized, moderate-volume monitoring, not for mass scraping.
+- Search results are limited to a configurable recent-page window (`max_pages`, default five) instead
+  of an exhaustive historical search.
+- Notification delivery is sequential and has no distributed queue or concurrent worker pool.
+- Multiple scheduler processes are not coordinated; SQLite file databases use WAL plus a busy timeout.
+- Listing detail depends on the observed `/api/v3/items/{id}` endpoint and is covered by offline
+  fixtures only.
+- No authentication: keep the API private, as described in
+  [Security and deployment scope](#security-and-deployment-scope).
 
-### Sold listing detection
+## Troubleshooting
 
-Wallapop Tracker can detect listings that Wallapop explicitly marks as sold.
+- `alembic` or `wallapop-track` is not recognized: activate `.venv`, or invoke the executable from
+  `.venv/bin/` (Linux/macOS) or `.venv\Scripts\` (Windows), then rerun `python -m pip install -e ".[dev]"`.
+- `unable to open database file`: create the parent directory before `alembic upgrade head`.
+- `/ready` returns `503`: run `alembic upgrade head` against the same `WALLAPOP_TRACKER_DB_URL`.
+- Notification startup rejects Telegram or webhook settings: keep the channel disabled, or provide
+  its matching destination variables; Telegram also accepts the documented legacy aliases.
+- HTTP `429` from Wallapop: stop the live command, reduce polling/page volume and retry later; do not
+  add bypasses. Upstream contract/schema changes require fixture and parser review.
+- `pytest -m live` skips a test: set `WALLAPOP_TEST_PROFILE_URL`; plain `pytest` intentionally skips
+  live tests.
 
-The tracker distinguishes between an explicitly sold listing, a listing that is
-no longer visible, a removed or unavailable listing, and an unknown state.
-A disappearing listing is never automatically considered sold. Historical
-snapshots retain the last observed asking price; this is not the final
-transaction price.
+## Release status
 
-## Development status
-
-This is a functional technical project with profile tracking, search tracking, normalized parsers, historical snapshots, deterministic diffing, reusable filters, global deduplication, reporting, alerts, a shared scheduler, CLI, SQLite, Alembic, Docker packaging, automated tests, CI, and manual E2E validation. Its external API integration remains subject to the limitations above, especially changes to undocumented Wallapop response contracts.
-
-## Deal scoring
-
-Listings can be scored deterministically within a tracked search with
-`wallapop-track score listing <listing-id> --search-id <id>` or ranked in batch
-with `wallapop-track score search <search-id>`. See
-[`docs/deal_scoring.md`](docs/deal_scoring.md); the score is contextual market
-analysis, not purchase advice.
-
-## API
-
-Run the local API with `uvicorn wallapop_tracker.api.app:app --reload`.
-It is documented in [`docs/api.md`](docs/api.md), uses `/api/v1`, and has no
-authentication in this phase; keep it private.
-
-The API exposes `/health`, `/ready`, `/metrics` and the versioned resources
-under `/api/v1`. It is intentionally local/private and performs no external
-Wallapop calls while serving read queries.
-
-## Notifications, analytics and scoring
-
-Notification destinations are configured with environment variables documented
-below. Delivery is persistent and idempotent; failed channels do not invalidate
-tracking runs. Market analytics are available with `analytics market`,
-`analytics prices`, `analytics activity`, `analytics sellers` and
-`analytics brands`. Deal scoring is deterministic and contextual to a tracked
-search; it is not purchase advice.
-
-## Engineering highlights
-
-- Async HTTP with bounded retries, rate limiting and `Retry-After` handling.
-- Bounded scheduler concurrency with isolated SQLAlchemy sessions.
-- SQLAlchemy/Alembic historical modeling and idempotent event persistence.
-- Persistent notification delivery with offline channel tests.
-- Deterministic diffing, analytics, relisting detection and deal scoring.
-- FastAPI, Prometheus-compatible metrics, Docker and CI contract tests.
-
-Operational logging and metrics are documented in
-[`docs/observability.md`](docs/observability.md). Use `/health`, `/ready` and
-`/metrics` only on a protected private deployment.
-### Product condition tracking
-
-Wallapop Tracker captures the physical condition of listings when Wallapop exposes it.
-
-The tracker stores the internal condition code separately from its localized label. Condition
-is optional because not every listing or category necessarily exposes it. The internal code is
-preferred for filtering and historical comparisons; the localized label is retained for display.
-### Health monitoring
-
-Wallapop Tracker records health metadata on the existing `tracking_runs` rows:
-duration, scanned listings, HTTP errors/status classes, parser errors, degraded
-results and consecutive failures. The API exposes `/api/v1/health`, run history,
-and search/profile-specific summaries. A zero-result run is degraded only when
-at least three recent runs for the same source contained listings.
-
-Schema fingerprints are value-independent sets of sorted key paths and scalar
-types. Search, profile-items and listing-detail responses are observed when
-the client receives valid payloads. Changes are persisted as idempotent schema
-drift events without storing payloads or credentials. CLI health reporting and
-external alert channels are intentionally outside this phase.
+- `1.0.0` covers the features above as a stable private release: tracking, parsers, storage, diffing,
+  filters and explanations, alerts, notifications, analytics, scoring, relisting detection, CLI,
+  local/private API, Alembic migrations, Docker packaging, tests and CI.
+- **Naming:** the repository is `wallapop-tracker`, the Python distribution is
+  `wallapop-profile-tracker`, the import package is `wallapop_tracker` and the CLI entry point is
+  `wallapop-track`. The distribution name is intentionally unchanged in this release: it is not
+  published on PyPI and nothing in the repository depends on the name beyond `pip install`, so
+  renaming it to match the repository stays a separate, deliberate decision.
+- **License:** MIT; see [`LICENSE`](LICENSE).
+- **Screenshots:** none. There is no UI, so the recommended captures are manual: the CLI,
+  `search explain`, FastAPI `/docs` and `/metrics`.
+- **Out of scope for this release:** Git tag, GitHub release, dashboard, MCP server, PostgreSQL
+  backend, authentication, new filters, new alerts and additional scraping.
