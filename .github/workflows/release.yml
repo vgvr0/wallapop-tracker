@@ -1,0 +1,127 @@
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project and release dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,release]"
+
+      - name: Validate tag version
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not tag.startswith("v"):
+              raise SystemExit(f"release tag must start with 'v': {tag}")
+
+          with Path("pyproject.toml").open("rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+
+          expected = f"v{version}"
+          if tag != expected:
+              raise SystemExit(
+                  f"release tag/version mismatch: tag={tag!r}, pyproject version={version!r}; "
+                  f"expected tag {expected!r}"
+              )
+
+          print(f"validated {tag} against pyproject.toml version {version}")
+          PY
+
+      - name: Run tests
+        run: pytest
+
+      - name: Run Ruff lint
+        run: ruff check .
+
+      - name: Check Ruff formatting
+        run: ruff format --check .
+
+      - name: Run mypy
+        run: mypy src
+
+      - name: Check diff whitespace
+        run: git diff --check
+
+      - name: Build release artifacts
+        run: python scripts/build_release.py
+
+      - name: Check release artifacts explicitly
+        run: python -m twine check dist/*
+
+      - name: Validate wheel in a clean environment
+        shell: bash
+        run: |
+          wheel=$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          source "$RUNNER_TEMP/wheel-venv/bin/activate"
+          python -m pip install --upgrade pip
+          python -m pip install "$wheel"
+          mkdir "$RUNNER_TEMP/wheel-check"
+          cd "$RUNNER_TEMP/wheel-check"
+          python "$GITHUB_WORKSPACE/scripts/validate_installed_package.py"
+
+      - name: Rebuild and validate wheel from sdist
+        shell: bash
+        run: |
+          sdist=$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)
+          test -n "$sdist"
+          rm -rf "$RUNNER_TEMP/sdist-source" "$RUNNER_TEMP/sdist-dist" "$RUNNER_TEMP/sdist-venv"
+          mkdir -p "$RUNNER_TEMP/sdist-source" "$RUNNER_TEMP/sdist-dist"
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          source "$RUNNER_TEMP/sdist-venv/bin/activate"
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir "$RUNNER_TEMP/sdist-dist" "$sdist"
+          rebuilt_wheel=$(find "$RUNNER_TEMP/sdist-dist" -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$rebuilt_wheel"
+          python -m pip install "$rebuilt_wheel"
+          cd "$RUNNER_TEMP/sdist-source"
+          python "$GITHUB_WORKSPACE/scripts/validate_installed_package.py"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ github.ref_name }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz --verify-tag --generate-notes
+          fi
