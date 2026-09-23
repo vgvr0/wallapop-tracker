@@ -12,6 +12,7 @@ RUN addgroup --system app \
     && chown -R app:app /app
 
 COPY pyproject.toml ./
+COPY README.md LICENSE ./
 COPY src ./src
 COPY alembic.ini ./
 COPY alembic ./alembic
