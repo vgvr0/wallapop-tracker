@@ -19,13 +19,19 @@ class Database:
     def __init__(self, url: str = "sqlite:///data/wallapop_tracker.db") -> None:
         connect_args: dict[str, Any] = {}
         poolclass = None
-        if url in {"sqlite:///:memory:", "sqlite+pysqlite:///:memory:"}:
+        is_sqlite = self._dialect_name(url) == "sqlite"
+        if is_sqlite and url in {"sqlite:///:memory:", "sqlite+pysqlite:///:memory:"}:
             connect_args["check_same_thread"] = False
             poolclass = StaticPool
-        self.engine = create_engine(
-            url, future=True, connect_args=connect_args, poolclass=poolclass
-        )
-        if url.startswith("sqlite"):
+        engine_options: dict[str, Any] = {"future": True, "connect_args": connect_args}
+        if poolclass is not None:
+            engine_options["poolclass"] = poolclass
+        if not is_sqlite:
+            engine_options.update(
+                pool_size=5, max_overflow=10, pool_pre_ping=True, pool_recycle=1800
+            )
+        self.engine = create_engine(url, **engine_options)
+        if is_sqlite:
             event.listen(self.engine, "connect", self._configure_sqlite)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False)
 
@@ -44,6 +50,10 @@ class Database:
     def create_all(self) -> None:
         Path("data").mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(self.engine)
+
+    @staticmethod
+    def _dialect_name(url: str) -> str:
+        return url.split(":", 1)[0].split("+", 1)[0].lower()
 
     @contextmanager
     def session(self) -> Iterator[Session]:

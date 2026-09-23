@@ -101,6 +101,60 @@ class Metrics:
         self.scheduler_active_jobs = Gauge(
             "scheduler_active_jobs", "Currently active scheduler jobs", registry=self.registry
         )
+        self.jobs_claimed_total = Counter(
+            "wallapop_jobs_claimed_total",
+            "Tracking jobs claimed",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.jobs_completed_total = Counter(
+            "wallapop_jobs_completed_total",
+            "Tracking jobs completed",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.jobs_failed_total = Counter(
+            "wallapop_jobs_failed_total",
+            "Tracking jobs failed",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.job_claim_conflicts_total = Counter(
+            "wallapop_job_claim_conflicts_total",
+            "Job claim conflicts",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.job_lease_expired_total = Counter(
+            "wallapop_job_lease_expired_total",
+            "Expired job leases",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.notification_claimed_total = Counter(
+            "wallapop_notification_claimed_total",
+            "Notification deliveries claimed",
+            registry=self.registry,
+        )
+        self.notification_sent_total = Counter(
+            "wallapop_notification_sent_total",
+            "Notification deliveries sent",
+            registry=self.registry,
+        )
+        self.notification_failed_total = Counter(
+            "wallapop_notification_failed_total",
+            "Notification deliveries failed",
+            registry=self.registry,
+        )
+        self.notification_retry_total = Counter(
+            "wallapop_notification_retry_total", "Notification retries", registry=self.registry
+        )
+        self.pending_jobs = Gauge(
+            "wallapop_pending_jobs", "Due tracking jobs", registry=self.registry
+        )
+        self.pending_notifications = Gauge(
+            "wallapop_pending_notifications", "Pending notifications", registry=self.registry
+        )
         self.http_requests_total = Counter(
             "http_requests_total",
             "API HTTP requests",

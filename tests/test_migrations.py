@@ -179,6 +179,10 @@ def test_notification_delivery_migration_from_0008(tmp_path):
         "created_at",
         "updated_at",
         "delivered_at",
+        "next_attempt_at",
+        "processing_started_at",
+        "claim_expires_at",
+        "claimed_by",
     }
     assert "ix_notification_deliveries_status_created" in indexes
 
@@ -263,6 +267,9 @@ def test_tracked_listing_migration_from_0009(tmp_path):
             "notify_on_30d_low",
             "notify_on_90d_low",
             "notify_on_all_time_low",
+            "claimed_at",
+            "claim_expires_at",
+            "claimed_by",
         } == tracked_columns
     assert "tracked_listing_id" in run_columns
     assert "tracked_listings" in run_foreign_keys

@@ -459,7 +459,10 @@ def create_app(
         "off",
     }
     try:
-        database.create_all()
+        # Local SQLite remains convenient for development/tests. Production
+        # databases are provisioned exclusively through ``alembic upgrade head``.
+        if database.engine.dialect.name == "sqlite":
+            database.create_all()
     except Exception:
         # /health must remain available while /ready reports the outage.
         pass

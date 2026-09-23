@@ -1,6 +1,7 @@
 """Add tracked listing source and monitoring configuration."""
 
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 from alembic import op
 
@@ -41,20 +42,28 @@ def upgrade() -> None:
     if op.get_bind().dialect.name == "sqlite":
         _rebuild_sqlite_tracking_runs()
     else:
-        with op.batch_alter_table("tracking_runs", recreate="always") as batch:
-            batch.add_column(sa.Column("tracked_listing_id", sa.Integer(), nullable=True))
-            batch.create_foreign_key(
-                "fk_tracking_runs_tracked_listing",
-                "tracked_listings",
-                ["tracked_listing_id"],
-                ["id"],
+        existing_columns = {
+            column["name"] for column in inspect(op.get_bind()).get_columns("tracking_runs")
+        }
+        if "tracked_listing_id" not in existing_columns:
+            op.add_column(
+                "tracking_runs", sa.Column("tracked_listing_id", sa.Integer(), nullable=True)
             )
-            batch.drop_constraint("ck_tracking_runs_exactly_one_source", type_="check")
-            batch.create_check_constraint(
-                "ck_tracking_runs_exactly_one_source",
-                "((profile_id IS NOT NULL) + (tracked_search_id IS NOT NULL) + "
-                "(tracked_listing_id IS NOT NULL)) = 1",
-            )
+        op.create_foreign_key(
+            "fk_tracking_runs_tracked_listing",
+            "tracking_runs",
+            "tracked_listings",
+            ["tracked_listing_id"],
+            ["id"],
+        )
+        op.drop_constraint("ck_tracking_runs_exactly_one_source", "tracking_runs", type_="check")
+        op.create_check_constraint(
+            "ck_tracking_runs_exactly_one_source",
+            "tracking_runs",
+            "((CASE WHEN profile_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_search_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_listing_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
+        )
 
 
 def downgrade() -> None:

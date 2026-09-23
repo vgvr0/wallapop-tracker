@@ -65,12 +65,15 @@ app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
 app.add_typer(analytics_app, name="analytics")
 app.add_typer(score_app, name="score")
+worker_app = typer.Typer(no_args_is_help=True)
+app.add_typer(worker_app, name="worker")
 
 
 def _db() -> Database:
     configure_logging()
     database = Database(os.getenv("WALLAPOP_TRACKER_DB_URL", "sqlite:///data/wallapop_tracker.db"))
-    database.create_all()
+    if database.engine.dialect.name == "sqlite":
+        database.create_all()
     return database
 
 
@@ -477,6 +480,45 @@ def schedule(
             asyncio.run(scheduler.run_forever())
     except KeyboardInterrupt:
         typer.echo("Scheduler stopped")
+    finally:
+        database.close()
+
+
+@worker_app.command("tracking")
+def tracking_worker(
+    once: bool = typer.Option(False, "--once"),
+    poll_seconds: float = typer.Option(60.0, "--poll-seconds", min=0),
+    max_concurrency: int = typer.Option(4, "--max-concurrency", min=1),
+) -> None:
+    """Run PostgreSQL-backed tracking jobs claimed by this worker."""
+    database = _db()
+    scheduler = TrackingScheduler(database, timedelta(hours=168), poll_seconds=poll_seconds,
+                                  max_concurrency=max_concurrency)
+    try:
+        if once:
+            asyncio.run(scheduler.run_once())
+        else:
+            asyncio.run(scheduler.run_forever())
+    finally:
+        database.close()
+
+
+@worker_app.command("notifications")
+def notification_worker(
+    once: bool = typer.Option(False, "--once"),
+    poll_seconds: float = typer.Option(10.0, "--poll-seconds", min=0),
+) -> None:
+    """Deliver persisted notifications with crash-recoverable leases."""
+    database = _db()
+    service = NotificationService(database)
+    async def loop() -> None:
+        while True:
+            await service.deliver_pending()
+            if once:
+                return
+            await asyncio.sleep(poll_seconds)
+    try:
+        asyncio.run(loop())
     finally:
         database.close()
 

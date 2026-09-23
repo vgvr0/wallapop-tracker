@@ -118,15 +118,24 @@ class TrackedSearchRecord(Base):
     target_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     percentage_drop_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     deal_score_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
-    notify_on_30d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
-    notify_on_90d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
-    notify_on_all_time_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_30d_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
+    notify_on_90d_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
+    notify_on_all_time_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_status: Mapped[str | None] = mapped_column(String(20))
     last_run_id: Mapped[int | None] = mapped_column(Integer)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(String(255))
 
 
 class TrackedListingRecord(Base):
@@ -147,14 +156,23 @@ class TrackedListingRecord(Base):
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_status: Mapped[str | None] = mapped_column(String(20))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(String(255))
     last_tracking_run_id: Mapped[int | None] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text)
     target_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     percentage_drop_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     deal_score_threshold: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
-    notify_on_30d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
-    notify_on_90d_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
-    notify_on_all_time_low: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    notify_on_30d_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
+    notify_on_90d_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
+    notify_on_all_time_low: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     listing: Mapped["ListingRecord"] = relationship()
@@ -209,18 +227,26 @@ class TrackingEventRecord(Base):
 
 class DealScoreSnapshotRecord(Base):
     """A score observation scoped to one listing/search context."""
+
     __tablename__ = "deal_score_snapshots"
-    __table_args__ = (Index("ix_deal_score_snapshots_context_time", "listing_id", "tracked_search_id", "computed_at"),)
+    __table_args__ = (
+        Index(
+            "ix_deal_score_snapshots_context_time", "listing_id", "tracked_search_id", "computed_at"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
-    tracked_search_id: Mapped[int] = mapped_column(ForeignKey("tracked_searches.id"), nullable=False)
+    tracked_search_id: Mapped[int] = mapped_column(
+        ForeignKey("tracked_searches.id"), nullable=False
+    )
     score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class NotificationDeliveryStatus(StrEnum):
     PENDING = "pending"
+    PROCESSING = "processing"
     DELIVERED = "delivered"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -228,6 +254,7 @@ class NotificationDeliveryStatus(StrEnum):
 
 class AlertRuleRecord(Base):
     """Persistent, deliberately small event-to-channel rule."""
+
     __tablename__ = "alert_rules"
     __table_args__ = (Index("ix_alert_rules_event_enabled", "event_type", "enabled"),)
 
@@ -235,8 +262,12 @@ class AlertRuleRecord(Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
     destination: Mapped[str] = mapped_column(String(2048), nullable=False)
-    filters_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
-    cooldown_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    filters_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}", server_default="{}"
+    )
+    cooldown_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -270,6 +301,10 @@ class NotificationDeliveryRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(String(255))
     event: Mapped[TrackingEventRecord] = relationship(back_populates="deliveries")
 
 
@@ -325,6 +360,9 @@ class TrackedProfileRecord(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_status: Mapped[str | None] = mapped_column(String(20))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
     profile: Mapped[ProfileRecord | None] = relationship()
 
@@ -333,8 +371,9 @@ class TrackingRunRecord(Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (
         CheckConstraint(
-            "((profile_id IS NOT NULL) + (tracked_search_id IS NOT NULL) + "
-            "(tracked_listing_id IS NOT NULL)) = 1",
+            "((CASE WHEN profile_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_search_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN tracked_listing_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
             name="ck_tracking_runs_exactly_one_source",
         ),
         CheckConstraint(
@@ -417,7 +456,11 @@ class SchemaObservationRecord(Base):
 
 class SchemaDriftEventRecord(Base):
     __tablename__ = "schema_drift_events"
-    __table_args__ = (UniqueConstraint("source", "previous_signature", "current_signature", name="uq_schema_drift_transition"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "source", "previous_signature", "current_signature", name="uq_schema_drift_transition"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source: Mapped[str] = mapped_column(String(100), nullable=False)
