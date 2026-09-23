@@ -58,6 +58,137 @@ def test_health_api_endpoints_work_with_data(api_client):
     assert api_client.get("/api/v1/health/profiles/999").json()["status"] == "DEGRADED"
 
 
+def test_search_explain_endpoint_explains_a_stored_listing(api_client):
+    from decimal import Decimal
+
+    from wallapop_tracker.models import Listing
+    from wallapop_tracker.storage.repositories import (
+        ListingRepository,
+        SnapshotRepository,
+        TrackingRunRepository,
+    )
+
+    created = api_client.post(
+        "/api/v1/searches",
+        json={
+            "name": "iphone limpio",
+            "query": "iphone",
+            "max_price": "500",
+            "filters": {"title_include": ["iphone"], "description_include": ["garantia"]},
+        },
+    )
+    assert created.status_code == 201, created.text
+    search_id = created.json()["id"]
+
+    value = Listing(
+        item_id="item-1",
+        user_id="seller-1",
+        title="iPhone 15 Pro",
+        description="Con factura",
+        price=Decimal("450"),
+    )
+    database = api_client._health_database
+    with database.transaction() as session:
+        run = TrackingRunRepository(session).start_search_run(search_id)
+        TrackingRunRepository(session).mark_valid(run.id, items_ok=True)
+        record, _ = ListingRepository(session).get_or_create_global_listing(
+            value, None, tracking_run_id=run.id
+        )
+        SnapshotRepository(session).save_listing_snapshot(record.id, run.id, value)
+        listing_id = record.id
+
+    response = api_client.get(f"/api/v1/searches/{search_id}/listings/{listing_id}/explain")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["matched"] is False
+    assert payload["complete"] is True
+    assert [(trace["filter_name"], trace["passed"]) for trace in payload["traces"]] == [
+        ("max_price", True),
+        ("title_include", True),
+        ("description_include", False),
+    ]
+    assert payload["traces"][0]["actual_value"] == "450.00"
+    assert payload["traces"][0]["expected_value"] == "500.00"
+    assert payload["traces"][1]["matched_values"] == ["iphone"]
+    assert payload["traces"][2]["expected_value"] == ["garantia"]
+    assert payload["traces"][2]["matched_values"] == []
+    assert payload["warnings"] == []
+
+    assert api_client.get(f"/api/v1/searches/999/listings/{listing_id}/explain").status_code == 404
+    assert api_client.get(f"/api/v1/searches/{search_id}/listings/999/explain").status_code == 404
+
+
+def test_search_explain_endpoint_reports_unknown_conditions(api_client):
+    from decimal import Decimal
+
+    from wallapop_tracker.models import Listing
+    from wallapop_tracker.storage.repositories import (
+        ListingRepository,
+        SnapshotRepository,
+        TrackingRunRepository,
+    )
+
+    created = api_client.post(
+        "/api/v1/searches",
+        json={
+            "query": "iphone",
+            "filters": {
+                "models": ["iphone 15"],
+                "latitude": 41.39,
+                "longitude": 2.16,
+                "max_distance_km": 25,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    search_id = created.json()["id"]
+
+    value = Listing(
+        item_id="item-1",
+        user_id="seller-1",
+        title="iPhone 15 Pro",
+        price=Decimal("450"),
+    )
+    database = api_client._health_database
+    with database.transaction() as session:
+        run = TrackingRunRepository(session).start_search_run(search_id)
+        TrackingRunRepository(session).mark_valid(run.id, items_ok=True)
+        record, _ = ListingRepository(session).get_or_create_global_listing(
+            value, None, tracking_run_id=run.id
+        )
+        SnapshotRepository(session).save_listing_snapshot(record.id, run.id, value)
+        listing_id = record.id
+
+    response = api_client.get(f"/api/v1/searches/{search_id}/listings/{listing_id}/explain")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["matched"] is None
+    assert payload["complete"] is False
+    assert payload["traces"] == [
+        {
+            "filter_name": "model",
+            "passed": None,
+            "actual_value": None,
+            "expected_value": ["iphone 15"],
+            "matched_values": [],
+            "reason": "model is not persisted in listing snapshots",
+        },
+        {
+            "filter_name": "distance",
+            "passed": None,
+            "actual_value": None,
+            "expected_value": 25.0,
+            "matched_values": [],
+            "reason": "distance cannot be evaluated because coordinates are not persisted",
+        },
+    ]
+    assert payload["warnings"] == [
+        "model could not be evaluated from persisted data",
+        "distance could not be evaluated from persisted data",
+    ]
+
+
 def test_search_import_and_pagination(api_client):
     imported = api_client.post(
         "/api/v1/searches/import",
@@ -129,3 +260,15 @@ def test_tracked_listing_advanced_alerts_patch_preserves_unmodified_fields(api_c
     assert cleared.status_code == 200
     assert cleared.json()["target_price"] is None
     assert cleared.json()["deal_score_threshold"] is None
+
+
+def test_search_explain_openapi_allows_null_matched(api_client):
+    schemas = api_client.get("/openapi.json").json()["components"]["schemas"]
+
+    matched = schemas["FilterExplanationResponse"]["properties"]["matched"]
+    assert {"type": "boolean"} in matched["anyOf"]
+    assert {"type": "null"} in matched["anyOf"]
+
+    passed = schemas["FilterTraceResponse"]["properties"]["passed"]
+    assert {"type": "boolean"} in passed["anyOf"]
+    assert {"type": "null"} in passed["anyOf"]

@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.domain.deal_scoring import DealScore
+from wallapop_tracker.domain.filters import FilterTrace
 from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
 from wallapop_tracker.health import health_summary
 from wallapop_tracker.observability import Metrics, configure_logging, get_metrics
@@ -35,6 +36,7 @@ from wallapop_tracker.reporting.market import (
 )
 from wallapop_tracker.reporting.queries import get_price_history, get_profile_metrics_history
 from wallapop_tracker.services.deal_scoring import DealScoringService
+from wallapop_tracker.services.filter_explanation import explain_search_listing
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     AlertRuleRecord,
@@ -239,6 +241,34 @@ class ScoreResponse(APIModel):
     calculated_at: datetime
 
 
+class FilterTraceResponse(BaseModel):
+    """Kept outside :class:`APIModel` on purpose.
+
+    ``APIModel`` registers a wildcard field serializer for the money values, and
+    that would erase the JSON schema of the tri-state ``passed`` field. Only the
+    value fields are serialized here, so ``passed`` keeps its
+    ``boolean | null`` schema.
+    """
+
+    filter_name: str
+    passed: bool | None = None
+    actual_value: Any = None
+    expected_value: Any = None
+    matched_values: list[str] = []
+    reason: str | None = None
+
+    @field_serializer("actual_value", "expected_value", when_used="json")
+    def serialize_decimal(self, value: Any) -> Any:
+        return f"{value:.2f}" if isinstance(value, Decimal) else value
+
+
+class FilterExplanationResponse(BaseModel):
+    matched: bool | None
+    complete: bool
+    traces: list[FilterTraceResponse]
+    warnings: list[str] = []
+
+
 def _utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -321,6 +351,17 @@ def _listing(session: Session, record: ListingRecord) -> ListingResponse:
         price=snapshot.price if snapshot else None,
         url=snapshot.url if snapshot else None,
         presence_state=snapshot.presence_state.value if snapshot else None,
+    )
+
+
+def _filter_trace(trace: FilterTrace) -> FilterTraceResponse:
+    return FilterTraceResponse(
+        filter_name=trace.filter_name,
+        passed=trace.passed,
+        actual_value=trace.actual_value,
+        expected_value=trace.expected_value,
+        matched_values=list(trace.matched_values),
+        reason=trace.reason,
     )
 
 
@@ -521,6 +562,37 @@ def create_app(
         if row is None:
             raise _not_found("Search", search_id)
         return _search(row)
+
+    @api.get(
+        "/api/v1/searches/{search_id}/listings/{listing_id}/explain",
+        response_model=FilterExplanationResponse,
+        tags=["searches"],
+    )
+    def explain_listing(
+        search_id: int, listing_id: int, session: Session = Depends(get_session)
+    ) -> FilterExplanationResponse:
+        """Explain why a stored listing matched or failed a tracked search.
+
+        Read-only and runtime only: nothing is persisted and the stored search
+        is evaluated against the latest stored snapshot of the listing, so the
+        listing does not need to be a stored match of the search. Fields that
+        snapshots do not keep make their filter ``passed: null`` with
+        ``complete: false`` and ``matched: null``, and are summarized in
+        ``warnings``.
+        """
+
+        try:
+            explanation = explain_search_listing(session, search_id, listing_id)
+        except ValueError as exc:
+            if str(exc).startswith("Unknown search"):
+                raise _not_found("Search", search_id) from exc
+            raise _not_found("Listing", listing_id) from exc
+        return FilterExplanationResponse(
+            matched=explanation.matched,
+            complete=explanation.complete,
+            traces=[_filter_trace(trace) for trace in explanation.evaluation.traces],
+            warnings=list(explanation.warnings),
+        )
 
     @api.post("/api/v1/searches", response_model=SearchResponse, status_code=201, tags=["searches"])
     def create_search(

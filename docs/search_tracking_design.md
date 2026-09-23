@@ -73,11 +73,15 @@ estructurada equivalente a `(event_type, item_id, old_price, new_price)`.
 * `domain/filters.py`: filtros de texto por campo (`FieldIncludeFilter`,
   `FieldExcludeFilter`) y filtros exactos de primera palabra del título
   (`TitleFirstWordFilter`).
+* `domain/filters.py`: `FilterTrace`, `FilterEvaluation` y
+  `FilterEngine.evaluate()` para explicar por qué un anuncio pasó o falló.
 * `services/search_tracker.py`: captura, filtrado, snapshots, asociaciones y
   eventos de búsquedas.
+* `services/filter_explanation.py`: orquestación mínima que reconstruye el
+  `Listing` desde `listings` + el último snapshot y evalúa la búsqueda guardada.
 * Repositorios para búsquedas, asociaciones y eventos, más una migración
   Alembic posterior a `0006`.
-* Comandos `search add/update/list/show/enable/disable/delete/run/run-all`.
+* Comandos `search add/update/list/show/explain/enable/disable/delete/run/run-all`.
 
 La deduplicación es persistente, transaccional y protegida por una restricción
 única. No se realizan acciones de escritura en Wallapop.
@@ -144,3 +148,73 @@ La descripción se toma del propio payload de búsqueda (`description` ya está
 presente en las respuestas observadas y `Listing` la conserva). No se añaden
 peticiones de detalle por anuncio: si el payload omite o acorta la
 descripción, los términos de descripción simplemente no coinciden.
+
+## Explicación de matching (traces)
+
+`FilterEngine.matches(listing)` conserva su contrato y su cortocircuito: sigue
+devolviendo `bool`. La explicación vive en el mismo módulo de dominio y no
+duplica lógica, porque cada filtro implementa `explain()` y `matches()` se
+deriva de él:
+
+```text
+FilterEngine.matches(listing)  -> bool                    (compatibilidad)
+FilterEngine.evaluate(listing) -> FilterEvaluation
+FilterEvaluation.matched        -> bool | None
+FilterEvaluation.complete       -> bool
+FilterEvaluation.traces        -> tuple[FilterTrace, ...]
+```
+
+`FilterTrace` es un dataclass inmutable con `filter_name`, `passed`,
+`actual_value`, `expected_value`, `matched_values` y `reason`. `passed` es
+tri-estado:
+
+```text
+passed=True   PASS     el filtro se pudo evaluar y se cumple
+passed=False  FAIL     el filtro se pudo evaluar y no se cumple
+passed=None   UNKNOWN  no hay datos suficientes para evaluarlo
+```
+
+Los términos de texto que coincidieron se exponen en `matched_values`, la
+primera palabra exacta en `actual_value`, y el regex guarda el target evaluado
+(`title`, `description` o `both`), el patrón y si hubo match (sólo el texto
+coincidente, nunca grupos de captura).
+
+Reglas:
+
+* `evaluate()` no cortocircuita: recorre todos los filtros configurados aunque
+  uno falle, porque el objetivo es diagnóstico.
+* La agregación vive en un único sitio, `FilterEvaluation.from_traces`:
+  `matched=True` si todo pasa; `matched=False` en cuanto hay un FAIL conocido;
+  `matched=None` si no hay FAIL pero sí algún UNKNOWN. Es decir, un FAIL
+  conocido gana sobre UNKNOWN y un UNKNOWN sólo impide afirmar MATCHED.
+  `complete=False` en cuanto existe al menos un UNKNOWN.
+* `FilterEngine.evaluate()` sobre un `Listing` real sigue siendo determinista y
+  de dos estados: el motor nunca inventa UNKNOWN y para esos casos sigue
+  cumpliéndose `matches(listing) == evaluate(listing).matched` con
+  `complete=True`. El estado UNKNOWN lo introducen los llamadores que saben que
+  su entrada está incompleta, como el servicio de explicación desde storage.
+* Los filtros no configurados no generan trace y el orden es el documentado
+  arriba; un `PriceFilter` con ambos límites produce `min_price` y `max_price`.
+* Los traces son datos de runtime: no se persisten, no se añaden columnas ni
+  migraciones y no se guardan en `filters_json`.
+
+`services/filter_explanation.py` es la única orquestación añadida: lee
+`tracked_searches`, reconstruye el `Listing` de dominio desde `listings` y el
+último `listing_snapshots`, y evalúa la búsqueda con la misma configuración
+que usó el tracking (las columnas de precio mandan sobre el JSON). Se expone
+en `wallapop-track search explain <search_id> <listing_id>` y en
+`GET /api/v1/searches/{id}/listings/{listing_id}/explain`.
+
+Ese servicio es el único que conoce el límite de reconstrucción: los snapshots
+no guardan `model` ni coordenadas, así que reemplaza las trazas de `model` y
+`distance` por UNKNOWN (`passed=None` con
+`reason="model is not persisted in listing snapshots"` y
+`reason="distance cannot be evaluated because coordinates are not persisted"`),
+recalcula `matched`/`complete` con `FilterEvaluation.from_traces` y resume los
+filtros afectados en `warnings`. El dominio no sabe nada de `listing_snapshots`
+ni de qué columnas existen. Durante el tracking, en cambio, un anuncio real sin
+coordenadas sigue siendo rechazado por el filtro de distancia (`FAIL`), porque
+ahí el dato ausente es un hecho del anuncio y no un artefacto del almacenamiento.
+
+La CLI traduce los tres estados a `✓ PASS`, `✗ FAIL` y `? UNKNOWN`, con títulos
+`MATCHED`, `NOT MATCHED`, `NOT MATCHED (INCOMPLETE)` o `INCOMPLETE`.

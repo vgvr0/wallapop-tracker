@@ -3,7 +3,7 @@
 import asyncio
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import typer
 
 from .client import WallapopClient
+from .domain.filters import FilterTrace
 from .domain.listing_urls import parse_listing_reference
 from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import WallapopError
@@ -25,6 +26,7 @@ from .reporting import (
     get_seller_market_stats,
 )
 from .services.deal_scoring import DealScoringService
+from .services.filter_explanation import SearchListingExplanation, explain_search_listing
 from .services.notifications import NotificationService
 from .services.runner import (
     ListingTrackingRunner,
@@ -789,6 +791,99 @@ def search_import(
             typer.echo(f"- {parameter}")
 
 
+def _quoted(values: Iterable[str]) -> str:
+    return ", ".join(f'"{value}"' for value in values)
+
+
+def _terms(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Iterable):
+        return tuple(str(item) for item in value)
+    return ()
+
+
+def _number(value: object) -> str:
+    if isinstance(value, Decimal):
+        text = format(value, "f")
+        return text.rstrip("0").rstrip(".") if "." in text else text
+    if isinstance(value, float):
+        return f"{value:.1f}"
+    return str(value)
+
+
+def _trace_detail(trace: FilterTrace) -> str:
+    """Readable detail for one trace; presentation only, no filter semantics."""
+
+    name = trace.filter_name
+    actual = trace.actual_value
+    if trace.passed is None:
+        return trace.reason or "not evaluated from persisted data"
+    if actual is None and trace.reason:
+        return trace.reason
+    if name in {"min_price", "max_price"}:
+        operator = "<=" if name == "max_price" else ">="
+        if not trace.passed:
+            operator = "<" if operator == ">=" else ">"
+        return f"{_number(actual)} {operator} {_number(trace.expected_value)}"
+    if name in {"include", "title_include", "description_include"}:
+        if trace.passed:
+            return f"matched {_quoted(trace.matched_values)}"
+        missing = tuple(
+            term for term in _terms(trace.expected_value) if term not in trace.matched_values
+        )
+        detail = f"missing {_quoted(missing)}"
+        if trace.matched_values:
+            detail += f"; matched {_quoted(trace.matched_values)}"
+        return detail
+    if name in {"exclude", "title_exclude", "description_exclude"}:
+        if trace.passed:
+            return "no excluded terms found"
+        return f"found {_quoted(trace.matched_values)}"
+    if name == "title_first_word_include":
+        if trace.passed:
+            return f'"{actual}"'
+        return f'"{actual}" not one of {_quoted(_terms(trace.expected_value))}'
+    if name == "title_first_word_exclude":
+        return f'"{actual}" is excluded' if not trace.passed else f'"{actual}" not excluded'
+    if name == "regex":
+        if trace.passed:
+            return f"matched {_quoted(trace.matched_values)} in {actual}"
+        return f"no match for {trace.expected_value!r} in {actual}"
+    if name == "distance":
+        return f"{_number(actual)} km <= {_number(trace.expected_value)} km"
+    if name == "category_id":
+        return (
+            str(actual) if trace.passed else f"{actual or 'missing'} is not {trace.expected_value}"
+        )
+    if name in {"condition", "brand", "model"}:
+        if trace.passed:
+            return str(actual)
+        return f"{actual or 'missing'} not one of {_quoted(_terms(trace.expected_value))}"
+    return str(actual) if trace.passed and actual is not None else (trace.reason or "failed")
+
+
+def _explanation_payload(explanation: SearchListingExplanation) -> dict[str, object]:
+    return {
+        "search_id": explanation.search_id,
+        "listing_id": explanation.listing_id,
+        "matched": explanation.matched,
+        "complete": explanation.complete,
+        "traces": [
+            {
+                "filter_name": trace.filter_name,
+                "passed": trace.passed,
+                "actual_value": trace.actual_value,
+                "expected_value": trace.expected_value,
+                "matched_values": list(trace.matched_values),
+                "reason": trace.reason,
+            }
+            for trace in explanation.evaluation.traces
+        ],
+        "warnings": list(explanation.warnings),
+    }
+
+
 @search_app.command("show")
 def search_show(search_id: int) -> None:
     database = _db()
@@ -810,6 +905,40 @@ def search_show(search_id: int) -> None:
             typer.echo(f"filters: {record.filters_json or '{}'}")
     finally:
         database.close()
+
+
+@search_app.command("explain")
+def search_explain(
+    search_id: int,
+    listing_id: int,
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Explain why a stored listing matched or failed a tracked search."""
+    database = _db()
+    try:
+        with database.session() as session:
+            try:
+                explanation = explain_search_listing(session, search_id, listing_id)
+            except ValueError as exc:
+                raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    if as_json:
+        payload = _explanation_payload(explanation)
+        typer.echo(json.dumps(payload, default=_json_default, sort_keys=True))
+        return
+    if explanation.matched is None:
+        typer.echo("INCOMPLETE")
+    elif explanation.matched:
+        typer.echo("MATCHED")
+    else:
+        typer.echo("NOT MATCHED" if explanation.complete else "NOT MATCHED (INCOMPLETE)")
+    typer.echo("")
+    for trace in explanation.evaluation.traces:
+        mark = "?" if trace.passed is None else ("✓" if trace.passed else "✗")
+        typer.echo(f"{mark} {trace.filter_name}: {_trace_detail(trace)}")
+    for warning in explanation.warnings:
+        typer.echo(f"warning: {warning}")
 
 
 def _toggle_search(search_id: int, enabled: bool) -> None:

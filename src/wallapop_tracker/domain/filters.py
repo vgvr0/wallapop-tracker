@@ -9,13 +9,17 @@ from decimal import Decimal
 from enum import StrEnum
 from math import asin, cos, radians, sin, sqrt
 from re import Pattern
-from typing import Protocol, cast
+from typing import Protocol, cast, runtime_checkable
 
 from wallapop_tracker.models import Listing
 
 
 class ListingFilter(Protocol):
-    """A deterministic predicate over a listing."""
+    """A deterministic predicate over a listing.
+
+    Built-in filters also implement :meth:`ExplainableFilter.explain` so the
+    engine can describe what each configured condition evaluated.
+    """
 
     def matches(self, listing: Listing) -> bool:
         """Return whether ``listing`` satisfies this filter."""
@@ -76,6 +80,88 @@ def _text(listing: Listing) -> str:
 
 
 @dataclass(frozen=True)
+class FilterTrace:
+    """Why a single configured condition accepted, rejected or skipped a listing.
+
+    ``passed`` is local to the condition and has three states: ``True`` means
+    the filter lets the listing continue (PASS), ``False`` means it rejects it
+    (FAIL) and ``None`` means the condition could not be evaluated because the
+    data it needs is unavailable (UNKNOWN). The engine never produces ``None``
+    by itself; that state belongs to callers that know their input is
+    incomplete, such as the storage-backed explanation service.
+
+    One filter can emit several traces (a price filter configured with both
+    bounds emits ``min_price`` and ``max_price``) and a filter with nothing
+    configured emits none.
+
+    ``actual_value`` holds the value observed on the listing, ``expected_value``
+    the configured expectation and ``matched_values`` the configured terms that
+    were found. ``reason`` is an optional short hint for cases where the values
+    alone are ambiguous, such as a missing price or an unevaluated condition.
+    Traces are runtime diagnostics: they are never persisted.
+    """
+
+    filter_name: str
+    passed: bool | None
+    actual_value: object | None = None
+    expected_value: object | None = None
+    matched_values: tuple[str, ...] = ()
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class FilterEvaluation:
+    """Explanation of one listing against one engine.
+
+    ``traces`` always covers every configured filter, even the ones evaluated
+    after a failure, because diagnosis is the point of
+    :meth:`FilterEngine.evaluate`. ``complete`` is ``False`` as soon as one
+    condition is unknown.
+
+    ``matched`` is ``True`` when every condition passed, ``False`` as soon as a
+    condition failed, and ``None`` when there is no known failure but some
+    condition is unknown. A known failure therefore wins over an unknown
+    condition, while an unknown condition only prevents asserting a match.
+    """
+
+    matched: bool | None
+    traces: tuple[FilterTrace, ...] = ()
+    complete: bool = True
+
+    @classmethod
+    def from_traces(cls, traces: Iterable[FilterTrace]) -> FilterEvaluation:
+        """Aggregate traces into ``matched`` and ``complete``.
+
+        This is the only place where the tri-state verdict is derived, so the
+        engine and the storage-backed explanation always agree.
+        """
+
+        items = tuple(traces)
+        unknown = any(trace.passed is None for trace in items)
+        if any(trace.passed is False for trace in items):
+            return cls(False, items, complete=not unknown)
+        if unknown:
+            return cls(None, items, complete=False)
+        return cls(True, items)
+
+
+@runtime_checkable
+class ExplainableFilter(Protocol):
+    """A filter able to report every condition it evaluated."""
+
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        """Return one trace per configured condition, in evaluation order."""
+
+
+def _explain_filter(item: ListingFilter, listing: Listing) -> tuple[FilterTrace, ...]:
+    """Trace one filter, tolerating custom filters that only implement ``matches``."""
+
+    if isinstance(item, ExplainableFilter):
+        return item.explain(listing)
+    return (FilterTrace(filter_name=type(item).__name__, passed=item.matches(listing)),)
+
+
+@dataclass(frozen=True)
 class PriceFilter:
     min_price: Decimal | None = None
     max_price: Decimal | None = None
@@ -85,12 +171,34 @@ class PriceFilter:
             if self.min_price > self.max_price:
                 raise ValueError("min_price must not exceed max_price")
 
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        traces: list[FilterTrace] = []
+        price = listing.price
+        missing = "price missing" if price is None else None
+        if self.min_price is not None:
+            traces.append(
+                FilterTrace(
+                    filter_name="min_price",
+                    passed=price is not None and price >= self.min_price,
+                    actual_value=price,
+                    expected_value=self.min_price,
+                    reason=missing,
+                )
+            )
+        if self.max_price is not None:
+            traces.append(
+                FilterTrace(
+                    filter_name="max_price",
+                    passed=price is not None and price <= self.max_price,
+                    actual_value=price,
+                    expected_value=self.max_price,
+                    reason=missing,
+                )
+            )
+        return tuple(traces)
+
     def matches(self, listing: Listing) -> bool:
-        if listing.price is None:
-            return self.min_price is None and self.max_price is None
-        if self.min_price is not None and listing.price < self.min_price:
-            return False
-        return not (self.max_price is not None and listing.price > self.max_price)
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -100,17 +208,41 @@ class ConditionFilter:
     def __init__(self, codes: Iterable[str]) -> None:
         object.__setattr__(self, "codes", frozenset(code for code in codes if code))
 
-    def matches(self, listing: Listing) -> bool:
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        if not self.codes:
+            return ()
         value = listing.condition_code or listing.condition
-        return not self.codes or (value is not None and value.casefold() in {c.casefold() for c in self.codes})
+        passed = value is not None and value.casefold() in {code.casefold() for code in self.codes}
+        return (
+            FilterTrace(
+                filter_name="condition",
+                passed=passed,
+                actual_value=value,
+                expected_value=tuple(sorted(self.codes)),
+                reason=None if value is not None else "condition missing",
+            ),
+        )
+
+    def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
 class CategoryFilter:
     category_id: str
 
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        return (
+            FilterTrace(
+                filter_name="category_id",
+                passed=listing.category_id == self.category_id,
+                actual_value=listing.category_id,
+                expected_value=self.category_id,
+            ),
+        )
+
     def matches(self, listing: Listing) -> bool:
-        return listing.category_id == self.category_id
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -122,9 +254,23 @@ class ValueFilter:
         object.__setattr__(self, "values", frozenset(v.casefold() for v in values if v.strip()))
         object.__setattr__(self, "attribute", attribute)
 
-    def matches(self, listing: Listing) -> bool:
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        if not self.values:
+            return ()
         value = getattr(listing, self.attribute, None)
-        return not self.values or (isinstance(value, str) and value.casefold() in self.values)
+        passed = isinstance(value, str) and value.casefold() in self.values
+        return (
+            FilterTrace(
+                filter_name=self.attribute,
+                passed=passed,
+                actual_value=value,
+                expected_value=tuple(sorted(self.values)),
+                reason=None if value is not None else f"{self.attribute} missing",
+            ),
+        )
+
+    def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -133,13 +279,34 @@ class DistanceFilter:
     longitude: float
     max_distance_km: float
 
-    def matches(self, listing: Listing) -> bool:
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         if listing.latitude is None or listing.longitude is None:
-            return False
+            return (
+                FilterTrace(
+                    filter_name="distance",
+                    passed=False,
+                    expected_value=self.max_distance_km,
+                    reason="listing coordinates missing",
+                ),
+            )
         dlat = radians(listing.latitude - self.latitude)
         dlon = radians(listing.longitude - self.longitude)
-        a = sin(dlat / 2) ** 2 + cos(radians(self.latitude)) * cos(radians(listing.latitude)) * sin(dlon / 2) ** 2
-        return 6371.0088 * 2 * asin(sqrt(a)) <= self.max_distance_km
+        a = (
+            sin(dlat / 2) ** 2
+            + cos(radians(self.latitude)) * cos(radians(listing.latitude)) * sin(dlon / 2) ** 2
+        )
+        distance_km = 6371.0088 * 2 * asin(sqrt(a))
+        return (
+            FilterTrace(
+                filter_name="distance",
+                passed=distance_km <= self.max_distance_km,
+                actual_value=distance_km,
+                expected_value=self.max_distance_km,
+            ),
+        )
+
+    def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -152,12 +319,23 @@ class IncludeTextFilter:
         object.__setattr__(self, "terms", normalized)
         object.__setattr__(self, "mode", IncludeMode(mode))
 
-    def matches(self, listing: Listing) -> bool:
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         if not self.terms:
-            return True
+            return ()
         haystack = _text(listing)
-        checks = [term in haystack for term in self.terms]
-        return all(checks) if self.mode == IncludeMode.ALL else any(checks)
+        matched = tuple(term for term in self.terms if term in haystack)
+        passed = len(matched) == len(self.terms) if self.mode == IncludeMode.ALL else bool(matched)
+        return (
+            FilterTrace(
+                filter_name="include",
+                passed=passed,
+                expected_value=self.terms,
+                matched_values=matched,
+            ),
+        )
+
+    def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -167,9 +345,22 @@ class ExcludeTextFilter:
     def __init__(self, terms: Iterable[str]) -> None:
         object.__setattr__(self, "terms", tuple(term.casefold() for term in terms if term.strip()))
 
-    def matches(self, listing: Listing) -> bool:
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
+        if not self.terms:
+            return ()
         haystack = _text(listing)
-        return not any(term in haystack for term in self.terms)
+        matched = tuple(term for term in self.terms if term in haystack)
+        return (
+            FilterTrace(
+                filter_name="exclude",
+                passed=not matched,
+                expected_value=self.terms,
+                matched_values=matched,
+            ),
+        )
+
+    def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
 
 
 @dataclass(frozen=True)
@@ -199,11 +390,22 @@ class FieldIncludeFilter:
         object.__setattr__(self, "mode", IncludeMode(mode))
 
     def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
+
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         if not self.terms:
-            return True
+            return ()
         haystack = normalize_text(getattr(listing, self.field.value, None))
-        checks = [term in haystack for term in self.terms]
-        return all(checks) if self.mode == IncludeMode.ALL else any(checks)
+        matched = tuple(term for term in self.terms if term in haystack)
+        passed = len(matched) == len(self.terms) if self.mode == IncludeMode.ALL else bool(matched)
+        return (
+            FilterTrace(
+                filter_name=f"{self.field.value}_include",
+                passed=passed,
+                expected_value=self.terms,
+                matched_values=matched,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -222,10 +424,21 @@ class FieldExcludeFilter:
         object.__setattr__(self, "field", TextField(field))
 
     def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
+
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         if not self.terms:
-            return True
+            return ()
         haystack = normalize_text(getattr(listing, self.field.value, None))
-        return not any(term in haystack for term in self.terms)
+        matched = tuple(term for term in self.terms if term in haystack)
+        return (
+            FilterTrace(
+                filter_name=f"{self.field.value}_exclude",
+                passed=not matched,
+                expected_value=self.terms,
+                matched_values=matched,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -247,10 +460,23 @@ class TitleFirstWordFilter:
         object.__setattr__(self, "exclude", exclude)
 
     def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
+
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         if not self.words:
-            return True
-        found = normalize_first_word(listing.title) in self.words
-        return not found if self.exclude else found
+            return ()
+        first_word = normalize_first_word(listing.title)
+        found = first_word in self.words
+        name = "title_first_word_exclude" if self.exclude else "title_first_word_include"
+        return (
+            FilterTrace(
+                filter_name=name,
+                passed=not found if self.exclude else found,
+                actual_value=first_word,
+                expected_value=tuple(sorted(self.words)),
+                matched_values=(first_word,) if found else (),
+            ),
+        )
 
 
 RegexTarget = str
@@ -272,6 +498,9 @@ class RegexFilter:
         object.__setattr__(self, "_compiled", compiled)
 
     def matches(self, listing: Listing) -> bool:
+        return all(trace.passed for trace in self.explain(listing))
+
+    def explain(self, listing: Listing) -> tuple[FilterTrace, ...]:
         assert self._compiled is not None
         if self.target == "title":
             value = listing.title or ""
@@ -279,7 +508,16 @@ class RegexFilter:
             value = listing.description or ""
         else:
             value = f"{listing.title or ''} {listing.description or ''}"
-        return self._compiled.search(value) is not None
+        match = self._compiled.search(value)
+        return (
+            FilterTrace(
+                filter_name="regex",
+                passed=match is not None,
+                actual_value=self.target,
+                expected_value=self.pattern,
+                matched_values=(match.group(0),) if match is not None else (),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -290,7 +528,26 @@ class FilterEngine:
         object.__setattr__(self, "filters", tuple(filters))
 
     def matches(self, listing: Listing) -> bool:
+        """Return whether every configured filter accepts ``listing``.
+
+        Kept behaviour-compatible with the original engine: the test
+        short-circuits and never returns ``None``. :meth:`evaluate` reports the
+        same verdict together with a trace per configured filter.
+        """
+
         return all(item.matches(listing) for item in self.filters)
+
+    def evaluate(self, listing: Listing) -> FilterEvaluation:
+        """Evaluate every configured filter and explain the outcome.
+
+        Unlike :meth:`matches`, evaluation never stops at the first failure:
+        the goal is diagnosis, so ``traces`` always covers every configured
+        filter. Every trace is a plain PASS/FAIL for a real listing;
+        :class:`FilterEvaluation` then derives ``matched`` and ``complete``.
+        """
+
+        traces = tuple(trace for item in self.filters for trace in _explain_filter(item, listing))
+        return FilterEvaluation.from_traces(traces)
 
     def apply(self, listings: Iterable[Listing]) -> list[Listing]:
         return [listing for listing in listings if self.matches(listing)]

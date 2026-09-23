@@ -141,6 +141,7 @@ wallapop-track metadata brands --category-id 24200
 wallapop-track metadata models --category-id 24200 --query iphone
 wallapop-track search list
 wallapop-track search show 1
+wallapop-track search explain 1 42
 wallapop-track search run 1
 wallapop-track search run-all
 wallapop-track search disable 1
@@ -164,7 +165,7 @@ wallapop-track listing disable camera
 wallapop-track listing remove camera --yes
 ```
 
-`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. The advanced text filters are repeatable too: `--title-include`, `--description-include`, `--title-exclude`, `--description-exclude`, `--title-first-word-include` and `--title-first-word-exclude`, with `--title-include-mode` / `--description-include-mode` selecting ANY or ALL. `search update <id>` replaces only the text filters you pass, keeps the rest of the stored configuration, and `--clear-text-filters` removes them; see [Search filters](#search-filters) for the exact semantics. `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
+`add` accepts an optional `--notes` value and resolves/checks the profile before creating the tracked-profile record. Search creation is local and does not contact Wallapop; `search import` parses only semantic values present in a compatible Wallapop search URL and warns about unsupported parameters. New searches suppress `NEW_LISTING` on their first valid run; pass `--notify-on-first-run` to keep initial notifications enabled. `--include` and `--exclude` can be repeated, and `--include-all` changes inclusion from ANY to ALL. The advanced text filters are repeatable too: `--title-include`, `--description-include`, `--title-exclude`, `--description-exclude`, `--title-first-word-include` and `--title-first-word-exclude`, with `--title-include-mode` / `--description-include-mode` selecting ANY or ALL. `search update <id>` replaces only the text filters you pass, keeps the rest of the stored configuration, and `--clear-text-filters` removes them; see [Search filters](#search-filters) for the exact semantics. `search explain <search_id> <listing_id>` prints the runtime trace of one stored listing against a stored search (`--json` for the structured payload); see [Filter explanations](#filter-explanations). `remove` and `search delete` ask for confirmation unless `--yes` is supplied.
 
 The scheduler also accepts `--poll-seconds` (default: `60`). Without `--once`, it keeps polling until interrupted. `schedule --once` evaluates due profiles and tracked searches once, then exits. Profiles use the scheduler interval; searches use their persisted `interval_seconds`.
 
@@ -230,6 +231,78 @@ Every step is ANDed, so the order is descriptive: a listing must satisfy all con
 ### Description availability
 
 Wallapop's search response already carries a `description` field and the normalized `Listing` keeps it, so `description_include` and `description_exclude` run on the search payload itself and no extra per-listing detail request is issued. Filters can only see what the search payload exposes: when Wallapop omits or shortens a description there, description terms will not match it (and description excludes will not reject it). Re-run `wallapop-track search run <id>` and inspect the stored snapshots if a description filter behaves unexpectedly.
+
+### Filter explanations
+
+`FilterEngine.matches(listing)` keeps its contract: it returns a plain `bool`, never `None`, and still short-circuits. The same engine can also explain the verdict, which is what the CLI and the API use for debugging, UI and explicability:
+
+```python
+from wallapop_tracker.domain.filters import filters_from_config
+
+engine = filters_from_config({"max_price": "500", "title_include": ["rtx 4070"]})
+
+engine.matches(listing)  # unchanged, short-circuiting bool
+evaluation = engine.evaluate(listing)
+
+evaluation.matched  # True / False for a real listing
+evaluation.complete  # False as soon as one condition is unknown
+evaluation.traces  # one FilterTrace per configured filter
+```
+
+Each trace is a frozen `FilterTrace`:
+
+| Field | Meaning |
+| --- | --- |
+| `filter_name` | Canonical filter name (`min_price`, `max_price`, `condition`, `category_id`, `brand`, `model`, `distance`, `include`, `exclude`, `title_include`, `description_include`, `title_exclude`, `description_exclude`, `title_first_word_include`, `title_first_word_exclude`, `regex`) |
+| `passed` | `True` = PASS, `False` = FAIL, `None` = UNKNOWN (not enough data to evaluate it) |
+| `actual_value` | Value observed on the listing; missing data stays `None` and a regex trace stores the evaluated target (`title`, `description` or `both`) |
+| `expected_value` | Configured expectation |
+| `matched_values` | Configured terms that were found |
+| `reason` | Short hint when the values alone are ambiguous, such as `price missing` or `model is not persisted in listing snapshots` |
+
+The three per-filter states are:
+
+| State | `passed` | Meaning |
+| --- | --- | --- |
+| PASS | `True` | The filter could be evaluated and the listing satisfies it |
+| FAIL | `False` | The filter could be evaluated and the listing does not satisfy it |
+| UNKNOWN | `None` | There is not enough data to evaluate the filter |
+
+Rules that follow from the design:
+
+* `evaluate()` never short-circuits: every configured filter is traced even after a failure, so a single rejection never hides the rest of the diagnosis.
+* The global verdict is derived in one place (`FilterEvaluation.from_traces`) with these rules: `matched=True` means every condition passed, `matched=False` means at least one condition failed, and `matched=None` means there is no known failure but some condition is unknown. A known failure wins over an unknown condition, while an unknown condition only prevents asserting a match; `complete=False` as soon as there is at least one UNKNOWN.
+* `FilterEngine.evaluate()` on a real listing stays two-valued: the engine itself never invents UNKNOWN, and for those listings `engine.matches(listing) == engine.evaluate(listing).matched` (with `complete=True`). UNKNOWN comes from callers that know their input is incomplete, such as the storage-backed explanation service.
+* A filter that is not configured emits no trace, and the trace order is the documented evaluation order above. A price filter configured with both bounds emits `min_price` and `max_price`.
+* Traces are runtime diagnostics. They are not persisted, no column or migration is added, and explaining a listing issues no extra Wallapop request.
+
+Realistic output:
+
+```text
+$ wallapop-track search explain 1 42
+NOT MATCHED
+
+✓ min_price: 400 >= 300
+✓ max_price: 400 <= 500
+✓ title_include: matched "rtx 4070"
+✗ description_include: missing "garantia"
+✓ title_exclude: no excluded terms found
+✓ title_first_word_include: "asus"
+```
+
+When persisted data is not enough to evaluate a condition, the trace is UNKNOWN and the global verdict becomes `INCOMPLETE` (or `NOT MATCHED (INCOMPLETE)` when another condition already failed):
+
+```text
+$ wallapop-track search explain 1 42
+INCOMPLETE
+
+✓ max_price: 400 <= 500
+? model: model is not persisted in listing snapshots
+? distance: distance cannot be evaluated because coordinates are not persisted
+✓ title_include: matched "iphone"
+```
+
+Storage keeps price, category, condition, brand and the text fields, which is exactly what those filters read. `model` and the coordinates used by a distance filter have no column in `listing_snapshots`, so when the explanation rebuilds a listing from storage it marks those two traces UNKNOWN instead of reporting a false FAIL, and summarizes them in `warnings`. That knowledge lives in the explanation service, not in the domain: during tracking a real listing without coordinates is still rejected by the distance filter (`FAIL`), because there the missing value is a fact about the listing rather than a storage artifact.
 
 ## Scheduling
 

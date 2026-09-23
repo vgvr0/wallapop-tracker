@@ -17,6 +17,8 @@ Implemented endpoint groups:
 
 * profiles and profile history;
 * tracked searches, local create/update, and search URL import;
+* filter explanations for a stored listing of a stored search
+  (`GET /api/v1/searches/{id}/listings/{listing_id}/explain`);
 * listings and price history;
 * tracked listings and local enable/update;
 * events and tracking runs;
@@ -37,6 +39,38 @@ writes, including the advanced text filters `title_include`,
 `title_first_word_include`, `title_first_word_exclude` and their
 `title_include_mode` / `description_include_mode` (`any` or `all`) policies.
 See [`../README.md`](../README.md#search-filters) for the exact semantics.
+
+`GET /api/v1/searches/{id}/listings/{listing_id}/explain` evaluates a stored
+listing against a stored search and returns `matched`, the per-filter `traces`
+and any `warnings`. It is read-only and runtime only: nothing is persisted, no
+extra Wallapop request is issued, and the listing does not need to be a stored
+match of the search, so a rejection can be explained too. See
+[`../README.md`](../README.md#filter-explanations).
+
+Both `matched` and each trace `passed` are tri-state. `passed` is `true` (PASS),
+`false` (FAIL) or `null` (UNKNOWN: persisted data is not enough to evaluate that
+condition). Globally, `matched` is `true` when every condition passed, `false`
+when at least one condition failed, and `null` when there is no known failure
+but some condition is unknown; `complete` is `false` as soon as one condition is
+unknown, and `warnings` summarizes those conditions:
+
+```json
+{
+  "matched": null,
+  "complete": false,
+  "traces": [
+    {
+      "filter_name": "model",
+      "passed": null,
+      "actual_value": null,
+      "expected_value": ["iphone 15"],
+      "matched_values": [],
+      "reason": "model is not persisted in listing snapshots"
+    }
+  ],
+  "warnings": ["model could not be evaluated from persisted data"]
+}
+```
 
 Known missing entities return 404, invalid input returns 422, and local
 configuration conflicts such as duplicate tracked-listing aliases return 409.
