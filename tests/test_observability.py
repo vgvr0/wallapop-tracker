@@ -1,3 +1,4 @@
+import importlib
 import json
 import logging
 from pathlib import Path
@@ -52,6 +53,20 @@ def test_ready_requires_current_alembic_revision():
             connection.execute(
                 text("INSERT INTO alembic_version VALUES ('0013_marketplace_identity')")
             )
+        assert client.get("/ready").status_code == 200
+    database.close()
+
+
+def test_ready_finds_migrations_when_package_is_installed(monkeypatch):
+    database = Database("sqlite+pysqlite:///:memory:")
+    database.create_all()
+    app_module = importlib.import_module("wallapop_tracker.api.app")
+    monkeypatch.setattr(app_module, "__file__", "/usr/local/lib/site-packages/wallapop_tracker/api/app.py")
+    app = create_app(database, metrics=Metrics())
+    with TestClient(app) as client:
+        with database.engine.begin() as connection:
+            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            connection.execute(text("INSERT INTO alembic_version VALUES ('0013_marketplace_identity')"))
         assert client.get("/ready").status_code == 200
     database.close()
 

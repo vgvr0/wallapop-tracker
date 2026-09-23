@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -57,6 +58,8 @@ from wallapop_tracker.storage.repositories import (
     TrackedListingRepository,
     TrackedSearchRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class APIModel(BaseModel):
@@ -428,6 +431,11 @@ def _schema_is_ready(database: Database) -> bool:
     try:
         project_root = Path(__file__).resolve().parents[3]
         config_path = project_root / "alembic.ini"
+        if not config_path.exists():
+            # In the container the package is installed under site-packages,
+            # while the migration files are copied to the application root.
+            project_root = Path.cwd()
+            config_path = project_root / "alembic.ini"
         config = Config(str(config_path if config_path.exists() else Path("alembic.ini")))
         config.set_main_option("script_location", str(project_root / "alembic"))
         script = ScriptDirectory.from_config(config)
@@ -438,6 +446,7 @@ def _schema_is_ready(database: Database) -> bool:
         # older deployments; Alembic still upgrades them to the new head.
         return current in {expected, "0013_marketplace_identity"}
     except Exception:
+        logger.exception("Readiness schema check failed")
         return False
 
 
