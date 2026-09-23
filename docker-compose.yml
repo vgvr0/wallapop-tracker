@@ -10,6 +10,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  migrate:
+    build:
+      context: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
+    depends_on:
+      postgres:
+        condition: service_healthy
   tracker:
     build:
       context: .
@@ -21,8 +32,16 @@ services:
     environment:
       WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./data:/app/data
   scheduler:
@@ -32,8 +51,11 @@ services:
     environment:
       WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    restart: unless-stopped
     volumes:
       - ./data:/app/data
   notification-worker:
@@ -43,7 +65,13 @@ services:
     environment:
       WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    restart: unless-stopped
     volumes:
       - ./data:/app/data
+
+volumes:
+  postgres-data:

@@ -133,21 +133,28 @@ uvicorn wallapop_tracker.api.app:app --host 0.0.0.0 --port 8000
 ```bash
 docker build -t wallapop-tracker .
 docker compose config
-docker compose run --rm tracker alembic upgrade head
-docker compose up                                      # API on :8000, plus postgres and workers
+docker compose up -d --build                          # migrates DB, then API on :8000 and workers
 docker compose run --rm tracker wallapop-track list    # CLI instead of the default process
 curl http://localhost:8000/health
 curl http://localhost:8000/ready
 ```
 
 `docker-compose.yml` publishes port `8000`, defaults `WALLAPOP_TRACKER_DB_URL` to its PostgreSQL
-service, and defines `tracker`, `scheduler` and `notification-worker`. The `./data` mount is kept
-for local artifacts. The PostgreSQL/worker implementation is a separate workstream and is not
-claimed as part of the SQLite quick-start validation.
+service, and defines a one-shot `migrate`, `tracker`, `scheduler` and `notification-worker` service.
+The `./data` mount is kept for local artifacts and the named `postgres-data` volume preserves the
+database across `docker compose down` / `up` (do not use `down -v` unless you intend to delete it).
+To apply migrations manually, use `docker compose run --rm migrate`; the normal `up` flow applies
+them automatically before the API and workers start. `/ready` is expected to return `200` only
+after the migration service reaches Alembic head. Stop services with `docker compose down`.
 
-Docker was not executed while preparing this release (no Docker runtime was available in that
-environment), so the container was validated by inspection only. Treat the commands above as the
-supported flow and confirm the first start through `/health` and `/ready`.
+For a local runtime smoke test without Wallapop traffic, run:
+
+```bash
+python scripts/validate_docker_release.py
+```
+
+The smoke test builds the image, starts Compose, validates health/readiness/metrics/docs and the
+CLI, checks restart persistence, and cleans up containers without deleting volumes.
 
 ## Security and deployment scope
 
