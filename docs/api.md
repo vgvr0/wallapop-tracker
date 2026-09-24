@@ -38,14 +38,15 @@ writes, including the advanced text filters `title_include`,
 `description_include`, `title_exclude`, `description_exclude`,
 `title_first_word_include`, `title_first_word_exclude` and their
 `title_include_mode` / `description_include_mode` (`any` or `all`) policies.
-See [`../README.md`](../README.md#search-filters) for the exact semantics.
+See [`search_tracking_design.md`](search_tracking_design.md#filtros-avanzados-de-texto) for the exact
+semantics, and the README filter table for the summary.
 
 `GET /api/v1/searches/{id}/listings/{listing_id}/explain` evaluates a stored
 listing against a stored search and returns `matched`, the per-filter `traces`
 and any `warnings`. It is read-only and runtime only: nothing is persisted, no
 extra Wallapop request is issued, and the listing does not need to be a stored
 match of the search, so a rejection can be explained too. See
-[`../README.md`](../README.md#filter-explanations).
+[`search_tracking_design.md`](search_tracking_design.md#explicación-de-matching-traces).
 
 Both `matched` and each trace `passed` are tri-state. `passed` is `true` (PASS),
 `false` (FAIL) or `null` (UNKNOWN: persisted data is not enough to evaluate that

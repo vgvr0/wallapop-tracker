@@ -11,7 +11,7 @@ RUN addgroup --system app \
     && mkdir -p /app/data \
     && chown -R app:app /app
 
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY src ./src
 COPY alembic.ini ./
 COPY alembic ./alembic
@@ -20,3 +20,9 @@ RUN pip install .
 
 USER app
 
+EXPOSE 8000
+
+# Default process for the image: the local/private FastAPI service. Override it
+# to run the CLI instead, for example:
+#   docker compose run --rm tracker wallapop-track list
+CMD ["uvicorn", "wallapop_tracker.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
