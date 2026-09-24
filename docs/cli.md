@@ -35,6 +35,7 @@ Los comandos `events` y `dlq` están documentados en [event_bus.md](event_bus.md
 | `run-all` | Track every enabled profile once. |
 | `profile show ALIAS` | Show the latest observed `reports_received` value (`unknown` when unavailable). |
 | `profile history ALIAS` | Show the historical observed profile metrics, including `reports_received`. |
+| `profile reputation ALIAS [--json]` | Show descriptive seller reputation metrics and local peer context from stored snapshots. |
 | `schedule [--once] [--interval-hours 168] [--poll-seconds 60] [--max-concurrency 4]` | Run due profiles, searches and tracked listings; `--once` evaluates due work and exits. |
 | `notify [--dry-run]` | Dispatch persisted notification deliveries through the configured channels. |
 

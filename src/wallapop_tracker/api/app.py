@@ -47,6 +47,7 @@ from wallapop_tracker.reporting.queries import get_price_history, get_profile_me
 from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.services.event_bus import deserialize_event
 from wallapop_tracker.services.filter_explanation import explain_search_listing
+from wallapop_tracker.services.seller_reputation import build_seller_reputation
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     AlertRuleRecord,
@@ -198,6 +199,38 @@ class ProfileResponse(APIModel):
     first_seen_at: datetime
     last_seen_at: datetime
     reports_received: int | None = None
+
+
+class SellerReputationResponse(APIModel):
+    profile_id: int
+    generated_at: datetime
+    rating: float | None
+    reviews: int | None
+    sales: int | None
+    published: int | None
+    sold: int | None
+    reports_received: int | None
+    rating_1_count: int | None
+    rating_2_count: int | None
+    rating_3_count: int | None
+    rating_4_count: int | None
+    rating_5_count: int | None
+    low_rating_count: int | None
+    low_rating_ratio: float | None
+    reports_per_100_sales: float | None
+    reports_per_100_reviews: float | None
+    reports_delta_30d: int | None
+    reports_delta_90d: int | None
+    rating_delta_30d: float | None
+    review_growth_30d: int | None
+    sales_growth_30d: int | None
+    peer_median_reports: float | None
+    peer_percentile: float | None
+    peer_sample_size: int
+    interpretation: str | None
+    confidence: str
+    data_quality: str
+    warnings: list[str]
 
 
 class ListingResponse(APIModel):
@@ -634,6 +667,20 @@ def create_app(
             _json_value(point.__dict__)
             for point in get_profile_metrics_history(session, profile_id)
         ]
+
+    @api.get(
+        "/api/v1/profiles/{profile_id}/reputation",
+        response_model=SellerReputationResponse,
+        tags=["profiles"],
+    )
+    def profile_reputation(
+        profile_id: int, session: Session = Depends(get_session)
+    ) -> SellerReputationResponse:
+        if session.get(ProfileRecord, profile_id) is None:
+            raise _not_found("Profile", profile_id)
+        return SellerReputationResponse.model_validate(
+            build_seller_reputation(session, profile_id).__dict__
+        )
 
     @api.get("/api/v1/searches", response_model=list[SearchResponse], tags=["searches"])
     def searches(
