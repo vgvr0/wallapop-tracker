@@ -6,9 +6,9 @@ import json
 from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
 
@@ -234,10 +234,7 @@ def serialize_document(document: SearchConfigDocument, format_name: str) -> str:
     )
     if format_name == "json":
         return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
-    return cast(
-        str,
-        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, default_flow_style=False),
-    )
+    return yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
 
 def _json_safe(value: Any) -> Any:
