@@ -8,7 +8,7 @@ The package installs one entry point, `wallapop-track` (module
 ```text
 wallapop-track [COMMAND]
 ├── add / list / enable / disable / remove / run / run-all / schedule / notify
-├── search        add update list import show explain enable disable delete run run-all alerts
+├── search        add update list import export-config import-config show explain enable disable delete run run-all alerts
 ├── listing       add list show enable disable remove run run-all alerts
 ├── notifications list retry
 ├── metadata      categories filters brands models
@@ -46,6 +46,8 @@ Los comandos `events` y `dlq` están documentados en [event_bus.md](event_bus.md
 | --- | --- |
 | `search add --query TEXT [...]` | Create a tracked search locally; no Wallapop request is made. |
 | `search import URL [--name TEXT] [--interval-seconds N] [--disabled] [--notify-on-first-run]` | Create a tracked search from a compatible public search URL, warning about unsupported parameters. |
+| `search export-config FILE [--format yaml|json] [--search-id ID] [--enabled-only]` | Export stable declarative search configuration. |
+| `search import-config FILE [--dry-run] [--update-existing]` | Validate and atomically import YAML or JSON configuration. |
 | `search update ID [...]` | Replace only the text filters and/or the name you pass; `--clear-text-filters` removes all text filters. |
 | `search list` / `search show ID` | Inspect stored configuration and baseline state. |
 | `search run ID` / `search run-all` | Track one search or every enabled search. |
@@ -74,6 +76,11 @@ every stored value you do not pass. Filter semantics are documented in
 `search alerts set` accepts `--percentage-drop`, `--deal-score-threshold` (0–100, the deal-score
 scale), `--notify-30d-low`, `--notify-90d-low`, `--notify-all-time-low` and the matching
 `--clear-percentage-drop` / `--clear-deal-score-threshold` options.
+
+La configuración declarativa admite `location.latitude`, `location.longitude` y
+`location.max_distance_km` opcionales; se exportan solo cuando existen y se
+validan con los rangos del dominio. Consulta [`search-config.md`](search-config.md)
+para la semántica de actualización y compatibilidad v1.
 
 ## Tracked listings
 

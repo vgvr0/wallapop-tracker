@@ -27,6 +27,7 @@ dependencies = [
   "prometheus-client>=0.20",
   "psycopg[binary]>=3.2",
   "pydantic>=2",
+  "PyYAML>=6.0",
   "sqlalchemy>=2.0",
   "typer>=0.12",
   "uvicorn>=0.30",
@@ -39,6 +40,7 @@ dev = [
   "respx>=0.21",
   "ruff>=0.6",
   "mypy>=1.11",
+  "types-PyYAML>=6.0",
 ]
 release = [
   "build>=1.2",
