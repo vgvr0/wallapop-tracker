@@ -1,5 +1,7 @@
 import pytest
 
+from wallapop_tracker.telegram_bot import TelegramBot, _Pending
+from wallapop_tracker.telegram_control import TelegramIntent
 from wallapop_tracker.telegram_natural_language import (
     TelegramNaturalLanguageError,
     TelegramNaturalLanguageParser,
@@ -48,3 +50,29 @@ async def test_parser_rejects_malformed_provider_output():
     completer = FakeCompleter("not-json")
     with pytest.raises(TelegramNaturalLanguageError):
         await TelegramNaturalLanguageParser(completer).parse("anything")
+
+
+@pytest.mark.asyncio
+async def test_explicit_help_and_pending_confirmation_bypass_llm(database):
+    class FailingParser:
+        async def parse(self, text: str) -> object:
+            raise AssertionError("LLM must not be called")
+
+    bot = TelegramBot(database, "token", nl_parser=FailingParser())
+    bot.service.register_chat(101)
+    replies: list[str] = []
+
+    async def fake_api(client: object, method: str, **payload: object) -> object:
+        replies.append(str(payload["text"]))
+        return None
+
+    bot.api = fake_api  # type: ignore[method-assign]
+    await bot.handle_update(
+        object(), {"update_id": 1, "message": {"chat": {"id": 101}, "text": "/help"}}
+    )
+    assert replies[-1].startswith("Commands:")
+
+    bot.pending[101] = _Pending(
+        TelegramIntent("search_delete", search_id=1), "confirmation", None, 9999999999
+    )
+    assert await bot._handle_text(101, "no") == "Cancelado."
