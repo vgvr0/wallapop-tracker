@@ -21,6 +21,18 @@ class Notification:
     new_price: Decimal | None
     created_at: datetime
     details: str | None = None
+    description: str | None = None
+    market_value: Decimal | None = None
+    deal_score: Decimal | None = None
+    market_discount_percent: Decimal | None = None
+    location: str | None = None
+    distance_km: Decimal | None = None
+    shipping_available: bool | None = None
+    seller_rating: Decimal | None = None
+    seller_review_count: int | None = None
+    seller_sales_count: int | None = None
+    evidence: tuple[str, ...] = ()
+    low_period_days: int | None = None
 
 
 @dataclass(frozen=True)

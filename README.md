@@ -242,6 +242,14 @@ wallapop-track metadata categories | filters --query iphone [--category-id 24200
 wallapop-track worker tracking | worker notifications
 ```
 
+Las notificaciones Telegram usan una plantilla HTML segura orientada a decidir
+rápidamente si abrir un anuncio: precio, contexto de mercado, deal score,
+ubicación, envíos, métricas descriptivas del vendedor y hasta cinco razones de
+matching cuando están disponibles. Los campos ausentes se omiten. `PRICE_DROP`
+incluye la variación anterior/nueva y las señales históricas que ya traiga el
+evento. El título y la descripción se escapan y truncan para respetar el límite
+de Telegram; webhook y Discord conservan sus formatos y payloads.
+
 New searches suppress `NEW_LISTING` on their first valid run unless `--notify-on-first-run` is given.
 Metadata commands are read-only and use discovery endpoints validated by RAW fixtures. The complete
 command reference is [`docs/cli.md`](docs/cli.md).

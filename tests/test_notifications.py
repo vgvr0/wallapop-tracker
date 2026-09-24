@@ -16,6 +16,7 @@ from wallapop_tracker.services.notifications import (
     NotificationService,
     TelegramNotificationChannel,
     WebhookNotificationChannel,
+    render_telegram_message,
 )
 from wallapop_tracker.services.search_tracker import SearchTracker
 from wallapop_tracker.storage.database import Database
@@ -292,6 +293,61 @@ def test_common_notification_payload_explains_advanced_alert():
     assert payload["event_type"] == "DEAL_SCORE_THRESHOLD"
     assert payload["title"] == "Camera"
     assert payload["details"] == "Score 70 -> 85; threshold 80"
+
+
+def test_telegram_buying_template_and_safety():
+    message = render_telegram_message(
+        Notification(
+            1,
+            AlertType.NEW_LISTING,
+            "item-ñ",
+            "iPhone 15 Pro 256GB",
+            "https://example.test/item?a=1&b=2",
+            None,
+            Decimal("575"),
+            datetime.now(UTC),
+            description="x" * 20_000,
+            market_value=Decimal("690"),
+            deal_score=Decimal("86"),
+            market_discount_percent=Decimal("-16.7"),
+            location="Madrid",
+            distance_km=Decimal("8"),
+            shipping_available=True,
+            seller_rating=Decimal("4.8"),
+            seller_review_count=27,
+            seller_sales_count=14,
+            evidence=("precio ≤ 600 €", 'título contiene "256GB"'),
+        )
+    )
+    assert len(message) <= 4096 and "Mercado" in message and "86/100" in message
+    assert "Madrid · 8 km" in message and "Envíos: Sí" in message
+    assert "27 valoraciones" in message and "&amp;" in message
+    assert render_telegram_message(
+        Notification(
+            1,
+            AlertType.PRICE_DROP,
+            "item",
+            "Cámara",
+            None,
+            Decimal("699"),
+            Decimal("575"),
+            datetime.now(UTC),
+            low_period_days=30,
+        )
+    ).endswith("📉 Mínimo de 30 días")
+    escaped = render_telegram_message(
+        Notification(
+            1,
+            AlertType.NEW_LISTING,
+            "item",
+            "_[*]()<>.- título",
+            "https://example.test/item",
+            None,
+            Decimal("1"),
+            datetime.now(UTC),
+        )
+    )
+    assert "_[*]()&lt;&gt;.-" in escaped and escaped.endswith(">Ver anuncio</a>")
 
 
 @pytest.mark.parametrize(
