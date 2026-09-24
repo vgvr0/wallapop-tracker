@@ -218,6 +218,17 @@ class Metrics:
             ["method", "route"],
             registry=self.registry,
         )
+        self.wallapop_deal_ranking_requests_total = Counter(
+            "wallapop_deal_ranking_requests_total", "Deal ranking requests", registry=self.registry
+        )
+        self.wallapop_deal_ranking_failures_total = Counter(
+            "wallapop_deal_ranking_failures_total", "Deal ranking failures", registry=self.registry
+        )
+        self.wallapop_deal_ranking_duration_seconds = Histogram(
+            "wallapop_deal_ranking_duration_seconds",
+            "Deal ranking duration",
+            registry=self.registry,
+        )
         self.wallapop_ai_analysis_requests_total = Counter(
             "wallapop_ai_analysis_requests_total", "AI analysis requests", registry=self.registry
         )

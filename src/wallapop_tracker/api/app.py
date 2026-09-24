@@ -44,6 +44,7 @@ from wallapop_tracker.reporting.market import (
     get_seller_market_stats,
 )
 from wallapop_tracker.reporting.queries import get_price_history, get_profile_metrics_history
+from wallapop_tracker.services.deal_ranking import DealRankingService
 from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.services.event_bus import deserialize_event
 from wallapop_tracker.services.filter_explanation import explain_search_listing
@@ -305,6 +306,19 @@ class ScoreResponse(APIModel):
     status: str
     reasons: list[ReasonResponse]
     calculated_at: datetime
+
+
+class DealRankingResponse(APIModel):
+    listing_id: int
+    overall_score: float
+    deal_score: float | None
+    market_score: float | None
+    semantic_score: float | None
+    risk_penalty: float
+    confidence: float
+    confidence_level: str
+    components: list[dict[str, Any]]
+    warnings: list[str]
 
 
 class FilterTraceResponse(BaseModel):
@@ -1173,6 +1187,22 @@ def create_app(
         listing_id: int, search_id: int = Query(..., gt=0), session: Session = Depends(get_session)
     ) -> ScoreResponse:
         return _score(DealScoringService(session).score_listing(listing_id, search_id))
+
+    @api.get(
+        "/api/v1/listings/{listing_id}/ranking",
+        response_model=DealRankingResponse,
+        tags=["ranking"],
+    )
+    def listing_ranking(
+        listing_id: int,
+        search_id: int | None = Query(None, gt=0),
+        session: Session = Depends(get_session),
+    ) -> DealRankingResponse:
+        try:
+            result = DealRankingService(session).rank_listing(listing_id, search_id)
+        except ValueError as exc:
+            raise _not_found("Listing", listing_id) from exc
+        return DealRankingResponse.model_validate(result.to_dict())
 
     @api.get(
         "/api/v1/scores/search/{search_id}", response_model=list[ScoreResponse], tags=["scoring"]

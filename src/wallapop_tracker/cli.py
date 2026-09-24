@@ -33,6 +33,7 @@ from .reporting import (
     get_profile_metrics_history,
     get_seller_market_stats,
 )
+from .services.deal_ranking import DealRankingService
 from .services.deal_scoring import DealScoringService
 from .services.event_bus import EventBus, deserialize_event
 from .services.filter_explanation import SearchListingExplanation, explain_search_listing
@@ -109,6 +110,44 @@ def market_value(
                 typer.echo(
                     f"Comparables: {result.sample_size} | Confidence: {result.confidence:.0%} ({result.confidence_level.value})"
                 )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+
+
+@app.command("rank")
+def rank_listing(
+    listing_id: int,
+    search_id: int | None = typer.Option(None, "--search-id", min=1),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Calculate the explainable aggregate deal ranking without calling AI."""
+    database = _db()
+    try:
+        with database.session() as session:
+            result = DealRankingService(session).rank_listing(listing_id, search_id)
+        if as_json:
+            typer.echo(json.dumps(result.to_dict(), sort_keys=True))
+        else:
+            typer.echo(f"Listing #{listing_id}\n{'─' * 24}")
+            typer.echo(f"Overall score          {result.overall_score:.2f} / 100")
+            typer.echo(
+                f"Confidence             {result.confidence_level.value.upper()} ({result.confidence:.2f})"
+            )
+            typer.echo("\nSignals")
+            for component in result.components:
+                if component.available:
+                    typer.echo(
+                        f"{component.name.title()}\n  Score                {component.normalized_value:.2f}\n  Weight               {component.weight:.0%}\n  Contribution         {component.contribution:.2f}"
+                    )
+                else:
+                    typer.echo(f"{component.name.title()}\n  Not available")
+            typer.echo(f"\nRisk penalty          -{result.risk_penalty:.2f}")
+            if result.warnings:
+                typer.echo("\nWarnings")
+                for warning in result.warnings:
+                    typer.echo(f"- {warning}")
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     finally:

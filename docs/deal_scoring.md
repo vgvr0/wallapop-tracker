@@ -45,3 +45,8 @@ wallapop-track score search <search-id> --limit 20
 The batch command ranks the latest active listings in that search and does not
 persist a ranking. No ML, LLM, embeddings, forecasting, or purchase labels are
 used.
+# Aggregate ranking
+
+`DealScore` remains an independent deterministic signal. It is consumed by the
+read-only [`DealRankingService`](ai-deal-ranking.md), but its formula, snapshots,
+and alerts are unchanged.
