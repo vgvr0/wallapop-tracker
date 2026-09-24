@@ -4,6 +4,10 @@ The project exposes a local/private HTTP API at `/api/v1`. It is a transport
 layer over the existing repositories, reporting functions and services; it
 does not call Wallapop while serving requests.
 
+Read-only event endpoints are `/api/v1/events`, `/api/v1/events/{id}`, `/api/v1/dlq` and
+`/api/v1/dlq/{id}`. Legacy tracking-event records remain available under
+`/api/v1/tracking-events`.
+
 Run it with:
 
 ```bash

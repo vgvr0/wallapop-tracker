@@ -37,10 +37,14 @@ from wallapop_tracker.reporting.market import (
 )
 from wallapop_tracker.reporting.queries import get_price_history, get_profile_metrics_history
 from wallapop_tracker.services.deal_scoring import DealScoringService
+from wallapop_tracker.services.event_bus import deserialize_event
 from wallapop_tracker.services.filter_explanation import explain_search_listing
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     AlertRuleRecord,
+    DeadLetterRecord,
+    DomainEventRecord,
+    EventConsumptionRecord,
     ListingRecord,
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
@@ -209,6 +213,20 @@ class EventResponse(APIModel):
     new_price: Decimal | None
     created_at: datetime
     metadata: dict[str, Any] | None = None
+
+
+class DomainEventResponse(APIModel):
+    id: int
+    event_type: str
+    aggregate_type: str
+    aggregate_id: str
+    marketplace: str | None
+    payload: dict[str, Any]
+    metadata: dict[str, Any]
+    occurred_at: datetime
+    created_at: datetime
+    correlation_id: str | None
+    causation_id: str | None
 
 
 class RunResponse(APIModel):
@@ -383,6 +401,21 @@ def _event(record: TrackingEventRecord) -> EventResponse:
         created_at=_utc(record.created_at),
         metadata=json.loads(record.metadata_json) if record.metadata_json else None,
     )
+
+
+def _dead_letter(record: DeadLetterRecord, session: Session) -> dict[str, Any]:
+    event = session.get(DomainEventRecord, record.event_id)
+    return {
+        "id": record.id,
+        "event_id": record.event_id,
+        "consumer": record.consumer_name,
+        "attempts": record.attempts,
+        "last_error": record.last_error,
+        "correlation_id": record.correlation_id,
+        "failed_at": _utc(record.failed_at),
+        "requeued_at": _utc(record.requeued_at),
+        "event": deserialize_event(event) if event is not None else None,
+    }
 
 
 def _run(record: TrackingRunRecord) -> RunResponse:
@@ -796,7 +829,7 @@ def create_app(
                 raise _not_found("Tracked listing", tracked_listing_id) from exc
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @api.get("/api/v1/events", response_model=list[EventResponse], tags=["events"])
+    @api.get("/api/v1/tracking-events", response_model=list[EventResponse], tags=["events"])
     def events(
         event_type: str | None = None,
         listing_id: int | None = None,
@@ -828,6 +861,61 @@ def create_app(
         if row is None:
             raise _not_found("Event", event_id)
         return _event(row)
+
+    @api.get("/api/v1/events", response_model=list[DomainEventResponse], tags=["events"])
+    def domain_events(
+        event_type: str | None = None,
+        consumer: str | None = None,
+        status: str | None = None,
+        since: datetime | None = None,
+        session: Session = Depends(get_session),
+        page: tuple[int, int] = Depends(_page),
+    ) -> list[DomainEventResponse]:
+        limit, offset = page
+        statement = select(DomainEventRecord).order_by(
+            DomainEventRecord.created_at, DomainEventRecord.id
+        )
+        if event_type is not None:
+            statement = statement.where(DomainEventRecord.event_type == event_type)
+        if since is not None:
+            statement = statement.where(DomainEventRecord.created_at >= since)
+        if consumer is not None or status is not None:
+            statement = statement.join(
+                EventConsumptionRecord, EventConsumptionRecord.event_id == DomainEventRecord.id
+            )
+            if consumer is not None:
+                statement = statement.where(EventConsumptionRecord.consumer_name == consumer)
+            if status is not None:
+                statement = statement.where(EventConsumptionRecord.status == status)
+        return [
+            DomainEventResponse(**deserialize_event(row))
+            for row in session.scalars(statement.offset(offset).limit(limit)).all()
+        ]
+
+    @api.get("/api/v1/events/{event_id}", response_model=DomainEventResponse, tags=["events"])
+    def domain_event(event_id: int, session: Session = Depends(get_session)) -> DomainEventResponse:
+        row = session.get(DomainEventRecord, event_id)
+        if row is None:
+            raise _not_found("Event", event_id)
+        return DomainEventResponse(**deserialize_event(row))
+
+    @api.get("/api/v1/dlq", tags=["events"])
+    def dead_letters(
+        consumer: str | None = None,
+        limit: int = Query(100, ge=1, le=1000),
+        session: Session = Depends(get_session),
+    ) -> list[dict[str, Any]]:
+        statement = select(DeadLetterRecord).order_by(DeadLetterRecord.id).limit(limit)
+        if consumer is not None:
+            statement = statement.where(DeadLetterRecord.consumer_name == consumer)
+        return [_dead_letter(row, session) for row in session.scalars(statement).all()]
+
+    @api.get("/api/v1/dlq/{dead_letter_id}", tags=["events"])
+    def dead_letter(dead_letter_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+        row = session.get(DeadLetterRecord, dead_letter_id)
+        if row is None:
+            raise _not_found("Dead letter", dead_letter_id)
+        return _dead_letter(row, session)
 
     @api.get("/api/v1/runs", response_model=list[RunResponse], tags=["runs"])
     def runs(

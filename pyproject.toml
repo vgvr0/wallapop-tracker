@@ -68,6 +68,7 @@ wallapop-track = "wallapop_tracker.cli:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = [
   "live: explicitly authorized live Wallapop integration test",
   "postgres: integration tests requiring a real PostgreSQL database",

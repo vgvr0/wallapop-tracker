@@ -5,6 +5,12 @@ Server, Grafana, Loki, Sentry ni tracing distribuido.
 
 ## Logging
 
+The event bus exposes `event_bus_published_total`, `event_bus_processed_total`,
+`event_bus_processing_failures_total`, `event_bus_retries_total`, `event_bus_dlq_total`,
+`event_bus_processing_duration_seconds`, `event_bus_pending`, `event_bus_leased` and
+`event_bus_dlq_size`. Labels are limited to event type, consumer and status. Event IDs and
+correlation IDs are structured log fields, never Prometheus labels.
+
 Se usa `logging` estándar con `WALLAPOP_LOG_LEVEL=INFO`,
 `WALLAPOP_LOG_FORMAT=human|json` y `WALLAPOP_METRICS_ENABLED=true|false`.
 El formato JSON produce una entrada válida

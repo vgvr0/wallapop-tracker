@@ -41,3 +41,10 @@ PROCESSING -> DELIVERED/FAILED`, with persistent exponential backoff in
 processing plus idempotent persistence and best-effort external deduplication;
 if a provider accepts a request and the process dies before `sent` is stored,
 an external duplicate remains possible, so exactly-once is not promised.
+## Event bus workers
+
+Revision `0023_postgres_event_bus_dlq` adds the transactional outbox, consumer leases and DLQ.
+Run `wallapop-track worker events --consumer notifications` alongside existing tracking workers.
+PostgreSQL workers use row-level claims with `SKIP LOCKED`; no broker or external service is
+required. Configure the event worker's lease, attempts and backoff through its CLI options and
+monitor the event bus Prometheus metrics before scaling workers.

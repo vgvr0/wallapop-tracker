@@ -10,8 +10,13 @@ Profile
   ├──< Listing ───< ListingSnapshot
   ├──< TrackingRun ───< TrackingRunListing >─── Listing
   └──< TrackingRun
-             └──< TrackingEvent ───< NotificationDelivery
+  ├──< TrackingEvent ───< NotificationDelivery
+  └──< DomainEvent ───< EventConsumption
+                    └──< DeadLetter
 ```
+
+Las tablas `domain_events`, `event_consumptions` y `dead_letters` se crean en la migración `0023`.
+`domain_events` es append-only y conserva el payload original; la DLQ nunca elimina el evento.
 
 - Un `Profile` representa la identidad estable de un usuario de Wallapop.
 - Un `ProfileSnapshot` representa sus métricas en una observación concreta.

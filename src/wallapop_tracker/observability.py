@@ -71,6 +71,57 @@ class Metrics:
             ["event_type"],
             registry=self.registry,
         )
+        self.event_bus_published_total = Counter(
+            "event_bus_published_total",
+            "Domain events published",
+            ["event_type"],
+            registry=self.registry,
+        )
+        self.event_bus_processed_total = Counter(
+            "event_bus_processed_total",
+            "Domain events processed",
+            ["consumer", "status"],
+            registry=self.registry,
+        )
+        self.event_bus_claimed_total = Counter(
+            "event_bus_claimed_total",
+            "Domain events claimed",
+            ["consumer"],
+            registry=self.registry,
+        )
+        self.event_bus_processing_failures_total = Counter(
+            "event_bus_processing_failures_total",
+            "Consumer processing failures",
+            ["consumer"],
+            registry=self.registry,
+        )
+        self.event_bus_retries_total = Counter(
+            "event_bus_retries_total",
+            "Consumer retries scheduled",
+            ["consumer"],
+            registry=self.registry,
+        )
+        self.event_bus_dlq_total = Counter(
+            "event_bus_dlq_total",
+            "Events moved to the dead letter queue",
+            ["consumer"],
+            registry=self.registry,
+        )
+        self.event_bus_processing_duration_seconds = Histogram(
+            "event_bus_processing_duration_seconds",
+            "Consumer processing duration",
+            ["consumer"],
+            registry=self.registry,
+        )
+        self.event_bus_pending = Gauge(
+            "event_bus_pending", "Pending event consumptions", ["consumer"], registry=self.registry
+        )
+        self.event_bus_leased = Gauge(
+            "event_bus_leased", "Leased event consumptions", ["consumer"], registry=self.registry
+        )
+        self.event_bus_dlq_size = Gauge(
+            "event_bus_dlq_size", "Dead letter queue size", ["consumer"], registry=self.registry
+        )
         self.notification_deliveries_total = Counter(
             "notification_deliveries_total",
             "Notification delivery attempts",
@@ -234,6 +285,11 @@ class _JsonFormatter(logging.Formatter):
             "attempt",
             "items_fetched",
             "events_created",
+            "event_id",
+            "event_type",
+            "consumer",
+            "correlation_id",
+            "dead_letter_id",
         ):
             if hasattr(record, key):
                 fields[key] = getattr(record, key)
