@@ -1,26 +1,26 @@
 {
-  "id": "v4z4nyeyq8jy",
-  "micro_name": "ANTONIO H.",
+  "id": "demo-user-001",
+  "micro_name": "Demo Seller",
   "type": "normal",
   "image": {
-    "id": "0j21g2721rzy",
+    "id": "demo-image-001",
     "original_width": 2736,
     "original_height": 3648,
     "average_hex_color": "10363d",
     "urls_by_size": {
-      "small": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W320",
-      "xmall": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W320",
-      "original": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W1024",
-      "large": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W800",
-      "xlarge": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W1024",
-      "medium": "https://cdn.wallapop.com/images/13/12/5x/__/c13p64102686/i1614002883.jpg?pictureSize=W640"
+      "small": "https://example.invalid/images/demo-profile-small.jpg",
+      "xmall": "https://example.invalid/images/demo-profile-xmall.jpg",
+      "original": "https://example.invalid/images/demo-profile-original.jpg",
+      "large": "https://example.invalid/images/demo-profile-large.jpg",
+      "xlarge": "https://example.invalid/images/demo-profile-xlarge.jpg",
+      "medium": "https://example.invalid/images/demo-profile-medium.jpg"
     }
   },
   "location": {
-    "approximated_latitude": 36.76934667509282,
-    "approximated_longitude": -2.6341512847964914,
-    "city": "Roquetas de Mar",
-    "zip": "04740",
+    "approximated_latitude": 40.4168,
+    "approximated_longitude": -3.7038,
+    "city": "Example City",
+    "zip": "00000",
     "country_code": "ES",
     "approxRadius": 1,
     "approximated_location": false
@@ -33,9 +33,9 @@
     }
   },
   "financing": false,
-  "web_slug": "joseantoniol-64102686",
-  "url_share": "https://www.wallapop.com/user/joseantoniol-64102686?_pid=wi",
-  "register_date": 1493118398000,
+  "web_slug": "demo-seller-001",
+  "url_share": "https://example.invalid/user/demo-seller-001",
+  "register_date": 1700000000000,
   "featured": false,
   "listing_protected": false,
   "is_top_profile": false,

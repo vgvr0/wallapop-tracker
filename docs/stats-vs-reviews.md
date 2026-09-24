@@ -1,22 +1,22 @@
 # Validación de `/stats` frente a `/reviews/summary`
 
-Fecha de captura: 17 de septiembre de 2026 (Europe/Madrid).
+Fecha de generación del fixture sintético: 17 de septiembre de 2026 (Europe/Madrid).
 
-Se utilizaron tres perfiles públicos cubiertos por la autorización indicada para este proyecto:
+Se utilizaron tres perfiles sintéticos con la misma forma de datos que el contrato observado:
 
 | Perfil | `user_id` | Característica observada |
 |---|---|---|
-| `joseantoniol-64102686` | `v4z4nyeyq8jy` | Perfil con muchos anuncios y reseñas |
-| `martag-16085078` | `qnzx5d9g9p62` | Perfil con volumen intermedio |
-| `pablos-457067972` | `e65y995po0jo` | Perfil pequeño, con dos reseñas |
+| `demo-seller-001` | `demo-user-001` | Perfil con muchos anuncios y reseñas |
+| `demo-reviewer-001` | `demo-reviewer-001` | Perfil con volumen intermedio |
+| `demo-reviewer-002` | `demo-reviewer-002` | Perfil pequeño, con dos reseñas |
 
 ## Comparación
 
 | profile | stats.rating | reviews.rating | stats.count | reviews.count | coincide |
 |---|---:|---:|---:|---:|---|
-| joseantoniol-64102686 | 4.9 | 4.9 | 294 | 294 | Sí |
-| martag-16085078 | 4.9 | 4.9 | 119 | 119 | Sí |
-| pablos-457067972 | 5.0 | 5.0 | 2 | 2 | Sí |
+| demo-seller-001 | 4.9 | 4.9 | 12 | 12 | Sí |
+| demo-reviewer-001 | 4.9 | 4.9 | 8 | 8 | Sí |
+| demo-reviewer-002 | 5.0 | 5.0 | 2 | 2 | Sí |
 
 ## Diferencias observadas
 
@@ -31,11 +31,11 @@ La distribución solo la proporciona `/reviews/summary`:
 
 | Perfil | Distribución `1..5` |
 |---|---|
-| joseantoniol-64102686 | `1%, 0%, 1%, 3%, 95%` |
-| martag-16085078 | `1%, 0%, 1%, 4%, 94%` |
-| pablos-457067972 | `0%, 0%, 0%, 0%, 100%` |
+| demo-seller-001 | `1%, 0%, 1%, 3%, 95%` |
+| demo-reviewer-001 | `1%, 0%, 1%, 4%, 94%` |
+| demo-reviewer-002 | `0%, 0%, 0%, 0%, 100%` |
 
-`/stats` proporciona campos adicionales que no aparecen en el resumen: `publish`, `buys`, `sells`, `sold` y `reports_received`. En el perfil de ejemplo, por ejemplo, `sells=417` y `sold=415`, mientras que `reviews.total_reviews=294`.
+`/stats` proporciona campos adicionales que no aparecen en el resumen: `publish`, `buys`, `sells`, `sold` y `reports_received`. En el perfil sintético, por ejemplo, `sells=15` y `sold=11`, mientras que `reviews.total_reviews=12`.
 
 No se observó ningún fallo de uno de los endpoints mientras el otro funcionaba. Los dos respondieron correctamente en los tres perfiles.
 

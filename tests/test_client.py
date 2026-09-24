@@ -324,9 +324,9 @@ async def test_resolve_user_id_locally_without_http():
     async with WallapopClient(min_interval=0) as client:
         assert (
             await client.resolve_user_id(
-                "https://www.wallapop.com/user/example-v4z4nyeyq8jy?tab=items"
+                "https://www.wallapop.com/user/example-demo00000001?tab=items"
             )
-            == "v4z4nyeyq8jy"
+            == "demo00000001"
         )
 
 

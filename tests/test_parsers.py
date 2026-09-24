@@ -9,11 +9,11 @@ from wallapop_tracker.parsers.stats import parse_profile_stats
 
 def test_parse_profile(fixture_data):
     profile = parse_profile(fixture_data("profile.json"))
-    assert profile.user_id == "user-1"
-    assert profile.name == "Ana"
-    assert profile.location == "Madrid, 28001"
-    assert profile.location_city == "Madrid"
-    assert profile.postal_code == "28001"
+    assert profile.user_id == "demo-user-001"
+    assert profile.name == "Demo Seller"
+    assert profile.location == "Example City, 00000"
+    assert profile.location_city == "Example City"
+    assert profile.postal_code == "00000"
     assert profile.seller_type == "Private"
     assert profile.verified is True
     assert profile.registered_at.tzinfo == UTC
@@ -63,8 +63,8 @@ def test_parse_raw_2026_extension_fields():
         user_id=profile.user_id,
     )
 
-    assert profile.location_city == "Roquetas de Mar"
-    assert profile.postal_code == "04740"
+    assert profile.location_city == "Example City"
+    assert profile.postal_code == "00000"
     assert profile.country_code == "ES"
     assert profile.is_top_profile is False
     assert stats.purchases_count == 14

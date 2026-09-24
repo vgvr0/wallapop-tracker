@@ -1,7 +1,7 @@
 {
   "captured_at": "2026-09-17T20:00:01.781529+00:00",
   "wallapop_api": "unofficial/public frontend API",
-  "authorization": "captured under user-provided Wallapop authorization",
+  "authorization": "synthetic fixture generated for parser contract testing",
   "endpoints": [
     "/api/v3/users/{user_id}",
     "/api/v3/users/{user_id}/stats",
@@ -11,8 +11,8 @@
   "profiles": [
     {
       "label": "example",
-      "url": "https://es.wallapop.com/user/joseantoniol-64102686",
-      "user_id": "v4z4nyeyq8jy",
+      "url": "https://example.invalid/user/demo-reviewer-001",
+      "user_id": "demo-reviewer-001",
       "stats": {
         "rating": 4.9,
         "review_count": 294,
@@ -33,8 +33,8 @@
     },
     {
       "label": "reviewer_a",
-      "url": "https://es.wallapop.com/user/martag-16085078",
-      "user_id": "qnzx5d9g9p62",
+      "url": "https://example.invalid/user/demo-reviewer-002",
+      "user_id": "demo-reviewer-002",
       "stats": {
         "rating": 4.9,
         "review_count": 119,
@@ -55,8 +55,8 @@
     },
     {
       "label": "reviewer_b",
-      "url": "https://es.wallapop.com/user/pablos-457067972",
-      "user_id": "e65y995po0jo",
+      "url": "https://example.invalid/user/demo-reviewer-003",
+      "user_id": "demo-reviewer-003",
       "stats": {
         "rating": 5.0,
         "review_count": 2,

@@ -33,8 +33,8 @@ def test_raw_2026_09_reviews_contract():
 
 
 def test_raw_2026_09_items_contract():
-    page_1 = parse_items_page(load("items_page_1.json"), user_id="v4z4nyeyq8jy")
-    page_2 = parse_items_page(load("items_page_2.json"), user_id="v4z4nyeyq8jy")
+    page_1 = parse_items_page(load("items_page_1.json"), user_id="demo-user-001")
+    page_2 = parse_items_page(load("items_page_2.json"), user_id="demo-user-001")
     assert page_1.items
     assert page_1.next_since
     assert page_2.next_since is None

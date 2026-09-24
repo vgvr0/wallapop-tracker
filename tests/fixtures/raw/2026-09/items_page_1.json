@@ -1,19 +1,19 @@
 {
   "data": [
     {
-      "id": "qjwr3q2kek6o",
-      "title": "Cámara Solar Xega 4G con Paneles Solares",
-      "description": "Cámara de seguridad solar 4G con dos paneles solares y batería de 9600mAh. Ideal para exteriores.\n\n- Resolución 2K.\n- Conexión 4G (requiere tarjeta SIM).\n- Detección de movimiento.\n- Visión nocturna.\n- Rotación de 200°\n- Alertas en la app.",
+      "id": "demo-item-01-001",
+      "title": "Synthetic listing 01-001",
+      "description": "Synthetic description for listing 01-001.",
       "category_id": "24200",
-      "slug": "camara-solar-xega-4g-con-paneles-solares-1301002605",
+      "slug": "synthetic-listing-01-001",
       "images": [
         {
-          "id": "nzxl90pdy25z",
+          "id": "demo-image-01-001-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301002605/i6725101706.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301002605/i6725101706.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301002605/i6725101706.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-001-01-small.jpg",
+            "medium": "https://example.invalid/images/01-001-01-medium.jpg",
+            "big": "https://example.invalid/images/01-001-01-big.jpg"
           }
         }
       ],
@@ -44,7 +44,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-001"
       },
       "is_refurbished": {
         "flag": false
@@ -52,19 +52,19 @@
       "has_warranty": false
     },
     {
-      "id": "4z4854o17vjy",
-      "title": "SIHOO Silla Oficina Ergonómica Malla Negra",
-      "description": "Silla de oficina ergonómica SIHOO, con diseño de malla ventilada para mayor comodidad.\n\n- Soporte lumbar.\n- Reposacabezas y reposabrazos ajustables.\n- Inclinación del respaldo de 90-135°.\n- Color Blanco Niebla (sin reposapiés).",
+      "id": "demo-item-01-002",
+      "title": "Synthetic listing 01-002",
+      "description": "Synthetic description for listing 01-002.",
       "category_id": "12467",
-      "slug": "sihoo-silla-oficina-ergonomica-malla-negra-1302887162",
+      "slug": "synthetic-listing-01-002",
       "images": [
         {
-          "id": "pj9kem8709mz",
+          "id": "demo-image-01-002-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/lj/pe/__/c10420p1302887162/i6736263413.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/lj/pe/__/c10420p1302887162/i6736263413.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/lj/pe/__/c10420p1302887162/i6736263413.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-002-01-small.jpg",
+            "medium": "https://example.invalid/images/01-002-01-medium.jpg",
+            "big": "https://example.invalid/images/01-002-01-big.jpg"
           }
         }
       ],
@@ -120,19 +120,19 @@
       "has_warranty": false
     },
     {
-      "id": "x6qq7xv0vo6y",
-      "title": "Vaporeta Limpieza Hogar 2500W 1.6L",
-      "description": "Vaporeta de limpieza para el hogar con gran capacidad y potencia.\n\n- 2500W de potencia.\n- Depósito de agua de 1,6L.\n- Vapor a 120 °C.\n- Calentamiento en 15 segundos.\n- 6 niveles de ajuste.\n- Incluye accesorios de limpieza y guantes.",
+      "id": "demo-item-01-003",
+      "title": "Synthetic listing 01-003",
+      "description": "Synthetic description for listing 01-003.",
       "category_id": "13100",
-      "slug": "vaporeta-limpieza-hogar-2500w-1-6l-1301002166",
+      "slug": "synthetic-listing-01-003",
       "images": [
         {
-          "id": "4z4yk1looxrz",
+          "id": "demo-image-01-003-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301002166/i6725099938.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301002166/i6725099938.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301002166/i6725099938.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-003-01-small.jpg",
+            "medium": "https://example.invalid/images/01-003-01-medium.jpg",
+            "big": "https://example.invalid/images/01-003-01-big.jpg"
           }
         }
       ],
@@ -163,7 +163,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-003"
       },
       "is_refurbished": {
         "flag": false
@@ -171,28 +171,28 @@
       "has_warranty": false
     },
     {
-      "id": "wzvgok14d1zl",
-      "title": "Juego Ollas y Sartenes GiPP Rosa 21 Piezas",
-      "description": "Set de cocina GiPP de 21 piezas en color rosa y blanco. Incluye ollas, sartenes y accesorios.\n\n- Asas desmontables.\n- Apto para inducción, horno y lavavajillas.\n- Material antiadherente.",
+      "id": "demo-item-01-004",
+      "title": "Synthetic listing 01-004",
+      "description": "Synthetic description for listing 01-004.",
       "category_id": "12467",
-      "slug": "juego-ollas-y-sartenes-gipp-rosa-21-piezas-1301518989",
+      "slug": "synthetic-listing-01-004",
       "images": [
         {
-          "id": "36edvxlp8vqj",
+          "id": "demo-image-01-004-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205087.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205087.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205087.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-004-01-small.jpg",
+            "medium": "https://example.invalid/images/01-004-01-medium.jpg",
+            "big": "https://example.invalid/images/01-004-01-big.jpg"
           }
         },
         {
-          "id": "8z8qe4xw598z",
+          "id": "demo-image-01-004-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205094.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205094.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518989/i6727205094.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-004-02-small.jpg",
+            "medium": "https://example.invalid/images/01-004-02-medium.jpg",
+            "big": "https://example.invalid/images/01-004-02-big.jpg"
           }
         }
       ],
@@ -244,7 +244,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-004"
       },
       "is_refurbished": {
         "flag": false
@@ -252,19 +252,19 @@
       "has_warranty": false
     },
     {
-      "id": "w67v0n927y6x",
-      "title": "Juego de Ollas y Sartenes GIPP 16 piezas",
-      "description": "Set de 16 piezas de ollas y sartenes de la marca GIPP. El juego incluye cacerola de 18 cm, sartén de 20/24/26 cm, wok de 26 cm, tapas de 18/26 cm, 4 salvamanteles, espátula, cuchara y pinzas de silicona, además de 2 asas.\n\n- Revestimiento antiadherente natural, no tóxico y libre de PFOA.\n- Asas extraíbles para facilitar el almacenamiento.\n- Diseño apto para lavavajillas.",
+      "id": "demo-item-01-005",
+      "title": "Synthetic listing 01-005",
+      "description": "Synthetic description for listing 01-005.",
       "category_id": "12467",
-      "slug": "juego-de-ollas-y-sartenes-gipp-16-piezas-1302397252",
+      "slug": "synthetic-listing-01-005",
       "images": [
         {
-          "id": "8j3mg4r4e316",
+          "id": "demo-image-01-005-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/lj/ew/__/c10420p1302397252/i6731475258.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/lj/ew/__/c10420p1302397252/i6731475258.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/lj/ew/__/c10420p1302397252/i6731475258.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-005-01-small.jpg",
+            "medium": "https://example.invalid/images/01-005-01-medium.jpg",
+            "big": "https://example.invalid/images/01-005-01-big.jpg"
           }
         }
       ],
@@ -320,19 +320,19 @@
       "has_warranty": false
     },
     {
-      "id": "p618gm440xz5",
-      "title": "Extractor de leche eléctrico Nuliie",
-      "description": "Extractor de leche eléctrico manos libres de la marca Nuliie.\n\n- Color: Azul claro.\n- Material: Silicona.\n- Función: Succión ajustable.",
+      "id": "demo-item-01-006",
+      "title": "Synthetic listing 01-006",
+      "description": "Synthetic description for listing 01-006.",
       "category_id": "12461",
-      "slug": "extractor-de-leche-electrico-nuliie-1302293231",
+      "slug": "synthetic-listing-01-006",
       "images": [
         {
-          "id": "36edv187vnvj",
+          "id": "demo-image-01-006-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/lj/cn/__/c10420p1302293231/i6730981139.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/lj/cn/__/c10420p1302293231/i6730981139.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/lj/cn/__/c10420p1302293231/i6730981139.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-006-01-small.jpg",
+            "medium": "https://example.invalid/images/01-006-01-medium.jpg",
+            "big": "https://example.invalid/images/01-006-01-big.jpg"
           }
         }
       ],
@@ -364,28 +364,28 @@
       "has_warranty": false
     },
     {
-      "id": "wzyrko58mx65",
-      "title": "Cámara Fototrampeo GardePro E8P WiFi 64GB",
-      "description": "Cámara de fototrampeo GardePro E8P con WiFi y batería de 8000mAh.\n\n- Resolución de 64MP y vídeo 1296P H.264.\n- Resistente al agua IP66.\n- Visión nocturna IR Invisible No Glow 940nm.\n- Incluye tarjeta SD de 64GB.",
+      "id": "demo-item-01-007",
+      "title": "Synthetic listing 01-007",
+      "description": "Synthetic description for listing 01-007.",
       "category_id": "24200",
-      "slug": "camara-fototrampeo-gardepro-e8p-wifi-64gb-1301289944",
+      "slug": "synthetic-listing-01-007",
       "images": [
         {
-          "id": "v6g0v2xr9xmj",
+          "id": "demo-image-01-007-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300888.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300888.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300888.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-007-01-small.jpg",
+            "medium": "https://example.invalid/images/01-007-01-medium.jpg",
+            "big": "https://example.invalid/images/01-007-01-big.jpg"
           }
         },
         {
-          "id": "wzvr3n751p46",
+          "id": "demo-image-01-007-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300917.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300917.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/r5/__/c10420p1301289944/i6726300917.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-007-02-small.jpg",
+            "medium": "https://example.invalid/images/01-007-02-medium.jpg",
+            "big": "https://example.invalid/images/01-007-02-big.jpg"
           }
         }
       ],
@@ -429,19 +429,19 @@
       "has_warranty": false
     },
     {
-      "id": "nzxe2qw0dp62",
-      "title": "Extractor de leche Nuliie manos libres",
-      "description": "Extractor de leche eléctrico Nuliie, manos libres. Modelo S32 en color gris claro.\n\n- Incluye 5 copas.\n- Viene con bolsa de almacenamiento para leche materna.\n- Incluye cable USB y cinta.",
+      "id": "demo-item-01-008",
+      "title": "Synthetic listing 01-008",
+      "description": "Synthetic description for listing 01-008.",
       "category_id": "13100",
-      "slug": "extractor-de-leche-nuliie-manos-libres-1301006606",
+      "slug": "synthetic-listing-01-008",
       "images": [
         {
-          "id": "ejkxrk0xprp6",
+          "id": "demo-image-01-008-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l3/__/c10420p1301006606/i6725117647.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l3/__/c10420p1301006606/i6725117647.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l3/__/c10420p1301006606/i6725117647.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-008-01-small.jpg",
+            "medium": "https://example.invalid/images/01-008-01-medium.jpg",
+            "big": "https://example.invalid/images/01-008-01-big.jpg"
           }
         }
       ],
@@ -475,7 +475,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-008"
       },
       "is_refurbished": {
         "flag": false
@@ -483,28 +483,28 @@
       "has_warranty": false
     },
     {
-      "id": "9jdwym32ql6k",
-      "title": "Sacaleches Eléctrico Inalámbrico",
-      "description": "Sacaleches eléctrico inalámbrico con pantalla LED.\n\n- 4 modos y 9 niveles de intensidad.\n- Diseño ultra gran angular de 130°.\n- Batería recargable de 1200 mAh.\n- Carga rápida USB-C.",
+      "id": "demo-item-01-009",
+      "title": "Synthetic listing 01-009",
+      "description": "Synthetic description for listing 01-009.",
       "category_id": "12461",
-      "slug": "sacaleches-electrico-inalambrico-1301518460",
+      "slug": "synthetic-listing-01-009",
       "images": [
         {
-          "id": "qjwe9po7dm4j",
+          "id": "demo-image-01-009-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203053.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203053.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203053.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-009-01-small.jpg",
+            "medium": "https://example.invalid/images/01-009-01-medium.jpg",
+            "big": "https://example.invalid/images/01-009-01-big.jpg"
           }
         },
         {
-          "id": "9jdxv2ln5g4z",
+          "id": "demo-image-01-009-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203060.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203060.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/w2/__/c10420p1301518460/i6727203060.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-009-02-small.jpg",
+            "medium": "https://example.invalid/images/01-009-02-medium.jpg",
+            "big": "https://example.invalid/images/01-009-02-big.jpg"
           }
         }
       ],
@@ -536,28 +536,28 @@
       "has_warranty": false
     },
     {
-      "id": "0j28vnx9lmjy",
-      "title": "Juego Ollas y Sartenes GiPP 11 Pzs",
-      "description": "Set de 11 piezas de ollas y sartenes GiPP con recubrimiento antiadherente.\n\n- Mango extraíble.\n- Aptas para todo tipo de cocinas, incluyendo inducción y horno.\n- Compatibles con lavavajillas.\n- Color negro y gris.",
+      "id": "demo-item-01-010",
+      "title": "Synthetic listing 01-010",
+      "description": "Synthetic description for listing 01-010.",
       "category_id": "12467",
-      "slug": "juego-ollas-y-sartenes-gipp-11-pzs-1300479335",
+      "slug": "synthetic-listing-01-010",
       "images": [
         {
-          "id": "vjrkxre7ev4z",
+          "id": "demo-image-01-010-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6722725543.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6722725543.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6722725543.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-010-01-small.jpg",
+            "medium": "https://example.invalid/images/01-010-01-medium.jpg",
+            "big": "https://example.invalid/images/01-010-01-big.jpg"
           }
         },
         {
-          "id": "mzngp8580x26",
+          "id": "demo-image-01-010-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6727150997.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6727150997.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479335/i6727150997.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-010-02-small.jpg",
+            "medium": "https://example.invalid/images/01-010-02-medium.jpg",
+            "big": "https://example.invalid/images/01-010-02-big.jpg"
           }
         }
       ],
@@ -609,7 +609,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-010"
       },
       "is_refurbished": {
         "flag": false
@@ -617,28 +617,28 @@
       "has_warranty": false
     },
     {
-      "id": "e65qllo5ep6o",
-      "title": "Robot Aspirador y Mopa Shark PowerDetect",
-      "description": "Robot aspirador y mopa Shark PowerDetect en color blanco.\n\n- Base NeverTouch Pro con vaciado automático.\n- Navegación 3D y LIDAR.\n- Tecnología NeverStuck.\n- Conectividad WiFi y App.\n- Incluye 1 robot, 1 base, 2 cartuchos antiolor, 3 bayetas, 2 cepillos laterales y 1 filtro.",
+      "id": "demo-item-01-011",
+      "title": "Synthetic listing 01-011",
+      "description": "Synthetic description for listing 01-011.",
       "category_id": "13100",
-      "slug": "robot-aspirador-y-mopa-shark-powerdetect-1262997200",
+      "slug": "synthetic-listing-01-011",
       "images": [
         {
-          "id": "nzxlmdg0vppz",
+          "id": "demo-image-01-011-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6501876830.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6501876830.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6501876830.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-011-01-small.jpg",
+            "medium": "https://example.invalid/images/01-011-01-medium.jpg",
+            "big": "https://example.invalid/images/01-011-01-big.jpg"
           }
         },
         {
-          "id": "x6qkwdev4ke6",
+          "id": "demo-image-01-011-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6726528042.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6726528042.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kv/ye/__/c10420p1262997200/i6726528042.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-011-02-small.jpg",
+            "medium": "https://example.invalid/images/01-011-02-medium.jpg",
+            "big": "https://example.invalid/images/01-011-02-big.jpg"
           }
         }
       ],
@@ -672,7 +672,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-011"
       },
       "is_refurbished": {
         "flag": false
@@ -680,28 +680,28 @@
       "has_warranty": false
     },
     {
-      "id": "nz08e2vrvv6o",
-      "title": "Cámara Vigilancia LEMNOI 4G 2K Exterior",
-      "description": "Cámara de vigilancia 4G para exterior con grabación 2K y visión nocturna.\n\n- Conexión 4G con tarjeta SIM integrada (válida 7 días).\n- Grabación continua 24H con alertas automáticas al móvil.\n- Alimentación solar con batería interna de 10400mAh.\n- Clasificación IP66 y diseño camuflado.\n- Vigilancia 360° con luces auxiliares y lente de 130°.\n- Audio bidireccional con altavoz y micrófono integrados.",
+      "id": "demo-item-01-012",
+      "title": "Synthetic listing 01-012",
+      "description": "Synthetic description for listing 01-012.",
       "category_id": "24200",
-      "slug": "camara-vigilancia-lemnoi-4g-2k-exterior-1301271051",
+      "slug": "synthetic-listing-01-012",
       "images": [
         {
-          "id": "nz0gd0pyxydj",
+          "id": "demo-image-01-012-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726226403.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726226403.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726226403.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-012-01-small.jpg",
+            "medium": "https://example.invalid/images/01-012-01-medium.jpg",
+            "big": "https://example.invalid/images/01-012-01-big.jpg"
           }
         },
         {
-          "id": "w673eyok248j",
+          "id": "demo-image-01-012-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726229752.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726229752.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/qr/__/c10420p1301271051/i6726229752.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-012-02-small.jpg",
+            "medium": "https://example.invalid/images/01-012-02-medium.jpg",
+            "big": "https://example.invalid/images/01-012-02-big.jpg"
           }
         }
       ],
@@ -735,7 +735,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-012"
       },
       "is_refurbished": {
         "flag": false
@@ -743,19 +743,19 @@
       "has_warranty": false
     },
     {
-      "id": "36e5ye3ke86d",
-      "title": "Auriculares Kieslect Bluetooth 5.4 Blancos",
-      "description": "Auriculares inalámbricos Kieslect en color blanco y dorado. Perfectos para escuchar música o podcasts mientras duermes.\n\n- Conexión Bluetooth 5.4.\n- Diseño intraural cómodo.\n- Control de ruido nulo.",
+      "id": "demo-item-01-013",
+      "title": "Synthetic listing 01-013",
+      "description": "Synthetic description for listing 01-013.",
       "category_id": "24200",
-      "slug": "auriculares-kieslect-bluetooth-5-4-blancos-1301206687",
+      "slug": "synthetic-listing-01-013",
       "images": [
         {
-          "id": "ejkxrk7qr9p6",
+          "id": "demo-image-01-013-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/pd/__/c10420p1301206687/i6725976847.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/pd/__/c10420p1301206687/i6725976847.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/pd/__/c10420p1301206687/i6725976847.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-013-01-small.jpg",
+            "medium": "https://example.invalid/images/01-013-01-medium.jpg",
+            "big": "https://example.invalid/images/01-013-01-big.jpg"
           }
         }
       ],
@@ -792,7 +792,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-013"
       },
       "is_refurbished": {
         "flag": false
@@ -800,19 +800,19 @@
       "has_warranty": false
     },
     {
-      "id": "8z8872o99oz3",
-      "title": "Auriculares Havit TW889 Bluetooth Negro",
-      "description": "Auriculares inalámbricos Havit TW889 en color negro.\n\n- Cancelación de ruido adaptativa híbrida.\n- Audio espacial inmersivo.\n- Llamadas claras con 6 micrófonos.\n- Conectividad Bluetooth.",
+      "id": "demo-item-01-014",
+      "title": "Synthetic listing 01-014",
+      "description": "Synthetic description for listing 01-014.",
       "category_id": "24200",
-      "slug": "auriculares-havit-tw889-bluetooth-negro-1301205046",
+      "slug": "synthetic-listing-01-014",
       "images": [
         {
-          "id": "wzyl95p8e0e6",
+          "id": "demo-image-01-014-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/pc/__/c10420p1301205046/i6725970768.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/pc/__/c10420p1301205046/i6725970768.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/pc/__/c10420p1301205046/i6725970768.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-014-01-small.jpg",
+            "medium": "https://example.invalid/images/01-014-01-medium.jpg",
+            "big": "https://example.invalid/images/01-014-01-big.jpg"
           }
         }
       ],
@@ -849,7 +849,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-014"
       },
       "is_refurbished": {
         "flag": false
@@ -857,19 +857,19 @@
       "has_warranty": false
     },
     {
-      "id": "ejkmy5e9mrzx",
-      "title": "Cafetera CAPXSNOB 5 en 1",
-      "description": "Cafetera multifunción CAPXSNOB, modelo Warriors1.\n\n- Compatible con cápsulas Nespresso, Dolce Gusto, Lavazza A Modo Mio, FAP Espresso Point y café molido.\n- Presión de 20 bar.\n- Capacidad de 0,82 L.\n- Potencia de 1400 W.\n- 3 temperaturas y volumen ajustable.",
+      "id": "demo-item-01-015",
+      "title": "Synthetic listing 01-015",
+      "description": "Synthetic description for listing 01-015.",
       "category_id": "13100",
-      "slug": "cafetera-capxsnob-5-en-1-1301006171",
+      "slug": "synthetic-listing-01-015",
       "images": [
         {
-          "id": "0j2we3lw3xrj",
+          "id": "demo-image-01-015-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301006171/i6725116083.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301006171/i6725116083.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301006171/i6725116083.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-015-01-small.jpg",
+            "medium": "https://example.invalid/images/01-015-01-medium.jpg",
+            "big": "https://example.invalid/images/01-015-01-big.jpg"
           }
         }
       ],
@@ -907,19 +907,19 @@
       "has_warranty": false
     },
     {
-      "id": "qzmm5po48ozv",
-      "title": "Placa Vitrocerámica Karinear 4 fuegos",
-      "description": "Placa vitrocerámica de la marca Karinear con cuatro fuegos y dos zonas de expansión.\n\n- Medidas: 59x52 cm.\n- Temporizador.\n- Bloqueo de seguridad para niños.\n- Función de pausa.\n- Vitrocerámica de forma ovalada.\n- Materiales reciclados.",
+      "id": "demo-item-01-016",
+      "title": "Synthetic listing 01-016",
+      "description": "Synthetic description for listing 01-016.",
       "category_id": "13100",
-      "slug": "placa-vitroceramica-karinear-4-fuegos-1301005808",
+      "slug": "synthetic-listing-01-016",
       "images": [
         {
-          "id": "8j3mgelmyr76",
+          "id": "demo-image-01-016-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301005808/i6725114734.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301005808/i6725114734.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l2/__/c10420p1301005808/i6725114734.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-016-01-small.jpg",
+            "medium": "https://example.invalid/images/01-016-01-medium.jpg",
+            "big": "https://example.invalid/images/01-016-01-big.jpg"
           }
         }
       ],
@@ -957,19 +957,19 @@
       "has_warranty": false
     },
     {
-      "id": "8j38qr5me7z9",
-      "title": "Máquina Karaoke GREEN KEEPER GKS61",
-      "description": "Máquina de karaoke GREEN KEEPER GKS61 con altavoz Bluetooth y micrófonos.\n\n- Incluye 2 micrófonos inalámbricos.\n- Altavoz con subwoofer de 6,5 y sonido 2.1.\n- Potencia de 100W RMS.\n- Conexión Bluetooth.",
+      "id": "demo-item-01-017",
+      "title": "Synthetic listing 01-017",
+      "description": "Synthetic description for listing 01-017.",
       "category_id": "24200",
-      "slug": "maquina-karaoke-green-keeper-gks61-1301004982",
+      "slug": "synthetic-listing-01-017",
       "images": [
         {
-          "id": "0j2we3l95dej",
+          "id": "demo-image-01-017-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004982/i6725111411.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004982/i6725111411.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004982/i6725111411.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-017-01-small.jpg",
+            "medium": "https://example.invalid/images/01-017-01-medium.jpg",
+            "big": "https://example.invalid/images/01-017-01-big.jpg"
           }
         }
       ],
@@ -1013,19 +1013,19 @@
       "has_warranty": false
     },
     {
-      "id": "x6qq7x4l2o6y",
-      "title": "Plancha Eléctrica TURBRO EG13 325W",
-      "description": "Plancha eléctrica TURBRO EG13 de 325W con superficie cerámica.\n\n- Plancha compacta de 13 pulgadas.\n- Calentamiento rápido.\n- Control NTC preciso.\n- Incluye funda rígida de viaje.",
+      "id": "demo-item-01-018",
+      "title": "Synthetic listing 01-018",
+      "description": "Synthetic description for listing 01-018.",
       "category_id": "13100",
-      "slug": "plancha-electrica-turbro-eg13-325w-1301004590",
+      "slug": "synthetic-listing-01-018",
       "images": [
         {
-          "id": "v6g0v2rmx8mj",
+          "id": "demo-image-01-018-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004590/i6725109864.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004590/i6725109864.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l1/__/c10420p1301004590/i6725109864.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-018-01-small.jpg",
+            "medium": "https://example.invalid/images/01-018-01-medium.jpg",
+            "big": "https://example.invalid/images/01-018-01-big.jpg"
           }
         }
       ],
@@ -1063,19 +1063,19 @@
       "has_warranty": false
     },
     {
-      "id": "pj94wvno9o6e",
-      "title": "Juego Ollas y Sartenes Cerámica GiPP Rosa",
-      "description": "Conjunto de ollas y sartenes de cerámica GiPP en color rosa. Incluye asas desmontables y es apto para inducción, horno y lavavajillas.\n\n- Juego de 21 piezas.\n- Superficie antiadherente.\n- Materiales no tóxicos.",
+      "id": "demo-item-01-019",
+      "title": "Synthetic listing 01-019",
+      "description": "Synthetic description for listing 01-019.",
       "category_id": "12467",
-      "slug": "juego-ollas-y-sartenes-ceramica-gipp-rosa-1301003013",
+      "slug": "synthetic-listing-01-019",
       "images": [
         {
-          "id": "xzol0r1kg15z",
+          "id": "demo-image-01-019-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301003013/i6725103333.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301003013/i6725103333.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/l0/__/c10420p1301003013/i6725103333.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-019-01-small.jpg",
+            "medium": "https://example.invalid/images/01-019-01-medium.jpg",
+            "big": "https://example.invalid/images/01-019-01-big.jpg"
           }
         }
       ],
@@ -1131,19 +1131,19 @@
       "has_warranty": false
     },
     {
-      "id": "0j28vqnvddjy",
-      "title": "Reloj XPLORA Kidzi Play Azul GPS SOS",
-      "description": "Reloj XPLORA Kidzi Play en color azul.\n\n- GPS y Zonas de Seguridad.\n- Función SOS.\n- Compatible con Wi-Fi y Red.\n- Capacidad de almacenamiento de 8 GB.\n- Sistema operativo Android 8.1.",
+      "id": "demo-item-01-020",
+      "title": "Synthetic listing 01-020",
+      "description": "Synthetic description for listing 01-020.",
       "category_id": "12465",
-      "slug": "reloj-xplora-kidzi-play-azul-gps-sos-1301001783",
+      "slug": "synthetic-listing-01-020",
       "images": [
         {
-          "id": "wzyl95gdmee6",
+          "id": "demo-image-01-020-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301001783/i6725098368.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301001783/i6725098368.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/kz/__/c10420p1301001783/i6725098368.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-020-01-small.jpg",
+            "medium": "https://example.invalid/images/01-020-01-medium.jpg",
+            "big": "https://example.invalid/images/01-020-01-big.jpg"
           }
         }
       ],
@@ -1187,19 +1187,19 @@
       "has_warranty": false
     },
     {
-      "id": "x6qmpogp3qjy",
-      "title": "Calentador de toallas",
-      "description": "Huanyu Calentador de Toallas 22L Calentador de Toallas Grande para baño y SPA Calentador de Toallas de Lujo con Temporizador Ajustable y función de Apagado automático\nNueva, sin usar",
+      "id": "demo-item-01-021",
+      "title": "Synthetic listing 01-021",
+      "description": "Synthetic description for listing 01-021.",
       "category_id": "13100",
-      "slug": "calentador-de-toallas-1127622342",
+      "slug": "synthetic-listing-01-021",
       "images": [
         {
-          "id": "x6qkm4212ne6",
+          "id": "demo-image-01-021-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/in/cu/__/c10420p1127622342/i5609855490.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/in/cu/__/c10420p1127622342/i5609855490.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/in/cu/__/c10420p1127622342/i5609855490.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-021-01-small.jpg",
+            "medium": "https://example.invalid/images/01-021-01-medium.jpg",
+            "big": "https://example.invalid/images/01-021-01-big.jpg"
           }
         }
       ],
@@ -1230,7 +1230,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-021"
       },
       "is_refurbished": {
         "flag": false
@@ -1238,19 +1238,19 @@
       "has_warranty": false
     },
     {
-      "id": "qjwrgwe0d46o",
-      "title": "ZZap NC20+ Contadora de Billetes",
-      "description": "Contadora de billetes ZZap NC20+ con detector de falsificaciones. Cuenta 1.000 billetes por minuto y permite recuento por lotes.\n\n- Detección de falsificaciones en 4 niveles.\n- Pantalla digital.\n- Diseño compacto.",
+      "id": "demo-item-01-022",
+      "title": "Synthetic listing 01-022",
+      "description": "Synthetic description for listing 01-022.",
       "category_id": "24200",
-      "slug": "zzap-nc20--contadora-de-billetes-1255796429",
+      "slug": "synthetic-listing-01-022",
       "images": [
         {
-          "id": "pzpyw4o3wl4z",
+          "id": "demo-image-01-022-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kr/o2/__/c10420p1255796429/i6455205474.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kr/o2/__/c10420p1255796429/i6455205474.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kr/o2/__/c10420p1255796429/i6455205474.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-022-01-small.jpg",
+            "medium": "https://example.invalid/images/01-022-01-medium.jpg",
+            "big": "https://example.invalid/images/01-022-01-big.jpg"
           }
         }
       ],
@@ -1287,7 +1287,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-022"
       },
       "is_refurbished": {
         "flag": false
@@ -1295,28 +1295,28 @@
       "has_warranty": false
     },
     {
-      "id": "4z481pwk3ljy",
-      "title": "Escáner de Códigos de Barras MUNBYN AS01P",
-      "description": "Escáner de códigos de barras MUNBYN AS01P con pantalla de 6 y Android 14. Ideal para entornos comerciales.\n\n- Motor de escaneo Zebra SE4710.\n- Jornada laboral de 16 horas.\n- Actualizable a Android 18.\n- Escanea códigos 1D/2D/QR.",
+      "id": "demo-item-01-023",
+      "title": "Synthetic listing 01-023",
+      "description": "Synthetic description for listing 01-023.",
       "category_id": "24200",
-      "slug": "escaner-de-codigos-de-barras-munbyn-as01p-1185414638",
+      "slug": "synthetic-listing-01-023",
       "images": [
         {
-          "id": "wzvr20yxnq76",
+          "id": "demo-image-01-023-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877289.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877289.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877289.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-023-01-small.jpg",
+            "medium": "https://example.invalid/images/01-023-01-medium.jpg",
+            "big": "https://example.invalid/images/01-023-01-big.jpg"
           }
         },
         {
-          "id": "pzpydg9vr5kz",
+          "id": "demo-image-01-023-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877302.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877302.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/jl/rj/__/c10420p1185414638/i5988877302.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-023-02-small.jpg",
+            "medium": "https://example.invalid/images/01-023-02-medium.jpg",
+            "big": "https://example.invalid/images/01-023-02-big.jpg"
           }
         }
       ],
@@ -1353,7 +1353,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-023"
       },
       "is_refurbished": {
         "flag": false
@@ -1361,19 +1361,19 @@
       "has_warranty": false
     },
     {
-      "id": "3zlmy03eypjx",
-      "title": "Juego Ollas y Sartenes GiPP 18 Pzs",
-      "description": "Set de 18 piezas de ollas y sartenes GiPP. Incluye utensilios y tapas.\n\n- Mango extraíble.\n- Apto para inducción y horno.\n- Apto para lavavajillas.\n- Color blanco.",
+      "id": "demo-item-01-024",
+      "title": "Synthetic listing 01-024",
+      "description": "Synthetic description for listing 01-024.",
       "category_id": "12467",
-      "slug": "juego-ollas-y-sartenes-gipp-18-pzs-1300479445",
+      "slug": "synthetic-listing-01-024",
       "images": [
         {
-          "id": "v6g0v2plovmj",
+          "id": "demo-image-01-024-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479445/i6722726088.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479445/i6722726088.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479445/i6722726088.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-024-01-small.jpg",
+            "medium": "https://example.invalid/images/01-024-01-medium.jpg",
+            "big": "https://example.invalid/images/01-024-01-big.jpg"
           }
         }
       ],
@@ -1429,19 +1429,19 @@
       "has_warranty": false
     },
     {
-      "id": "nz08erk94r6o",
-      "title": "Juego Ollas y Sartenes GiPP 19 Pzs Inducción",
-      "description": "Set de 19 piezas de ollas y sartenes GiPP en color negro. Cuentan con mango extraíble y son aptas para todo tipo de cocinas, incluyendo inducción y horno. Compatibles con lavavajillas.\n\n- Antiadherentes y sin tóxicos.\n- Diseño moderno y funcional.",
+      "id": "demo-item-01-025",
+      "title": "Synthetic listing 01-025",
+      "description": "Synthetic description for listing 01-025.",
       "category_id": "12467",
-      "slug": "juego-ollas-y-sartenes-gipp-19-pzs-induccion-1300479103",
+      "slug": "synthetic-listing-01-025",
       "images": [
         {
-          "id": "pj9ke5415wvz",
+          "id": "demo-image-01-025-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479103/i6722724561.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479103/i6722724561.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/li/9s/__/c10420p1300479103/i6722724561.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-025-01-small.jpg",
+            "medium": "https://example.invalid/images/01-025-01-medium.jpg",
+            "big": "https://example.invalid/images/01-025-01-big.jpg"
           }
         }
       ],
@@ -1490,7 +1490,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-025"
       },
       "is_refurbished": {
         "flag": false
@@ -1498,19 +1498,19 @@
       "has_warranty": false
     },
     {
-      "id": "0j28v4d9ndjy",
-      "title": "Juego de Sartenes GiPP Antiadherentes",
-      "description": "Set de utensilios de cocina GiPP con mangos desmontables.\n\n- Incluye sartenes y ollas.\n- Utensilios de cocina con mangos de madera.\n- Pinzas de cocina incluidas.",
+      "id": "demo-item-01-026",
+      "title": "Synthetic listing 01-026",
+      "description": "Synthetic description for listing 01-026.",
       "category_id": "12467",
-      "slug": "juego-de-sartenes-gipp-antiadherentes-1299774135",
+      "slug": "synthetic-listing-01-026",
       "images": [
         {
-          "id": "4z4ykg50klwz",
+          "id": "demo-image-01-026-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/lh/uo/__/c10420p1299774135/i6718899238.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/lh/uo/__/c10420p1299774135/i6718899238.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/lh/uo/__/c10420p1299774135/i6718899238.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-026-01-small.jpg",
+            "medium": "https://example.invalid/images/01-026-01-medium.jpg",
+            "big": "https://example.invalid/images/01-026-01-big.jpg"
           }
         }
       ],
@@ -1569,28 +1569,28 @@
       "has_warranty": false
     },
     {
-      "id": "v6gpqvpqen6e",
-      "title": "Masajista corporal en Roquetas de Mar (Almería)",
-      "description": "tu cuerpo necesita un respiro de verdad. Soy Mar Medina, titulada en masaje corporal, y me muevo a domicilio por Roquetas de Mar (Las Salinas) para dejarte como nueva. Sin moverte de casa.\n​Elige tu vibra de hoy:\n​¿Estrés a tope? 🌊 Masaje Relajante.\n​¿Post-entreno duro? 💪🏼 Deportivo o Descontracturante.\n​¿Retención y mimos? 🍃 Drenaje Linfático o Anticelulítico.\n​Stop excusas. Un hueco para ti es urgente.\n📲 Reserva ya por WhatsApp o llamada al 622 394 720. ¡Hablemos!\nDesde 10 a 30 euros por servicio",
+      "id": "demo-item-01-027",
+      "title": "Synthetic listing 01-027",
+      "description": "Synthetic description for listing 01-027.",
       "category_id": "13200",
-      "slug": "masajista-corporal-1269798564",
+      "slug": "synthetic-listing-01-027",
       "images": [
         {
-          "id": "vjrkpqn471xz",
+          "id": "demo-image-01-027-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721891.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721891.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721891.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-027-01-small.jpg",
+            "medium": "https://example.invalid/images/01-027-01-medium.jpg",
+            "big": "https://example.invalid/images/01-027-01-big.jpg"
           }
         },
         {
-          "id": "qzm9veq7lvy6",
+          "id": "demo-image-01-027-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721908.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721908.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/l0/06/__/c10420p1269798564/i6544721908.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-027-02-small.jpg",
+            "medium": "https://example.invalid/images/01-027-02-medium.jpg",
+            "big": "https://example.invalid/images/01-027-02-big.jpg"
           }
         }
       ],
@@ -1605,7 +1605,7 @@
       "shipping": {
         "item_is_shippable": false,
         "user_allows_shipping": false,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-027"
       },
       "is_refurbished": {
         "flag": false
@@ -1613,19 +1613,19 @@
       "has_warranty": false
     },
     {
-      "id": "3zlmy9nv3njx",
-      "title": "Sistema Ósmosis Inversa AQUALTRA 100GPD",
-      "description": "Sistema de ósmosis inversa AQUALTRA para fregadero.\n\n- Modelo: USF-4RF-100.\n- Capacidad: 100 GPD.\n- Incluye grifo y tanque de almacenamiento de 12 litros.\n- Relación agua purificada/residual 3:1.\n- Enriquecimiento mineral del agua.",
+      "id": "demo-item-01-028",
+      "title": "Synthetic listing 01-028",
+      "description": "Synthetic description for listing 01-028.",
       "category_id": "12467",
-      "slug": "sistema-osmosis-inversa-aqualtra-100gpd-1299040569",
+      "slug": "synthetic-listing-01-028",
       "images": [
         {
-          "id": "w673eg727vyj",
+          "id": "demo-image-01-028-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/lh/ey/__/c10420p1299040569/i6715399828.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/lh/ey/__/c10420p1299040569/i6715399828.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/lh/ey/__/c10420p1299040569/i6715399828.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-028-01-small.jpg",
+            "medium": "https://example.invalid/images/01-028-01-medium.jpg",
+            "big": "https://example.invalid/images/01-028-01-big.jpg"
           }
         }
       ],
@@ -1663,19 +1663,19 @@
       "has_warranty": false
     },
     {
-      "id": "ejkm3k2vy9zx",
-      "title": "Sistema Osmosis Inversa AQUALTRA 1000 GPD",
-      "description": "Sistema de ósmosis inversa AQUALTRA para debajo del fregadero. Certificado NSF/ANSI/CAN 372.\n\n- Capacidad de 1000 GPD.\n- Grifo LED inteligente.\n- 10 etapas de purificación.\n- Relación 3:1.",
+      "id": "demo-item-01-029",
+      "title": "Synthetic listing 01-029",
+      "description": "Synthetic description for listing 01-029.",
       "category_id": "12467",
-      "slug": "sistema-osmosis-inversa-aqualtra-1000-gpd-1283322123",
+      "slug": "synthetic-listing-01-029",
       "images": [
         {
-          "id": "wzvrken03416",
+          "id": "demo-image-01-029-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/l8/21/__/c10420p1283322123/i6626347341.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/l8/21/__/c10420p1283322123/i6626347341.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/l8/21/__/c10420p1283322123/i6626347341.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-029-01-small.jpg",
+            "medium": "https://example.invalid/images/01-029-01-medium.jpg",
+            "big": "https://example.invalid/images/01-029-01-big.jpg"
           }
         }
       ],
@@ -1727,7 +1727,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-029"
       },
       "is_refurbished": {
         "flag": false
@@ -1735,19 +1735,19 @@
       "has_warranty": false
     },
     {
-      "id": "e65qpxn0kk6o",
-      "title": "Impresora Fotográfica Instantánea WOLFANG",
-      "description": "Impresora fotográfica instantánea WOLFANG, ideal para capturar y compartir tus recuerdos al instante. Incluye un pack de 54 hojas (4x6 pulgadas).\n\n- Compatible con conexión WiFi.\n- Aplicaciones creativas para edición de fotos.\n- Funciona con smartphones iOS/Android.\n- Tecnología de impresión por sublimación.",
+      "id": "demo-item-01-030",
+      "title": "Synthetic listing 01-030",
+      "description": "Synthetic description for listing 01-030.",
       "category_id": "24200",
-      "slug": "impresora-fotografica-instantanea-wolfang-1217892496",
+      "slug": "synthetic-listing-01-030",
       "images": [
         {
-          "id": "qjwe79xknewj",
+          "id": "demo-image-01-030-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/k5/3n/__/c10420p1217892496/i6210481577.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/k5/3n/__/c10420p1217892496/i6210481577.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/k5/3n/__/c10420p1217892496/i6210481577.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-030-01-small.jpg",
+            "medium": "https://example.invalid/images/01-030-01-medium.jpg",
+            "big": "https://example.invalid/images/01-030-01-big.jpg"
           }
         }
       ],
@@ -1784,7 +1784,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-030"
       },
       "is_refurbished": {
         "flag": false
@@ -1792,19 +1792,19 @@
       "has_warranty": false
     },
     {
-      "id": "qzmmwryg2lzv",
-      "title": "Aspiradora JONR H2 Seco y Húmedo 20000Pa",
-      "description": "Aspiradora JONR H2 en seco y húmedo con diseño innovador.\n\n- Potencia de succión de 20000 Pa.\n- Depósito de agua dulce de 1500 ml.\n- Depósito de agua sucia de 600 ml.\n- Autonomía de 45 minutos.\n- Posición plana de 180°.",
+      "id": "demo-item-01-031",
+      "title": "Synthetic listing 01-031",
+      "description": "Synthetic description for listing 01-031.",
       "category_id": "13100",
-      "slug": "aspiradora-jonr-h2-seco-y-humedo-20000pa-1265117756",
+      "slug": "synthetic-listing-01-031",
       "images": [
         {
-          "id": "wzvrkynl7wd6",
+          "id": "demo-image-01-031-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kx/7v/__/c10420p1265117756/i6514805341.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kx/7v/__/c10420p1265117756/i6514805341.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kx/7v/__/c10420p1265117756/i6514805341.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-031-01-small.jpg",
+            "medium": "https://example.invalid/images/01-031-01-medium.jpg",
+            "big": "https://example.invalid/images/01-031-01-big.jpg"
           }
         }
       ],
@@ -1842,19 +1842,19 @@
       "has_warranty": false
     },
     {
-      "id": "v6gprd4d276e",
-      "title": "Pack 2 Teléfonos Inalámbricos Motorola Voice",
-      "description": "Pack de dos teléfonos inalámbricos Motorola Voice.\n\n- Alcance de hasta 1 km.\n- Certificación IP67 resistente al agua y polvo.\n- Carga inductiva.\n- Pantalla a color de 1.8.\n- Agenda para 200 contactos.\n- Identificador de llamadas.\n- Manos libres.\n- Compatible con hasta 11 terminales.\n- Incluye clip para cinturón y soporte de pared.",
+      "id": "demo-item-01-032",
+      "title": "Synthetic listing 01-032",
+      "description": "Synthetic description for listing 01-032.",
       "category_id": "24200",
-      "slug": "pack-2-telefonos-inalambricos-motorola-voice-1265434088",
+      "slug": "synthetic-listing-01-032",
       "images": [
         {
-          "id": "v6g0k4ek337j",
+          "id": "demo-image-01-032-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kx/en/__/c10420p1265434088/i6516558464.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kx/en/__/c10420p1265434088/i6516558464.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kx/en/__/c10420p1265434088/i6516558464.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-032-01-small.jpg",
+            "medium": "https://example.invalid/images/01-032-01-medium.jpg",
+            "big": "https://example.invalid/images/01-032-01-big.jpg"
           }
         }
       ],
@@ -1898,19 +1898,19 @@
       "has_warranty": false
     },
     {
-      "id": "3zlm7v9e9pjx",
-      "title": "Balanza postal MUNBYN 300kg/660lb",
-      "description": "Balanza digital MUNBYN de alta precisión, ideal para paquetes, equipaje y almacenes. Incluye pilas AAA, tornillos y cable Type-C.\n\n- Capacidad máxima de 300 kg / 660 lb.\n- Función de tara y retención (Hold).\n- Cuatro unidades de medida: kg, lb, oz, lb:oz.\n- Tres opciones de alimentación: batería recargable, pilas AAA o cable.\n- Panel de control independiente.",
+      "id": "demo-item-01-033",
+      "title": "Synthetic listing 01-033",
+      "description": "Synthetic description for listing 01-033.",
       "category_id": "13100",
-      "slug": "balanza-postal-munbyn-300kg-660lb-1265435221",
+      "slug": "synthetic-listing-01-033",
       "images": [
         {
-          "id": "9jdxm7emok4z",
+          "id": "demo-image-01-033-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kx/eo/__/c10420p1265435221/i6516563460.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kx/eo/__/c10420p1265435221/i6516563460.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kx/eo/__/c10420p1265435221/i6516563460.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-033-01-small.jpg",
+            "medium": "https://example.invalid/images/01-033-01-medium.jpg",
+            "big": "https://example.invalid/images/01-033-01-big.jpg"
           }
         }
       ],
@@ -1948,28 +1948,28 @@
       "has_warranty": false
     },
     {
-      "id": "qzmm4l2yggzv",
-      "title": "Farola solar Gefolly exterior",
-      "description": "Farola solar Gefolly SL-8500W para exterior, en perfecto estado. \n\n- Iluminación LED potente y eficiente.\n- Diseño resistente a la intemperie (IP67).\n- Control remoto incluido.\n- Ideal para jardín o garaje.\n- Material de aluminio.",
+      "id": "demo-item-01-034",
+      "title": "Synthetic listing 01-034",
+      "description": "Synthetic description for listing 01-034.",
       "category_id": "12467",
-      "slug": "farola-solar-gefolly-exterior-1169498880",
+      "slug": "synthetic-listing-01-034",
       "images": [
         {
-          "id": "nz0g8q7vgq3j",
+          "id": "demo-image-01-034-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015151.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015151.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015151.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-034-01-small.jpg",
+            "medium": "https://example.invalid/images/01-034-01-medium.jpg",
+            "big": "https://example.invalid/images/01-034-01-big.jpg"
           }
         },
         {
-          "id": "4z4y8pdgy7vz",
+          "id": "demo-image-01-034-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015162.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015162.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/jc/af/__/c10420p1169498880/i5900015162.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-034-02-small.jpg",
+            "medium": "https://example.invalid/images/01-034-02-medium.jpg",
+            "big": "https://example.invalid/images/01-034-02-big.jpg"
           }
         }
       ],
@@ -2012,7 +2012,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-034"
       },
       "is_refurbished": {
         "flag": false
@@ -2020,28 +2020,28 @@
       "has_warranty": false
     },
     {
-      "id": "nz08dxnorr6o",
-      "title": "Cámara Exterior Vosker V150 4G LTE Solar",
-      "description": "Cámara de seguridad exterior Vosker V150 con panel solar y conectividad 4G LTE. Ideal para vigilar en remoto sin necesidad de Wi-Fi.\n\n- Visión nocturna.\n- Detección de movimiento.\n- Fotos enviadas a la aplicación móvil.\n- Batería recargable.",
+      "id": "demo-item-01-035",
+      "title": "Synthetic listing 01-035",
+      "description": "Synthetic description for listing 01-035.",
       "category_id": "24200",
-      "slug": "camara-exterior-vosker-v150-4g-lte-solar-1238501551",
+      "slug": "synthetic-listing-01-035",
       "images": [
         {
-          "id": "4z4yqeo7prwz",
+          "id": "demo-image-01-035-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513414.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513414.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513414.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-035-01-small.jpg",
+            "medium": "https://example.invalid/images/01-035-01-medium.jpg",
+            "big": "https://example.invalid/images/01-035-01-big.jpg"
           }
         },
         {
-          "id": "mzng024y5p06",
+          "id": "demo-image-01-035-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513425.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513425.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/kh/dd/__/c10420p1238501551/i6346513425.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-035-02-small.jpg",
+            "medium": "https://example.invalid/images/01-035-02-medium.jpg",
+            "big": "https://example.invalid/images/01-035-02-big.jpg"
           }
         }
       ],
@@ -2072,7 +2072,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-035"
       },
       "is_refurbished": {
         "flag": false
@@ -2080,19 +2080,19 @@
       "has_warranty": false
     },
     {
-      "id": "xzo20qe74269",
-      "title": "Auriculares inalambricos",
-      "description": "Totalmente nuevos, sin usar ",
+      "id": "demo-item-01-036",
+      "title": "Synthetic listing 01-036",
+      "description": "Synthetic description for listing 01-036.",
       "category_id": "24200",
-      "slug": "auriculares-inalambricos-1048403933",
+      "slug": "synthetic-listing-01-036",
       "images": [
         {
-          "id": "nz0gmekd9qrj",
+          "id": "demo-image-01-036-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/hc/6x/__/c10420p1048403933/i5126091751.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/hc/6x/__/c10420p1048403933/i5126091751.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/hc/6x/__/c10420p1048403933/i5126091751.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-036-01-small.jpg",
+            "medium": "https://example.invalid/images/01-036-01-medium.jpg",
+            "big": "https://example.invalid/images/01-036-01-big.jpg"
           }
         }
       ],
@@ -2129,7 +2129,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-036"
       },
       "is_refurbished": {
         "flag": false
@@ -2137,19 +2137,19 @@
       "has_warranty": false
     },
     {
-      "id": "xzo2gk888769",
-      "title": "SECADOR SECADO RAPIDO IONICO",
-      "description": "Totalmente nuevo, sin usar ",
+      "id": "demo-item-01-037",
+      "title": "Synthetic listing 01-037",
+      "description": "Synthetic description for listing 01-037.",
       "category_id": "12465",
-      "slug": "secador-secado-rapido-ionico-1003319481",
+      "slug": "synthetic-listing-01-037",
       "images": [
         {
-          "id": "vjrkkvvv47wz",
+          "id": "demo-image-01-037-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/gl/cm/__/c10420p1003319481/i4877277619.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/gl/cm/__/c10420p1003319481/i4877277619.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/gl/cm/__/c10420p1003319481/i4877277619.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-037-01-small.jpg",
+            "medium": "https://example.invalid/images/01-037-01-medium.jpg",
+            "big": "https://example.invalid/images/01-037-01-big.jpg"
           }
         }
       ],
@@ -2174,7 +2174,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-037"
       },
       "is_refurbished": {
         "flag": false
@@ -2182,19 +2182,19 @@
       "has_warranty": false
     },
     {
-      "id": "0j2404qvwezy",
-      "title": "Traje neopreno Talla L mujer Seac",
-      "description": "SEAC Trendy Lady Traje Corto de Una Pieza de Neopreno de 2,5 mm con Cremallera Frontal, para Snorkel, Surf y Deportes Acuáticos en Aguas Templadas para Adultos y Niños, Mujer\nNuevo, sin usar",
+      "id": "demo-item-01-038",
+      "title": "Synthetic listing 01-038",
+      "description": "Synthetic description for listing 01-038.",
       "category_id": "12579",
-      "slug": "traje-neopreno-talla-l-mujer-seac-1132486883",
+      "slug": "synthetic-listing-01-038",
       "images": [
         {
-          "id": "v6g0g3777lnj",
+          "id": "demo-image-01-038-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/iq/94/__/c10420p1132486883/i5648270316.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/iq/94/__/c10420p1132486883/i5648270316.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/iq/94/__/c10420p1132486883/i5648270316.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-038-01-small.jpg",
+            "medium": "https://example.invalid/images/01-038-01-medium.jpg",
+            "big": "https://example.invalid/images/01-038-01-big.jpg"
           }
         }
       ],
@@ -2219,7 +2219,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-038"
       },
       "is_refurbished": {
         "flag": false
@@ -2227,28 +2227,28 @@
       "has_warranty": false
     },
     {
-      "id": "v6ggy95do76e",
-      "title": "Powerbank",
-      "description": "Totalmente nueva, sin abrir",
+      "id": "demo-item-01-039",
+      "title": "Synthetic listing 01-039",
+      "description": "Synthetic description for listing 01-039.",
       "category_id": "24200",
-      "slug": "powerbank-1114006064",
+      "slug": "synthetic-listing-01-039",
       "images": [
         {
-          "id": "p61vy0px0x76",
+          "id": "demo-image-01-039-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875307.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875307.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875307.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-039-01-small.jpg",
+            "medium": "https://example.invalid/images/01-039-01-medium.jpg",
+            "big": "https://example.invalid/images/01-039-01-big.jpg"
           }
         },
         {
-          "id": "8j3mew73w386",
+          "id": "demo-image-01-039-02",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875310.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875310.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/if/90/__/c10420p1114006064/i5493875310.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-039-02-small.jpg",
+            "medium": "https://example.invalid/images/01-039-02-medium.jpg",
+            "big": "https://example.invalid/images/01-039-02-big.jpg"
           }
         }
       ],
@@ -2279,7 +2279,7 @@
       "shipping": {
         "item_is_shippable": true,
         "user_allows_shipping": true,
-        "cost_configuration_id": "814429d6-7844-471d-97af-196cd4020f26"
+        "cost_configuration_id": "demo-cost-01-039"
       },
       "is_refurbished": {
         "flag": false
@@ -2287,19 +2287,19 @@
       "has_warranty": false
     },
     {
-      "id": "p618kd09w5z5",
-      "title": "Cámara Vigilancia Exterior COOAU Batería 2K",
-      "description": "Cámara de vigilancia exterior COOAU con batería.\n\n- Resolución 2K.\n- PTZ 355°/90°.\n- Inalámbrica WiFi IP.\n- Detector de movimiento inteligente.\n- Visión nocturna.\n- Resolución HD.",
+      "id": "demo-item-01-040",
+      "title": "Synthetic listing 01-040",
+      "description": "Synthetic description for listing 01-040.",
       "category_id": "24200",
-      "slug": "camara-vigilancia-exterior-cooau-bateria-2k-1214203831",
+      "slug": "synthetic-listing-01-040",
       "images": [
         {
-          "id": "36edpplkm1nj",
+          "id": "demo-image-01-040-01",
           "average_color": "13C1AC",
           "urls": {
-            "small": "https://cdn.wallapop.com/images/10420/k2/wl/__/c10420p1214203831/i6185846715.jpg?pictureSize=W320",
-            "medium": "https://cdn.wallapop.com/images/10420/k2/wl/__/c10420p1214203831/i6185846715.jpg?pictureSize=W640",
-            "big": "https://cdn.wallapop.com/images/10420/k2/wl/__/c10420p1214203831/i6185846715.jpg?pictureSize=W800"
+            "small": "https://example.invalid/images/01-040-01-small.jpg",
+            "medium": "https://example.invalid/images/01-040-01-medium.jpg",
+            "big": "https://example.invalid/images/01-040-01-big.jpg"
           }
         }
       ],

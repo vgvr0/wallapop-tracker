@@ -4,7 +4,7 @@ Fecha de observación: 17 de septiembre de 2026 (Europe/Madrid)
 
 Perfil utilizado como caso de estudio:
 
-`https://es.wallapop.com/user/joseantoniol-64102686`
+`https://example.invalid/user/demo-seller-001`
 
 ## Resumen ejecutivo
 
@@ -20,18 +20,18 @@ No debe confundirse viabilidad técnica con autorización de uso: las [Condicion
 
 La navegación a la URL pública con slug:
 
-`/user/joseantoniol-64102686`
+`/user/demo-seller-001`
 
 devuelve HTML `200`. En `#__NEXT_DATA__` aparece:
 
 ```json
 {
-  "query": {"userSlug": "joseantoniol-64102686"},
+  "query": {"userSlug": "demo-seller-001"},
   "props": {
     "pageProps": {
       "user": {
-        "id": "v4z4nyeyq8jy",
-        "webSlug": "joseantoniol-64102686"
+        "id": "demo-user-001",
+        "webSlug": "demo-seller-001"
       }
     }
   }
@@ -94,7 +94,7 @@ Campos observados en `pageProps.user`:
 }
 ```
 
-La diferencia entre `ratings.reviews` y `counters.reviews` se observó en el perfil de ejemplo (`98` frente a `294`), por lo que no se deben mapear ambos a un único campo sin entender su semántica. Para el contador visible de valoraciones del perfil, el valor observado es `counters.reviews = 294`.
+La diferencia entre `ratings.reviews` y `counters.reviews` se conserva en el perfil sintético (`8` frente a `12`), por lo que no se deben mapear ambos a un único campo sin entender su semántica. Para el contador visible de valoraciones del perfil, el valor sintético es `counters.reviews = 12`.
 
 ### Anuncios SSR
 
@@ -105,12 +105,12 @@ La diferencia entre `ratings.reviews` y `counters.reviews` se observó en el per
   "meta": {"next": "<cursor opaco>"},
   "data": [
     {
-      "id": "qjwr3q2kek6o",
-      "title": "Cámara Solar Xega 4G con Paneles Solares",
-      "description": "...",
+      "id": "demo-item-01-001",
+      "title": "Synthetic listing 01-001",
+      "description": "Synthetic description for listing 01-001.",
       "categoryId": 24200,
-      "slug": "camara-solar-xega-4g-con-paneles-solares-1301002605",
-      "images": [{"urls": {"small": "...", "medium": "...", "big": "..."}}],
+      "slug": "synthetic-listing-01-001",
+      "images": [{"urls": {"small": "https://example.invalid/images/01-001-small.jpg", "medium": "https://example.invalid/images/01-001-medium.jpg", "big": "https://example.invalid/images/01-001-big.jpg"}}],
       "price": {"amount": 22, "currency": "EUR"},
       "shipping": {"isItemShippable": true, "userAllowsShipping": true},
       "hasWarranty": false,
@@ -130,7 +130,7 @@ Todos los endpoints siguientes se probaron el 17/09/2026 con `GET`, sin cookies 
 
 ### Perfil
 
-`GET https://api.wallapop.com/api/v3/users/v4z4nyeyq8jy`
+`GET https://api.wallapop.com/api/v3/users/demo-user-001`
 
 Respuesta `200`, objeto JSON con:
 
@@ -140,20 +140,20 @@ El `seller_type` observado es un objeto API (`{"type":"Private","verified":true}
 
 ### Estadísticas
 
-`GET https://api.wallapop.com/api/v3/users/v4z4nyeyq8jy/stats`
+`GET https://api.wallapop.com/api/v3/users/demo-user-001/stats`
 
 Respuesta `200`:
 
 ```json
 {
-  "ratings": [{"type": "reviews", "value": 98}],
+  "ratings": [{"type": "reviews", "value": 8}],
   "counters": [
-    {"type": "publish", "value": 77},
-    {"type": "buys", "value": 14},
-    {"type": "sells", "value": 417},
-    {"type": "reviews", "value": 294},
-    {"type": "sold", "value": 415},
-    {"type": "reports_received", "value": 10}
+    {"type": "publish", "value": 12},
+    {"type": "buys", "value": 2},
+    {"type": "sells", "value": 15},
+    {"type": "reviews", "value": 12},
+    {"type": "sold", "value": 11},
+    {"type": "reports_received", "value": 0}
   ],
   "rating_average": 4.9
 }
@@ -163,7 +163,7 @@ Este endpoint es la fuente preferida para snapshots de estadísticas si se confi
 
 ### Anuncios publicados
 
-`GET https://api.wallapop.com/api/v3/users/v4z4nyeyq8jy/items`
+`GET https://api.wallapop.com/api/v3/users/demo-user-001/items`
 
 Respuesta `200` con `{ "data": [...], "meta": {"next": "..."} }`. En la respuesta API los nombres son snake_case; el bundle del frontend los transforma a camelCase.
 
@@ -177,13 +177,13 @@ Con el cursor observado se obtuvo `200`, 37 anuncios y `meta.next = null`. El cu
 
 ### Resumen de reseñas
 
-`GET https://api.wallapop.com/api/v3/users/v4z4nyeyq8jy/reviews/summary`
+`GET https://api.wallapop.com/api/v3/users/demo-user-001/reviews/summary`
 
 Respuesta `200`:
 
 ```json
 {
-  "total_reviews": 294,
+  "total_reviews": 12,
   "average": 4.9,
   "breakdown": {
     "1": {"percentage": 1},
@@ -201,7 +201,7 @@ Es una fuente adecuada para el contador y la media, si se mantiene pública.
 
 La pestaña pública de reseñas realizó esta llamada:
 
-`GET https://api.wallapop.com/bff/sales/reviews/user-profile?page=0&user_id=v4z4nyeyq8jy&order_by=creation_desc`
+`GET https://api.wallapop.com/bff/sales/reviews/user-profile?page=0&user_id=demo-user-001&order_by=creation_desc`
 
 Respuesta `200`, array de reseñas. La respuesta expone cabecera `X-NextPage: 1`, que debe usarse para avanzar en la paginación. Cada elemento observado incluía `id`, `rating`, `rating_over_five`, `comment`, `published`, `sale`, `user`, `analytics` y `edit`.
 
@@ -209,7 +209,7 @@ Este endpoint devuelve texto de comentarios y datos de otros usuarios. No es nec
 
 ### Endpoint no utilizable
 
-`GET https://api.wallapop.com/api/v3/users/v4z4nyeyq8jy/seller-info` devolvió `404` en la prueba directa, aunque el bundle contiene código para solicitarlo en determinadas condiciones. No debe incorporarse como dependencia sin reproducir primero la condición que activa esa llamada.
+`GET https://api.wallapop.com/api/v3/users/demo-user-001/seller-info` devolvió `404` en la prueba directa, aunque el bundle contiene código para solicitarlo en determinadas condiciones. No debe incorporarse como dependencia sin reproducir primero la condición que activa esa llamada.
 
 ## 4. Qué proviene de cada capa
 
@@ -224,7 +224,7 @@ No se necesitó Playwright para obtener los datos: el navegador se utilizó para
 
 ## 5. Autenticación, límites y riesgos
 
-- El perfil, usuario, estadísticas, anuncios y resumen de reseñas respondieron sin autenticación.
+- El perfil sintético, sus estadísticas, anuncios y resumen de reseñas se modelan sin autenticación.
 - No se observaron credenciales, tokens de usuario ni CAPTCHA durante esta investigación.
 - La API no documenta públicamente un contrato versionado; los endpoints pertenecen al frontend y pueden cambiar sin aviso.
 - La paginación de anuncios usa cursores opacos; no se debe inventar paginación por `page` para esa colección.
@@ -249,7 +249,7 @@ Antes de implementar el tracker periódico hay que resolver la restricción de l
 
 ## Fuentes y artefactos de observación
 
-- [Perfil público de ejemplo](https://es.wallapop.com/user/joseantoniol-64102686)
+- [Perfil público de ejemplo](https://example.invalid/user/demo-seller-001)
 - [Condiciones de uso de Wallapop](https://about.wallapop.com/condiciones-de-uso/)
 - Bundle de la página observado en la carga: `https://web-static.wallapop.com/nextjs/_next/static/chunks/pages/user/%5BuserSlug%5D/%5B%5B...tabSelected%5D%5D-45896066bc9c80a9.js`
 

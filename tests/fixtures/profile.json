@@ -1,1 +1,15 @@
-{"id":"user-1","micro_name":"Ana","web_slug":"ana-1","url_share":"https://www.wallapop.com/user/ana-1","location":{"city":"Madrid","zip":"28001"},"register_date":1493118398000,"seller_type":{"type":"Private","verified":true}}
+{
+  "id": "demo-user-001",
+  "micro_name": "Demo Seller",
+  "web_slug": "demo-seller-001",
+  "url_share": "https://example.invalid/user/demo-seller-001",
+  "location": {
+    "city": "Example City",
+    "zip": "00000"
+  },
+  "register_date": 1700000000000,
+  "seller_type": {
+    "type": "Private",
+    "verified": true
+  }
+}
