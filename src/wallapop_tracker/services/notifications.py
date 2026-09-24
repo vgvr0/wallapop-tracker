@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from html import escape
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -38,6 +39,105 @@ from wallapop_tracker.storage.repositories import (
 )
 
 logger = logging.getLogger(__name__)
+
+TELEGRAM_MAX_LENGTH = 4096
+
+
+def truncate_text(value: str | None, max_length: int) -> str | None:
+    if not value:
+        return None
+    value = " ".join(value.split())
+    return value if len(value) <= max_length else value[: max(0, max_length - 1)].rstrip() + "…"
+
+
+def _html(value: object) -> str:
+    return escape(str(value), quote=True)
+
+
+def _money(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return f"{value:.2f}".rstrip("0").rstrip(".") + " €"
+
+
+def _percent(value: Decimal | None) -> str | None:
+    return f"{value:.1f}%" if value is not None else None
+
+
+def render_telegram_message(notification: Notification) -> str:
+    title = truncate_text(notification.title, 240) or notification.listing_id
+    event = notification.event_type
+    heading = {
+        AlertType.PRICE_DROP: "📉 Bajada de precio",
+        AlertType.REAPPEARED: "🔁 Reapareció",
+        AlertType.DEAL_SCORE_THRESHOLD: "🎯 Deal score",
+    }.get(event, "🔥" if event in {AlertType.NEW_LISTING, AlertType.NEW_SEARCH_MATCH} else "🔔")
+    lines = [f"{heading} <b>{_html(title)}</b>"]
+    if (
+        event == AlertType.PRICE_DROP
+        and notification.old_price is not None
+        and notification.new_price is not None
+    ):
+        drop = (notification.new_price - notification.old_price) / notification.old_price * 100
+        lines.extend(
+            [
+                f"{_html(_money(notification.old_price))} → {_html(_money(notification.new_price))}",
+                f"-{_html(_money(notification.old_price - notification.new_price))} ({_html(_percent(-abs(drop)))})",
+            ]
+        )
+    elif notification.new_price is not None:
+        lines.append(f"💶 {_html(_money(notification.new_price))}")
+    if notification.market_value is not None:
+        lines.append(f"📊 Mercado: ~{_html(_money(notification.market_value))}")
+        if notification.market_discount_percent is not None:
+            lines.append(f"📉 Diferencia: {_html(_percent(notification.market_discount_percent))}")
+    if notification.deal_score is not None:
+        score = (
+            notification.deal_score.quantize(Decimal("1"))
+            if notification.deal_score == notification.deal_score.to_integral()
+            else notification.deal_score
+        )
+        lines.append(f"🎯 Deal score: {_html(score)}/100")
+    context: list[str] = []
+    if notification.location:
+        location = _html(notification.location)
+        if notification.distance_km is not None:
+            location += f" · {_html(notification.distance_km.normalize())} km"
+        context.append(f"📍 {location}")
+    elif notification.distance_km is not None:
+        context.append(f"📍 {_html(notification.distance_km.normalize())} km")
+    if notification.shipping_available is not None:
+        context.append(f"📦 Envíos: {'Sí' if notification.shipping_available else 'No'}")
+    seller: list[str] = []
+    if notification.seller_rating is not None:
+        seller.append(f"{_html(notification.seller_rating)}★")
+    if notification.seller_review_count is not None:
+        seller.append(f"{notification.seller_review_count} valoraciones")
+    if notification.seller_sales_count is not None:
+        seller.append(f"{notification.seller_sales_count} ventas")
+    if seller:
+        context.append("👤 " + " · ".join(seller))
+    if context:
+        lines.append("\n".join(context))
+    evidence = [truncate_text(item, 180) for item in notification.evidence[:5]]
+    evidence = [item for item in evidence if item]
+    if evidence:
+        lines.append("✅ Coincide porque:\n" + "\n".join(f"• {_html(item)}" for item in evidence))
+    if notification.low_period_days is not None:
+        lines.append(f"📉 Mínimo de {notification.low_period_days} días")
+    description = truncate_text(notification.description, 280)
+    if description:
+        lines.append(f"\n{_html(description)}")
+    if notification.url:
+        lines.append(
+            f'🔗 <a href="{_html(truncate_text(notification.url, 1800) or notification.url)}">Ver anuncio</a>'
+        )
+    elif notification.details and event not in {AlertType.NEW_LISTING, AlertType.NEW_SEARCH_MATCH}:
+        lines.append(_html(truncate_text(notification.details, 500) or ""))
+    return (
+        truncate_text("\n\n".join(line for line in lines if line), TELEGRAM_MAX_LENGTH)
+        or "🔔 Notificación"
+    )
 
 
 def _price(value: Decimal | None) -> str | None:
@@ -150,35 +250,26 @@ class TelegramNotificationChannel:
         self.http_client = http_client
 
     async def send(self, notification: Notification, destination: str) -> DeliveryResult:
-        title = notification.title or notification.listing_id
-        text = f"{notification.event_type.value.replace('_', ' ').title()}\n{title}"
-        if notification.old_price is not None and notification.new_price is not None:
-            text += f"\n{_price(notification.old_price)} € → {_price(notification.new_price)} €"
-        if notification.url:
-            text += f"\n{notification.url}"
-        if notification.details:
-            text += f"\n{notification.details}"
+        text = render_telegram_message(notification)
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        chunks = [text[index : index + 4096] for index in range(0, len(text), 4096)] or [""]
-        for chunk in chunks:
-            payload = {"chat_id": destination, "text": chunk}
-            try:
-                if self.http_client is not None:
-                    response = await self.http_client.post(url, json=payload, timeout=self.timeout)
-                else:
-                    async with httpx.AsyncClient(timeout=self.timeout) as client:
-                        response = await client.post(url, json=payload)
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                return DeliveryResult(False, True, type(exc).__name__)
-            result = _http_result(response)
-            if not result.delivered:
-                return result
-            try:
-                body = response.json()
-            except ValueError:
-                body = {}
-            if isinstance(body, dict) and body.get("ok") is False:
-                return DeliveryResult(False, False, "Telegram API error")
+        payload = {"chat_id": destination, "text": text, "parse_mode": "HTML"}
+        try:
+            if self.http_client is not None:
+                response = await self.http_client.post(url, json=payload, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(url, json=payload)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            return DeliveryResult(False, True, type(exc).__name__)
+        result = _http_result(response)
+        if not result.delivered:
+            return result
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        if isinstance(body, dict) and body.get("ok") is False:
+            return DeliveryResult(False, False, "Telegram API error")
         return DeliveryResult(True)
 
 
