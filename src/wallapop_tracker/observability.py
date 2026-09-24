@@ -206,6 +206,26 @@ class Metrics:
         self.pending_notifications = Gauge(
             "wallapop_pending_notifications", "Pending notifications", registry=self.registry
         )
+        self.telegram_updates_total = Counter(
+            "wallapop_telegram_updates_total", "Telegram updates received", registry=self.registry
+        )
+        self.telegram_commands_total = Counter(
+            "wallapop_telegram_commands_total",
+            "Telegram commands processed",
+            ["command"],
+            registry=self.registry,
+        )
+        self.telegram_command_failures_total = Counter(
+            "wallapop_telegram_command_failures_total",
+            "Telegram command failures",
+            ["command"],
+            registry=self.registry,
+        )
+        self.telegram_control_duration_seconds = Histogram(
+            "wallapop_telegram_control_duration_seconds",
+            "Telegram command duration",
+            registry=self.registry,
+        )
         self.http_requests_total = Counter(
             "http_requests_total",
             "API HTTP requests",
