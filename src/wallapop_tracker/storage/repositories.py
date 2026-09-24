@@ -611,6 +611,7 @@ class NotificationDeliveryRepository:
         lease_seconds: int,
         max_attempts: int,
         include_failed: bool = False,
+        ignore_backoff: bool = False,
     ) -> NotificationDeliveryRecord | None:
         """Claim one delivery in a short transaction; PostgreSQL skips locked rows."""
         statuses = [NotificationDeliveryStatus.PENDING, NotificationDeliveryStatus.PROCESSING]
@@ -626,7 +627,7 @@ class NotificationDeliveryRepository:
                 | (NotificationDeliveryRecord.claim_expires_at <= now),
                 *(
                     ()
-                    if include_failed
+                    if ignore_backoff
                     else (
                         (NotificationDeliveryRecord.next_attempt_at.is_(None))
                         | (NotificationDeliveryRecord.next_attempt_at <= now),

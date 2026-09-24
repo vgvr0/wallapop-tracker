@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import httpx
@@ -28,7 +28,10 @@ from wallapop_tracker.storage.models import (
     TrackingRunRecord,
     TrackingRunStatus,
 )
-from wallapop_tracker.storage.repositories import TrackedSearchRepository
+from wallapop_tracker.storage.repositories import (
+    NotificationDeliveryRepository,
+    TrackedSearchRepository,
+)
 
 
 @pytest.fixture
@@ -163,6 +166,33 @@ async def test_failed_delivery_can_be_retried_without_new_row(database):
         assert delivery.status == NotificationDeliveryStatus.DELIVERED
         assert delivery.attempts == 2
         assert session.scalar(select(func.count()).select_from(NotificationDeliveryRecord)) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_delivery_respects_backoff_when_include_failed_is_true(database):
+    event_id = await create_event(database)
+    now = datetime.now(UTC)
+    with database.transaction() as session:
+        delivery = NotificationDeliveryRepository(session).create_once(
+            event_id=event_id,
+            channel="webhook",
+            destination="dest",
+            created_at=now,
+        )[0]
+        delivery.status = NotificationDeliveryStatus.FAILED
+        delivery.next_attempt_at = now + timedelta(minutes=5)
+
+    with database.transaction() as session:
+        assert (
+            NotificationDeliveryRepository(session).claim_next(
+                now=now,
+                worker_id="early-retry",
+                lease_seconds=60,
+                max_attempts=3,
+                include_failed=True,
+            )
+            is None
+        )
 
 
 @pytest.mark.asyncio

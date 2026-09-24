@@ -347,6 +347,7 @@ class NotificationService:
                 lease_seconds=self.lease_seconds,
                 max_attempts=self.settings.max_attempts,
                 include_failed=include_failed,
+                ignore_backoff=include_failed,
             )
             return record.id if record is not None else None
 

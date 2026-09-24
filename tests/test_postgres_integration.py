@@ -297,6 +297,7 @@ def test_postgres_notification_claim_retry_and_completed_delivery(postgres_url):
                     worker_id="too-early",
                     lease_seconds=60,
                     max_attempts=3,
+                    include_failed=True,
                 )
                 is None
             )
