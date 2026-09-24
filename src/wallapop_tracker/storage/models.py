@@ -9,6 +9,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -136,6 +137,42 @@ class TrackedSearchRecord(Base):
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claimed_by: Mapped[str | None] = mapped_column(String(255))
+
+
+class TelegramChatRecord(Base):
+    """Telegram chat metadata; ``chat_id`` is the canonical identity."""
+
+    __tablename__ = "telegram_chats"
+    __table_args__ = (UniqueConstraint("chat_id", name="uq_telegram_chats_chat_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255))
+    first_name: Mapped[str | None] = mapped_column(String(255))
+    last_name: Mapped[str | None] = mapped_column(String(255))
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TelegramSearchOwnerRecord(Base):
+    """Ownership association between a Telegram chat and a tracked search."""
+
+    __tablename__ = "telegram_search_owners"
+    __table_args__ = (
+        UniqueConstraint("telegram_chat_id", "tracked_search_id", name="uq_telegram_search_owner"),
+        Index("ix_telegram_search_owners_chat", "telegram_chat_id"),
+        Index("ix_telegram_search_owners_search", "tracked_search_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_chat_id: Mapped[int] = mapped_column(
+        ForeignKey("telegram_chats.id", ondelete="CASCADE"), nullable=False
+    )
+    tracked_search_id: Mapped[int] = mapped_column(
+        ForeignKey("tracked_searches.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class TrackedListingRecord(Base):

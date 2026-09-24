@@ -27,6 +27,8 @@ from .models import (
     ProfileRecord,
     ProfileSnapshotRecord,
     SearchListingMatchRecord,
+    TelegramChatRecord,
+    TelegramSearchOwnerRecord,
     TrackedListingRecord,
     TrackedProfileRecord,
     TrackedSearchRecord,
@@ -64,7 +66,7 @@ def _validate_alert_thresholds(
         raise ValueError("deal_score_threshold must be between 0 and 100")
 
 
-class TrackedSearchRepository:
+class _TrackedSearchCreateRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
@@ -134,6 +136,133 @@ class TrackedSearchRepository:
         self.session.add(record)
         self.session.flush()
         return record
+
+
+class TelegramOwnershipRepository:
+    """Persistence boundary for Telegram identity and search ownership."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def upsert_chat(
+        self,
+        chat_id: int,
+        *,
+        username: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+    ) -> TelegramChatRecord:
+        now = datetime.now(UTC)
+        row = self.session.scalar(
+            select(TelegramChatRecord).where(TelegramChatRecord.chat_id == chat_id)
+        )
+        if row is None:
+            row = TelegramChatRecord(
+                chat_id=chat_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            self.session.add(row)
+        else:
+            row.username = username
+            row.first_name = first_name
+            row.last_name = last_name
+            row.last_seen_at = now
+        self.session.flush()
+        return row
+
+    def get_chat(self, chat_id: int) -> TelegramChatRecord | None:
+        return self.session.scalar(
+            select(TelegramChatRecord).where(TelegramChatRecord.chat_id == chat_id)
+        )
+
+    def touch_chat(self, chat_id: int) -> TelegramChatRecord | None:
+        row = self.get_chat(chat_id)
+        if row is not None:
+            row.last_seen_at = datetime.now(UTC)
+            self.session.flush()
+        return row
+
+    def associate(self, chat_id: int, search_id: int) -> TelegramSearchOwnerRecord:
+        chat = self.get_chat(chat_id)
+        if chat is None:
+            raise ValueError("Telegram chat is not registered")
+        row = self.session.scalar(
+            select(TelegramSearchOwnerRecord).where(
+                TelegramSearchOwnerRecord.telegram_chat_id == chat.id,
+                TelegramSearchOwnerRecord.tracked_search_id == search_id,
+            )
+        )
+        if row is None:
+            row = TelegramSearchOwnerRecord(
+                telegram_chat_id=chat.id,
+                tracked_search_id=search_id,
+                created_at=datetime.now(UTC),
+            )
+            self.session.add(row)
+            self.session.flush()
+        return row
+
+    def remove_association(self, chat_id: int, search_id: int) -> bool:
+        row = self._owner(chat_id, search_id)
+        if row is None:
+            return False
+        self.session.delete(row)
+        self.session.flush()
+        return True
+
+    def list_owned(self, chat_id: int) -> list[TrackedSearchRecord]:
+        return list(
+            self.session.scalars(
+                select(TrackedSearchRecord)
+                .join(
+                    TelegramSearchOwnerRecord,
+                    TelegramSearchOwnerRecord.tracked_search_id == TrackedSearchRecord.id,
+                )
+                .join(
+                    TelegramChatRecord,
+                    TelegramChatRecord.id == TelegramSearchOwnerRecord.telegram_chat_id,
+                )
+                .where(TelegramChatRecord.chat_id == chat_id)
+                .order_by(TrackedSearchRecord.id)
+            )
+        )
+
+    def resolve_owned(self, chat_id: int, search_id: int) -> TrackedSearchRecord | None:
+        row = self._owner(chat_id, search_id)
+        return self.session.get(TrackedSearchRecord, search_id) if row is not None else None
+
+    def owner_chat_ids(self, search_id: int) -> list[int]:
+        return list(
+            self.session.scalars(
+                select(TelegramChatRecord.chat_id)
+                .join(
+                    TelegramSearchOwnerRecord,
+                    TelegramSearchOwnerRecord.telegram_chat_id == TelegramChatRecord.id,
+                )
+                .where(TelegramSearchOwnerRecord.tracked_search_id == search_id)
+            )
+        )
+
+    def _owner(self, chat_id: int, search_id: int) -> TelegramSearchOwnerRecord | None:
+        return self.session.scalar(
+            select(TelegramSearchOwnerRecord)
+            .join(
+                TelegramChatRecord,
+                TelegramChatRecord.id == TelegramSearchOwnerRecord.telegram_chat_id,
+            )
+            .where(
+                TelegramChatRecord.chat_id == chat_id,
+                TelegramSearchOwnerRecord.tracked_search_id == search_id,
+            )
+        )
+
+
+class TrackedSearchRepository(_TrackedSearchCreateRepository):
+    """Complete search repository, preserving the historical implementation."""
 
     def has_valid_run(self, search_id: int) -> bool:
         return (

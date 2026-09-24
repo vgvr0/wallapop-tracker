@@ -32,7 +32,10 @@ from wallapop_tracker.storage.models import (
     PossibleRelistingRecord,
     TrackingEventRecord,
 )
-from wallapop_tracker.storage.repositories import NotificationDeliveryRepository
+from wallapop_tracker.storage.repositories import (
+    NotificationDeliveryRepository,
+    TelegramOwnershipRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -277,13 +280,13 @@ class NotificationService:
                 assert self.settings.discord_webhook_url is not None
                 configured["discord"] = DiscordWebhookChannel(timeout=self.settings.timeout)
                 configured_destinations["discord"] = (self.settings.discord_webhook_url,)
-            if self.settings.telegram_enabled:
+            if self.settings.telegram_enabled or self.settings.telegram_bot_token:
                 assert self.settings.telegram_bot_token is not None
-                assert self.settings.telegram_chat_id is not None
                 configured["telegram"] = TelegramNotificationChannel(
                     self.settings.telegram_bot_token, timeout=self.settings.timeout
                 )
-                configured_destinations["telegram"] = (self.settings.telegram_chat_id,)
+                if self.settings.telegram_chat_id:
+                    configured_destinations["telegram"] = (self.settings.telegram_chat_id,)
             self.channels = configured
             self.destinations = configured_destinations
         else:
@@ -298,6 +301,18 @@ class NotificationService:
             if event is None:
                 raise ValueError(f"Tracking event not found: {event_id}")
             repository = NotificationDeliveryRepository(session)
+            destinations: dict[str, tuple[str, ...]] = dict(self.destinations)
+            owner_ids = (
+                TelegramOwnershipRepository(session).owner_chat_ids(event.tracked_search_id)
+                if event.tracked_search_id is not None
+                else []
+            )
+            if owner_ids and "telegram" in self.channels:
+                destinations["telegram"] = tuple(
+                    dict.fromkeys(
+                        (*destinations.get("telegram", ()), *(str(value) for value in owner_ids))
+                    )
+                )
             return [
                 repository.create_once(
                     event_id=event.id,
@@ -305,9 +320,9 @@ class NotificationService:
                     destination=destination,
                     created_at=event.created_at,
                 )[0]
-                for channel, destinations in self.destinations.items()
+                for channel, channel_destinations in destinations.items()
                 if (channel_obj := self.channels.get(channel)) is not None
-                for destination in destinations
+                for destination in channel_destinations
                 if channel_obj is not None
             ]
 

@@ -154,3 +154,7 @@ transport errors surface as tracker errors instead of partial historical state.
 Use `wallapop-track rank <listing_id>` for a human-readable explainable ranking,
 or add `--json` for machine-readable output. AI is optional; missing signals are
 reported and remaining weights are renormalized.
+## Telegram control bot
+
+The optional polling worker is started with `wallapop-track telegram-bot`. See
+[`telegram-control-bot.md`](telegram-control-bot.md) for setup and ownership semantics.

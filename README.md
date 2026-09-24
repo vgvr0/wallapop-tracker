@@ -424,3 +424,5 @@ RAW fixtures in `tests/fixtures/raw/`. Live tests are opt-in (`pytest -m live` w
   `search explain`, FastAPI `/docs` and `/metrics`.
 - **Out of scope for this release:** Git tag, GitHub release, dashboard, MCP server, authentication,
   new filters, new alerts and additional scraping.
+- **Optional Telegram control:** run `wallapop-track telegram-bot` with
+  `WALLAPOP_TELEGRAM_BOT_TOKEN`; see [`docs/telegram-control-bot.md`](docs/telegram-control-bot.md).

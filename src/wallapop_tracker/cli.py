@@ -87,6 +87,18 @@ ai_app = typer.Typer(no_args_is_help=True)
 app.add_typer(ai_app, name="ai")
 
 
+@app.command("telegram-bot")
+def telegram_bot(
+    poll_timeout: int = typer.Option(30, "--poll-timeout", min=1, max=50),
+    log_level: str = typer.Option("INFO", "--log-level"),
+) -> None:
+    """Run the Telegram control bot using long polling."""
+    os.environ["WALLAPOP_LOG_LEVEL"] = log_level
+    from .telegram_bot import run_bot
+
+    run_bot(poll_timeout=poll_timeout)
+
+
 @app.command("market-value")
 def market_value(
     listing_id: int,
