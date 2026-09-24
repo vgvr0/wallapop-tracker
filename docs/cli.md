@@ -15,6 +15,7 @@ wallapop-track [COMMAND]
 ├── relistings    list show
 ├── analytics     market prices activity sellers brands
 ├── score         listing search
+├── market-value  LISTING_ID [--window-days N] [--json]
 ├── ai            assess show
     events        list show consume replay
     dlq           list show retry
@@ -122,6 +123,20 @@ All metadata commands are read-only and limited to endpoints validated by RAW fi
 ## AI listing analysis
 
 `ai assess LISTING_ID [--force] [--json]` explicitly runs or reuses a cached semantic assessment. `ai show LISTING_ID [--json]` only reads the latest persisted assessment. AI is disabled by default and is configured through `WALLAPOP_AI_*` variables.
+
+## Market value estimation
+
+`market-value LISTING_ID` estimates the observed market median from selected
+stored comparables. It defaults to a 30-day window and performs no external or
+LLM request. Use `--json` for machine-readable output:
+
+```bash
+wallapop-track market-value 123
+wallapop-track market-value 123 --json
+```
+
+The output reports the estimated median, observed P25–P75 range, comparable
+count and confidence. It estimates asking prices, not completed-sale value.
 
 Analytics are read-only queries over the persisted history: removed listings are never treated as
 sold. Scores are contextual market analysis, not purchase advice. See

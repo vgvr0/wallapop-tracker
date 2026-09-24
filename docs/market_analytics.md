@@ -4,6 +4,20 @@ Los analytics son consultas read-only sobre el histórico persistido. Para una
 búsqueda, el universo se limita siempre a `SearchMatch`; que un listing exista
 en la tabla global no lo incluye automáticamente en otra búsqueda.
 
+## Market analytics frente a market value
+
+Los market analytics son una vista agregada del mercado observado: resumen de
+búsqueda, series temporales y agregaciones por vendedor, marca o categoría.
+Market value estimation es una estimación específica de un listing: selecciona
+comparables por señales explicables y calcula mediana, P25/P75 y confianza.
+Usa una ventana predeterminada de 30 días, una observación por `listing_id` y
+un filtro IQR determinista para outliers. Los precios son precios publicados,
+no precios finales de venta.
+
+Los relistings confirmados o enlazados sólo pueden deduplicarse si el modelo
+persistido existente expone una relación segura; si no, diferentes IDs siguen
+siendo comparables separados. Esto se mantiene como limitación explícita.
+
 ## Métricas
 
 `MarketSummary` calcula listings activos en el último run válido, IDs únicos

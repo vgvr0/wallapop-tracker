@@ -113,7 +113,10 @@ def _score(
     if condition and other_condition and _norm(condition) == _norm(other_condition):
         score += Decimal("0.10")
         signals.append("same condition")
-    age_days = max(0, (datetime.now(UTC) - candidate.observed_at).days)
+    observed_at = candidate.observed_at
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=UTC)
+    age_days = max(0, (datetime.now(UTC) - observed_at).days)
     score += Decimal("0.10") * max(Decimal("0"), Decimal("1") - Decimal(age_days) / Decimal("30"))
     if age_days <= 30:
         signals.append("recent observation")
