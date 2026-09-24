@@ -1133,6 +1133,9 @@ def search_add(
                 name=name,
                 min_price=Decimal(min_price) if min_price is not None else None,
                 max_price=Decimal(max_price) if max_price is not None else None,
+                latitude=latitude,
+                longitude=longitude,
+                max_distance_km=max_distance_km,
                 filters=filters,
                 interval_seconds=interval_seconds,
                 notify_on_first_run=notify_on_first_run,
@@ -1170,6 +1173,9 @@ def search_update(
         None, "--title-first-word-exclude"
     ),
     clear_text_filters: bool = typer.Option(False, "--clear-text-filters"),
+    latitude: float | None = typer.Option(None, "--latitude"),
+    longitude: float | None = typer.Option(None, "--longitude"),
+    max_distance_km: float | None = typer.Option(None, "--max-distance-km"),
 ) -> None:
     """Update the advanced text filters of an existing tracked search."""
     overrides: dict[str, object] = {
@@ -1183,7 +1189,12 @@ def search_update(
         "title_first_word_exclude": title_first_word_exclude,
     }
     provided = {key: value for key, value in overrides.items() if value is not None}
-    if not provided and not clear_text_filters and name is None:
+    if (
+        not provided
+        and not clear_text_filters
+        and name is None
+        and all(value is None for value in (latitude, longitude, max_distance_km))
+    ):
         raise typer.BadParameter("provide at least one option to update")
     database = _db()
     try:
@@ -1205,7 +1216,14 @@ def search_update(
                 ):
                     filters.pop(key, None)
             filters |= provided
-            record = repository.update(search_id, name=name, filters=filters)
+            record = repository.update(
+                search_id,
+                name=name,
+                filters=filters,
+                latitude=latitude,
+                longitude=longitude,
+                max_distance_km=max_distance_km,
+            )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     finally:
@@ -1258,6 +1276,9 @@ def search_import(
                     name=name,
                     min_price=imported.min_price,
                     max_price=imported.max_price,
+                    latitude=imported.latitude,
+                    longitude=imported.longitude,
+                    max_distance_km=imported.distance,
                     filters=imported.search_filters(),
                     interval_seconds=interval_seconds,
                     notify_on_first_run=notify_on_first_run,
@@ -1400,6 +1421,11 @@ def search_show(search_id: int) -> None:
             typer.echo(f"query: {record.query}")
             typer.echo(f"min_price: {record.min_price or '-'}")
             typer.echo(f"max_price: {record.max_price or '-'}")
+            typer.echo(f"latitude: {record.latitude if record.latitude is not None else '-'}")
+            typer.echo(f"longitude: {record.longitude if record.longitude is not None else '-'}")
+            typer.echo(
+                f"max_distance_km: {record.max_distance_km if record.max_distance_km is not None else '-'}"
+            )
             typer.echo(f"enabled: {record.enabled}")
             typer.echo(f"interval_seconds: {record.interval_seconds}")
             typer.echo(

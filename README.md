@@ -107,6 +107,10 @@ wallapop-track add https://es.wallapop.com/user/<profile> --alias seller
 wallapop-track list
 wallapop-track run seller
 wallapop-track search add --name "iphone 15 pro" --query "iphone 15 pro" --max-price 650
+
+# Búsqueda centrada en Madrid con radio explícito
+wallapop-track search add --name "iphone madrid" --query "iphone 15 pro" \
+  --max-price 600 --latitude 40.4168 --longitude -3.7038 --max-distance-km 20
 wallapop-track search run-all
 ```
 
