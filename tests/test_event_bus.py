@@ -2,7 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from typer.testing import CliRunner
 
+from wallapop_tracker.cli import app
 from wallapop_tracker.services.event_bus import EventBus, deserialize_event
 from wallapop_tracker.storage.models import (
     DeadLetterRecord,
@@ -92,3 +94,11 @@ def test_replay_rejects_side_effects_and_allows_analytics(database):
         with pytest.raises(ValueError):
             EventBus(database).replay(session, consumer="notifications", from_id=1, to_id=1)
         assert EventBus(database).replay(session, consumer="analytics", from_id=1, to_id=1) == 1
+
+
+def test_event_bus_cli_commands_are_exposed():
+    runner = CliRunner()
+    result = runner.invoke(app, ["events", "--help"])
+    assert result.exit_code == 0
+    assert "consume" in result.output
+    assert "replay" in result.output
