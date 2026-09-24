@@ -112,7 +112,7 @@ class WallapopClient:
         backoff_factor: float = 0.5,
         max_retry_after: float = 60.0,
         min_interval: float = 0.25,
-        user_agent: str = "wallapop-profile-tracker/0.1 (authorized-read-only)",
+        user_agent: str = "wallapop-profile-tracker/1.0 (authorized-read-only)",
         raw_data_dir: Path | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
