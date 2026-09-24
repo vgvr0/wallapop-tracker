@@ -36,6 +36,7 @@ from .reporting import (
 from .services.deal_scoring import DealScoringService
 from .services.event_bus import EventBus, deserialize_event
 from .services.filter_explanation import SearchListingExplanation, explain_search_listing
+from .services.market_value import MarketValueService
 from .services.notifications import NotificationService
 from .services.runner import (
     ListingTrackingRunner,
@@ -83,6 +84,37 @@ app.add_typer(analytics_app, name="analytics")
 app.add_typer(score_app, name="score")
 ai_app = typer.Typer(no_args_is_help=True)
 app.add_typer(ai_app, name="ai")
+
+
+@app.command("market-value")
+def market_value(
+    listing_id: int,
+    window_days: int = typer.Option(30, "--window-days", min=1),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Estimate observed market value using stored comparable listings."""
+    database = _db()
+    try:
+        with database.session() as session:
+            result = MarketValueService(session).estimate(
+                listing_id, window=timedelta(days=window_days)
+            )
+            if as_json:
+                typer.echo(json.dumps(result.to_dict(), default=_json_default, sort_keys=True))
+            else:
+                typer.echo(f"Estimated market median: {_money(result.median_price)}")
+                typer.echo(
+                    f"Observed comparable range: {_money(result.p25_price)} – {_money(result.p75_price)}"
+                )
+                typer.echo(
+                    f"Comparables: {result.sample_size} | Confidence: {result.confidence:.0%} ({result.confidence_level.value})"
+                )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+
+
 profile_app = typer.Typer(no_args_is_help=True)
 app.add_typer(profile_app, name="profile")
 worker_app = typer.Typer(no_args_is_help=True)

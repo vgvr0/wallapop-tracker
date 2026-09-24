@@ -33,6 +33,15 @@ Implemented endpoint groups:
 * notification delivery state.
 * explicit, cached AI listing assessments (`POST` and read-only `GET` under
   `/api/v1/listings/{id}/ai-assessment`); AI is disabled by default.
+* read-only listing-specific market value estimates at
+  `GET /api/v1/listings/{id}/market-value`.
+
+Market value accepts `window_days` (default `30`) and uses only persisted
+observations; it makes no external or LLM calls. `discount_vs_median` is
+signed (`-0.20` means 20% below the median), while `percentile` is the
+fraction of accepted asking prices strictly below the current price. Fewer
+than three accepted comparables produce `null` market prices and
+`insufficient` confidence.
 
 Collection endpoints accept `limit` and `offset`, defaulting to 50 and capped
 at 200. Score search uses `limit` capped at 100. Money is serialized as a

@@ -13,6 +13,7 @@ from wallapop_tracker.ai.models import (
     ListingAnalysisContext,
     ListingAnalysisMetadata,
 )
+from wallapop_tracker.services.market_value import MarketConfidence, MarketValueService
 from wallapop_tracker.storage.models import (
     ListingAIAssessmentRecord,
     ListingRecord,
@@ -121,6 +122,13 @@ class ListingAIRepository:
                 .where(ProfileSnapshotRecord.profile_id == listing.profile_id)
                 .order_by(desc(ProfileSnapshotRecord.observed_at), desc(ProfileSnapshotRecord.id))
             )
+        try:
+            market = MarketValueService(self.session).estimate(listing_id)
+        except ValueError:
+            market = None
+        reliable_market = (
+            market is not None and market.confidence_level != MarketConfidence.INSUFFICIENT
+        )
         return ListingAnalysisContext(
             listing_id=str(listing.id),
             title=snapshot.title if snapshot and snapshot.title else "",
@@ -134,6 +142,10 @@ class ListingAIRepository:
             seller_rating=_float(profile_snapshot.rating) if profile_snapshot else None,
             seller_reviews=profile_snapshot.review_count if profile_snapshot else None,
             seller_sales=profile_snapshot.sales_count if profile_snapshot else None,
+            market_median_price=market.median_price if reliable_market and market else None,
+            market_p25=market.p25_price if reliable_market and market else None,
+            market_p75=market.p75_price if reliable_market and market else None,
+            market_sample_size=market.sample_size if reliable_market and market else None,
         )
 
 
