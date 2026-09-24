@@ -112,6 +112,7 @@ def market_value(
     finally:
         database.close()
 
+
 profile_app = typer.Typer(no_args_is_help=True)
 app.add_typer(profile_app, name="profile")
 worker_app = typer.Typer(no_args_is_help=True)
