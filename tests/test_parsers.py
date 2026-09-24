@@ -1,6 +1,9 @@
 from datetime import UTC
 from decimal import Decimal
 
+import pytest
+
+from wallapop_tracker.exceptions import WallapopParseError
 from wallapop_tracker.parsers.items import parse_items_page
 from wallapop_tracker.parsers.profile import parse_profile
 from wallapop_tracker.parsers.reviews import parse_review_summary
@@ -28,6 +31,27 @@ def test_parse_stats(fixture_data):
     assert stats.purchases_count is None
     assert stats.sales_count is None
     assert stats.reports_count is None
+    assert stats.reports_received is None
+
+
+@pytest.mark.parametrize("value", [0, 1, 14])
+def test_parse_reports_received_values(value):
+    stats = parse_profile_stats({"counters": [{"type": "reports_received", "value": value}]})
+    assert stats.reports_received == value
+    assert stats.reports_count == value
+
+
+@pytest.mark.parametrize(
+    "payload", [{"counters": []}, {"counters": [{"type": "reports_received", "value": None}]}]
+)
+def test_parse_reports_received_unknown(payload):
+    assert parse_profile_stats(payload).reports_received is None
+
+
+@pytest.mark.parametrize("value", [-1, "14", 1.5, True])
+def test_parse_reports_received_rejects_invalid_values(value):
+    with pytest.raises(WallapopParseError):
+        parse_profile_stats({"counters": [{"type": "reports_received", "value": value}]})
 
 
 def test_parse_review_summary(fixture_data):

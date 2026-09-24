@@ -35,7 +35,7 @@ La distribución solo la proporciona `/reviews/summary`:
 | demo-reviewer-001 | `1%, 0%, 1%, 4%, 94%` |
 | demo-reviewer-002 | `0%, 0%, 0%, 0%, 100%` |
 
-`/stats` proporciona campos adicionales que no aparecen en el resumen: `publish`, `buys`, `sells`, `sold` y `reports_received`. En el perfil sintético, por ejemplo, `sells=15` y `sold=11`, mientras que `reviews.total_reviews=12`.
+`/stats` proporciona campos adicionales que no aparecen en el resumen: `publish`, `buys`, `sells`, `sold` y `reports_received`. En el perfil sintético, por ejemplo, `sells=15` y `sold=11`, mientras que `reviews.total_reviews=12`. `reports_received` es un contador público observado: `0` significa cero reportes devueltos explícitamente y `NULL` significa que el dato no estaba disponible; por sí solo no indica fraude, fiabilidad ni calidad del vendedor.
 
 No se observó ningún fallo de uno de los endpoints mientras el otro funcionaba. Los dos respondieron correctamente en los tres perfiles.
 

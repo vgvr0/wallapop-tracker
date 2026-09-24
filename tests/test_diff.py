@@ -119,6 +119,7 @@ def test_new_listing_and_field_changes(database):
         ("review_count", 2, 3, ChangeType.REVIEW_COUNT_CHANGED),
         ("rating", 4.0, 4.5, ChangeType.RATING_CHANGED),
         ("sold_count", 10, 11, ChangeType.SOLD_COUNT_CHANGED),
+        ("reports_received", 8, 11, ChangeType.REPORTS_RECEIVED_CHANGED),
     ],
 )
 def test_profile_metric_changes(database, field, old, new, kind):
@@ -131,6 +132,18 @@ def test_profile_metric_changes(database, field, old, new, kind):
         snapshots.save_profile_snapshot(profile.id, second.id, ProfileStats(**{field: new}))
         changes = DiffService(session).compare_runs(first.id, second.id)
         assert [(c.change_type, c.old_value, c.new_value) for c in changes] == [(kind, old, new)]
+
+
+@pytest.mark.parametrize("old,new", [(None, 5), (5, None), (None, None)])
+def test_optional_reports_received_transitions_are_not_changes(database, old, new):
+    with database.session() as session:
+        profile, listing = _setup(session)
+        snapshots = SnapshotRepository(session)
+        first = _run(session, profile.id, 1, (listing.id,))
+        second = _run(session, profile.id, 2, (listing.id,))
+        snapshots.save_profile_snapshot(profile.id, first.id, ProfileStats(reports_received=old))
+        snapshots.save_profile_snapshot(profile.id, second.id, ProfileStats(reports_received=new))
+        assert DiffService(session).compare_runs(first.id, second.id) == []
 
 
 def test_change_based_listing_snapshot_is_reconstructed(database):

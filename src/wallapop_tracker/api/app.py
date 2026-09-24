@@ -50,6 +50,7 @@ from wallapop_tracker.storage.models import (
     NotificationDeliveryRecord,
     PossibleRelistingRecord,
     ProfileRecord,
+    ProfileSnapshotRecord,
     SearchListingMatchRecord,
     TrackedListingRecord,
     TrackedSearchRecord,
@@ -187,6 +188,7 @@ class ProfileResponse(APIModel):
     registered_at: datetime | None
     first_seen_at: datetime
     last_seen_at: datetime
+    reports_received: int | None = None
 
 
 class ListingResponse(APIModel):
@@ -340,7 +342,7 @@ def _search(record: TrackedSearchRecord) -> SearchResponse:
     )
 
 
-def _profile(record: ProfileRecord) -> ProfileResponse:
+def _profile(record: ProfileRecord, reports_received: int | None = None) -> ProfileResponse:
     return ProfileResponse(
         id=record.id,
         wallapop_user_id=record.wallapop_user_id,
@@ -349,6 +351,16 @@ def _profile(record: ProfileRecord) -> ProfileResponse:
         registered_at=_utc(record.registered_at),
         first_seen_at=_utc(record.first_seen_at),
         last_seen_at=_utc(record.last_seen_at),
+        reports_received=reports_received,
+    )
+
+
+def _latest_profile_snapshot(session: Session, profile_id: int) -> ProfileSnapshotRecord | None:
+    return session.scalar(
+        select(ProfileSnapshotRecord)
+        .where(ProfileSnapshotRecord.profile_id == profile_id)
+        .order_by(ProfileSnapshotRecord.observed_at.desc(), ProfileSnapshotRecord.id.desc())
+        .limit(1)
     )
 
 
@@ -574,14 +586,19 @@ def create_app(
         rows = session.scalars(
             select(ProfileRecord).order_by(ProfileRecord.id).offset(offset).limit(limit)
         ).all()
-        return [_profile(row) for row in rows]
+        result: list[ProfileResponse] = []
+        for row in rows:
+            snapshot = _latest_profile_snapshot(session, row.id)
+            result.append(_profile(row, snapshot.reports_received if snapshot else None))
+        return result
 
     @api.get("/api/v1/profiles/{profile_id}", response_model=ProfileResponse, tags=["profiles"])
     def profile(profile_id: int, session: Session = Depends(get_session)) -> ProfileResponse:
         row = session.get(ProfileRecord, profile_id)
         if row is None:
             raise _not_found("Profile", profile_id)
-        return _profile(row)
+        snapshot = _latest_profile_snapshot(session, row.id)
+        return _profile(row, snapshot.reports_received if snapshot else None)
 
     @api.get("/api/v1/profiles/{profile_id}/history", tags=["profiles"])
     def profile_history(

@@ -1436,7 +1436,7 @@ class SnapshotRepository:
             "purchases_count": stats.purchases_count,
             "sales_count": stats.sales_count,
             "sold_count": stats.sold_count,
-            "reports_count": stats.reports_count,
+            "reports_received": stats.reports_received,
             "rating_1_pct": distribution.get(1) if distribution else None,
             "rating_2_pct": distribution.get(2) if distribution else None,
             "rating_3_pct": distribution.get(3) if distribution else None,
