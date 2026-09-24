@@ -194,6 +194,7 @@ destinations of the channels you explicitly enable.
 | `WALLAPOP_LOG_LEVEL` | `INFO` | Standard logging level |
 | `WALLAPOP_LOG_FORMAT` | `human` | `human` or `json` structured logging |
 | `WALLAPOP_METRICS_ENABLED` | `true` | Enables `/metrics` and HTTP request metrics |
+| `WALLAPOP_TELEGRAM_NL_ENABLED` | `false` | Enables optional Telegram natural-language intent parsing |
 | `WALLAPOP_NOTIFY_WEBHOOK_ENABLED` | `false` | Enables the generic webhook channel |
 | `WALLAPOP_NOTIFY_DISCORD_ENABLED` | `false` | Enables the Discord webhook channel |
 | `WALLAPOP_NOTIFY_TELEGRAM_ENABLED` | `false` | Enables the Telegram Bot API channel |
@@ -448,3 +449,5 @@ RAW fixtures in `tests/fixtures/raw/`. Live tests are opt-in (`pytest -m live` w
   new filters, new alerts and additional scraping.
 - **Optional Telegram control:** run `wallapop-track telegram-bot` with
   `WALLAPOP_TELEGRAM_BOT_TOKEN`; see [`docs/telegram-control-bot.md`](docs/telegram-control-bot.md).
+  Natural-language control is opt-in and requires the existing `WALLAPOP_AI_*` settings; explicit
+  commands remain available when it is disabled.
