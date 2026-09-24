@@ -24,6 +24,7 @@ from .reporting import (
     get_brand_market_stats,
     get_market_summary,
     get_price_time_series,
+    get_profile_metrics_history,
     get_seller_market_stats,
 )
 from .services.deal_scoring import DealScoringService
@@ -43,6 +44,7 @@ from .storage.models import (
     DeadLetterRecord,
     DomainEventRecord,
     ListingRecord,
+    ProfileSnapshotRecord,
     TrackingRunStatus,
 )
 from .storage.repositories import (
@@ -72,6 +74,8 @@ app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
 app.add_typer(analytics_app, name="analytics")
 app.add_typer(score_app, name="score")
+profile_app = typer.Typer(no_args_is_help=True)
+app.add_typer(profile_app, name="profile")
 worker_app = typer.Typer(no_args_is_help=True)
 app.add_typer(worker_app, name="worker")
 events_app = typer.Typer(no_args_is_help=True)
@@ -376,6 +380,46 @@ def list_profiles() -> None:
                     f"{record.alias}\t{state}\t{record.wallapop_user_id}\t"
                     f"{record.last_run_at or '-'}\t{record.last_run_status or '-'}"
                 )
+    finally:
+        database.close()
+
+
+@profile_app.command("show")
+def profile_show(alias: str) -> None:
+    """Show the latest observed public metrics for a tracked profile."""
+    database = _db()
+    try:
+        with database.session() as session:
+            record = TrackedProfileRepository(session).get_by_alias(_alias(alias))
+            if record is None or record.profile_id is None:
+                raise typer.BadParameter(f"Unknown or untracked profile: {alias}")
+            snapshot = session.scalar(
+                select(ProfileSnapshotRecord)
+                .where(ProfileSnapshotRecord.profile_id == record.profile_id)
+                .order_by(ProfileSnapshotRecord.observed_at.desc(), ProfileSnapshotRecord.id.desc())
+                .limit(1)
+            )
+            reports = snapshot.reports_received if snapshot else None
+            typer.echo(f"Profile: {record.alias}")
+            typer.echo(f"Reports received: {reports if reports is not None else 'unknown'}")
+    finally:
+        database.close()
+
+
+@profile_app.command("history")
+def profile_history(alias: str) -> None:
+    """Show the historical profile metrics."""
+    database = _db()
+    try:
+        with database.session() as session:
+            record = TrackedProfileRepository(session).get_by_alias(_alias(alias))
+            if record is None or record.profile_id is None:
+                raise typer.BadParameter(f"Unknown or untracked profile: {alias}")
+            for point in get_profile_metrics_history(session, record.profile_id):
+                reports = (
+                    str(point.reports_received) if point.reports_received is not None else "unknown"
+                )
+                typer.echo(f"{point.observed_at.isoformat()}\tReports received: {reports}")
     finally:
         database.close()
 

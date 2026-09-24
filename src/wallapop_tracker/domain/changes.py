@@ -17,6 +17,7 @@ class ChangeType(StrEnum):
     REVIEW_COUNT_CHANGED = "REVIEW_COUNT_CHANGED"
     RATING_CHANGED = "RATING_CHANGED"
     SOLD_COUNT_CHANGED = "SOLD_COUNT_CHANGED"
+    REPORTS_RECEIVED_CHANGED = "PROFILE_REPORTS_CHANGED"
     SHIPPING_AVAILABLE_CHANGED = "SHIPPING_AVAILABLE_CHANGED"
     BRAND_CHANGED = "BRAND_CHANGED"
     CONDITION_CHANGED = "CONDITION_CHANGED"
@@ -33,3 +34,10 @@ class DetectedChange:
     current_run_id: int
     old_value: object | None
     new_value: object | None
+
+    @property
+    def delta(self) -> int | float | None:
+        """Return a numeric delta when both observed values are known."""
+        if isinstance(self.old_value, (int, float)) and isinstance(self.new_value, (int, float)):
+            return self.new_value - self.old_value
+        return None

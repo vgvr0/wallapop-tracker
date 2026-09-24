@@ -204,12 +204,17 @@ class DiffService:
             ("review_count", ChangeType.REVIEW_COUNT_CHANGED),
             ("rating", ChangeType.RATING_CHANGED),
             ("sold_count", ChangeType.SOLD_COUNT_CHANGED),
+            ("reports_received", ChangeType.REPORTS_RECEIVED_CHANGED),
         )
-        return [
-            self._change(kind, current, previous, None, getattr(old, field), getattr(new, field))
-            for field, kind in mapping
-            if getattr(old, field) != getattr(new, field)
-        ]
+        changes: list[DetectedChange] = []
+        for field, kind in mapping:
+            old_value, new_value = getattr(old, field), getattr(new, field)
+            if old_value == new_value:
+                continue
+            if field == "reports_received" and (old_value is None or new_value is None):
+                continue
+            changes.append(self._change(kind, current, previous, None, old_value, new_value))
+        return changes
 
     def _listing_field_changes(
         self,
@@ -303,7 +308,8 @@ class DiffService:
             ChangeType.REVIEW_COUNT_CHANGED: 0,
             ChangeType.RATING_CHANGED: 1,
             ChangeType.SOLD_COUNT_CHANGED: 2,
-            ChangeType.NEW_LISTING: 3,
+            ChangeType.REPORTS_RECEIVED_CHANGED: 3,
+            ChangeType.NEW_LISTING: 4,
             ChangeType.REAPPEARED: 4,
             ChangeType.PRICE_CHANGED: 5,
             ChangeType.TITLE_CHANGED: 6,

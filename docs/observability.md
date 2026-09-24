@@ -50,3 +50,6 @@ curl http://localhost:8000/metrics
 La capa queda preparada para que en el futuro un Prometheus externo scrapee el
 endpoint, pero no despliega ese sistema ni ofrece alertas, dashboards o
 retención histórica de métricas.
+The stats schema observation covers `counters[].type=reports_received`. A missing field is
+kept distinct from an explicit zero: the parser stores `NULL` and the existing schema-drift
+monitor can report the missing path without inventing a value.

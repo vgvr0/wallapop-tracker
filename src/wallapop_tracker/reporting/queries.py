@@ -75,7 +75,7 @@ class ProfileMetricsPoint:
     purchases_count: int | None
     sales_count: int | None
     sold_count: int | None
-    reports_count: int | None
+    reports_received: int | None
 
 
 @dataclass(frozen=True)
@@ -260,7 +260,7 @@ def get_profile_metrics_history(session: Session, profile_id: int) -> list[Profi
                 latest.purchases_count if latest else None,
                 latest.sales_count if latest else None,
                 latest.sold_count if latest else None,
-                latest.reports_count if latest else None,
+                latest.reports_received if latest else None,
             )
         )
     return points

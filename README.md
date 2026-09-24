@@ -17,7 +17,9 @@ writes to Wallapop: no purchases, no messages, no listing edits.
 
 ## What it does
 
-- Tracks public profiles and their historical metrics (rating, reviews, published, sales, sold).
+- Tracks public profiles and their historical metrics (rating, reviews, published, sales, sold,
+  reports received). `reports_received` is an observed public Wallapop metric; `0` is distinct
+  from unknown and the value does not indicate fraud, trustworthiness or seller quality.
 - Tracks saved searches with query, price bounds, structured filters and a per-search interval.
 - Deduplicates new-listing and price-change alerts globally across overlapping searches, including
   across process restarts.

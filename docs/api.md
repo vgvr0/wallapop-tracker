@@ -20,6 +20,9 @@ outside the versioned API: `GET /health` returns `{"status": "ok"}`.
 Implemented endpoint groups:
 
 * profiles and profile history;
+
+Profile responses expose the latest observed `reports_received` value. Profile history
+responses include the same field, using JSON `null` when Wallapop did not provide it.
 * tracked searches, local create/update, and search URL import;
 * filter explanations for a stored listing of a stored search
   (`GET /api/v1/searches/{id}/listings/{listing_id}/explain`);

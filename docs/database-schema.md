@@ -98,7 +98,7 @@ No se guardan aquí rating, reseñas ni contadores: todos son temporales y perte
 | `purchases_count` | integer | nullable, >= 0 |
 | `sales_count` | integer | nullable, >= 0 |
 | `sold_count` | integer | nullable, >= 0 |
-| `reports_count` | integer | nullable, >= 0 |
+| `reports_received` | integer | nullable, >= 0; `0` is distinct from unknown (`NULL`) |
 | `rating_1_count` ... `rating_5_count` | integer | nullable, >= 0 |
 
 Los campos desconocidos se representan como `NULL`, nunca como cero. Los contadores de la API se mapean por significado, no por posición.

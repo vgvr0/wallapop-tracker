@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from wallapop_tracker.domain.marketplace import Marketplace
 
@@ -36,7 +36,16 @@ class ProfileStats(BaseModel):
     purchases_count: int | None = None
     sales_count: int | None = None
     sold_count: int | None = None
-    reports_count: int | None = None
+    reports_received: int | None = Field(
+        default=None,
+        ge=0,
+        validation_alias=AliasChoices("reports_received", "reports_count"),
+    )
+
+    @property
+    def reports_count(self) -> int | None:
+        """Legacy input/property alias; serialization remains canonical."""
+        return self.reports_received
 
 
 class ReviewSummary(BaseModel):

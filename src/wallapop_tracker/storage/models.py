@@ -650,7 +650,9 @@ class ProfileSnapshotRecord(Base):
         ),
         CheckConstraint("sales_count IS NULL OR sales_count >= 0", name="ck_profile_sales"),
         CheckConstraint("sold_count IS NULL OR sold_count >= 0", name="ck_profile_sold"),
-        CheckConstraint("reports_count IS NULL OR reports_count >= 0", name="ck_profile_reports"),
+        CheckConstraint(
+            "reports_received IS NULL OR reports_received >= 0", name="ck_profile_reports"
+        ),
         Index("ix_profile_snapshots_profile_observed", "profile_id", "observed_at"),
     )
 
@@ -664,7 +666,7 @@ class ProfileSnapshotRecord(Base):
     purchases_count: Mapped[int | None] = mapped_column(Integer)
     sales_count: Mapped[int | None] = mapped_column(Integer)
     sold_count: Mapped[int | None] = mapped_column(Integer)
-    reports_count: Mapped[int | None] = mapped_column(Integer)
+    reports_received: Mapped[int | None] = mapped_column(Integer)
     rating_1_pct: Mapped[int | None] = mapped_column(Integer)
     rating_2_pct: Mapped[int | None] = mapped_column(Integer)
     rating_3_pct: Mapped[int | None] = mapped_column(Integer)
@@ -672,6 +674,10 @@ class ProfileSnapshotRecord(Base):
     rating_5_pct: Mapped[int | None] = mapped_column(Integer)
     profile: Mapped[ProfileRecord] = relationship(back_populates="snapshots")
     tracking_run: Mapped[TrackingRunRecord] = relationship(back_populates="profile_snapshots")
+
+    @property
+    def reports_count(self) -> int | None:
+        return self.reports_received
 
 
 class ListingSnapshotRecord(Base):
