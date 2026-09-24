@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from collections.abc import Iterable, Mapping
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
@@ -44,6 +45,7 @@ from .services.runner import (
 )
 from .services.scheduler import TrackingScheduler
 from .services.search_tracker import SearchTracker
+from .services.seller_reputation import build_seller_reputation
 from .services.tracker import ProfileTracker
 from .storage.database import Database
 from .storage.models import (
@@ -514,6 +516,75 @@ def profile_show(alias: str) -> None:
             reports = snapshot.reports_received if snapshot else None
             typer.echo(f"Profile: {record.alias}")
             typer.echo(f"Reports received: {reports if reports is not None else 'unknown'}")
+    finally:
+        database.close()
+
+
+@profile_app.command("reputation")
+def profile_reputation(alias: str, as_json: bool = typer.Option(False, "--json")) -> None:
+    """Show descriptive, read-only seller reputation context from stored snapshots."""
+    database = _db()
+    try:
+        with database.session() as session:
+            record = TrackedProfileRepository(session).get_by_alias(_alias(alias))
+            if record is None or record.profile_id is None:
+                raise typer.BadParameter(f"Unknown or untracked profile: {alias}")
+            insight = build_seller_reputation(session, record.profile_id)
+        payload = asdict(insight)
+        if as_json:
+            typer.echo(
+                json.dumps(payload, default=_json_default, ensure_ascii=False, sort_keys=True)
+            )
+            return
+        typer.echo("Seller Reputation Intelligence")
+        typer.echo("─" * 32)
+        rows: list[tuple[str, object]] = [
+            ("Rating", insight.rating),
+            ("Reviews", insight.reviews),
+            ("Sales", insight.sales),
+            ("Reports received", insight.reports_received),
+        ]
+        for label, value in rows:
+            typer.echo(f"{label:<28}{value if value is not None else 'unknown'}")
+        typer.echo("\n30-day change")
+        rows = [
+            ("Reports", insight.reports_delta_30d),
+            ("Rating", insight.rating_delta_30d),
+            ("Reviews", insight.review_growth_30d),
+            ("Sales", insight.sales_growth_30d),
+        ]
+        for label, value in rows:
+            typer.echo(f"{label:<28}{value if value is not None else 'unknown'}")
+        typer.echo("\nRelative context")
+        rows = [
+            ("Peer median reports", insight.peer_median_reports),
+            (
+                "Peer percentile",
+                f"{insight.peer_percentile:.1f}%" if insight.peer_percentile is not None else None,
+            ),
+            ("Peer sample", insight.peer_sample_size),
+        ]
+        for label, value in rows:
+            typer.echo(f"{label:<28}{value if value is not None else 'unknown'}")
+        typer.echo("\nLow ratings")
+        typer.echo(
+            f"{'<=3-star reviews':<28}{insight.low_rating_count if insight.low_rating_count is not None else 'unknown'}"
+        )
+        ratio = (
+            f"{insight.low_rating_ratio * 100:.1f}%"
+            if insight.low_rating_ratio is not None
+            else "unknown"
+        )
+        typer.echo(f"{'Low-rating ratio':<28}{ratio}")
+        if insight.interpretation:
+            typer.echo(f"\nInterpretation\n{insight.interpretation}")
+        typer.echo(
+            "\nThis is descriptive marketplace data and does not determine seller trustworthiness."
+        )
+        if insight.warnings:
+            typer.echo("\nWarnings")
+            for warning in insight.warnings:
+                typer.echo(f"- {warning}")
     finally:
         database.close()
 

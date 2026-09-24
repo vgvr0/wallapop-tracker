@@ -324,6 +324,7 @@ Background reading: [`docs/architecture.md`](docs/architecture.md),
 | [`docs/advanced_alerts.md`](docs/advanced_alerts.md) | Advanced alert rules and thresholds |
 | [`docs/market_analytics.md`](docs/market_analytics.md) | Market summaries, series, seller and brand stats |
 | [`docs/deal_scoring.md`](docs/deal_scoring.md) | Score signals, confidence and persistence |
+| [`docs/seller-reputation.md`](docs/seller-reputation.md) | Descriptive seller metrics, peer context and limitations |
 | [`docs/relisting_detection.md`](docs/relisting_detection.md) | Relisting signals, score and candidate status |
 | [`docs/tracked_listing_architecture.md`](docs/tracked_listing_architecture.md) | Direct listing monitoring lifecycle |
 | [`docs/sold-listing-detection.md`](docs/sold-listing-detection.md) | Explicit sold detection |

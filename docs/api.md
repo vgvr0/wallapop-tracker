@@ -20,6 +20,7 @@ outside the versioned API: `GET /health` returns `{"status": "ok"}`.
 Implemented endpoint groups:
 
 * profiles and profile history;
+* read-only seller reputation intelligence derived from persisted profile snapshots;
 * tracked searches, local create/update, and search URL import;
 * filter explanations for a stored listing of a stored search
   (`GET /api/v1/searches/{id}/listings/{listing_id}/explain`);

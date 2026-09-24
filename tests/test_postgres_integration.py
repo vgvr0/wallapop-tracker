@@ -11,12 +11,14 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import make_url
 
 from alembic import command
+from wallapop_tracker.services.seller_reputation import build_seller_reputation
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     ListingRecord,
     NotificationDeliveryRecord,
     NotificationDeliveryStatus,
     ProfileRecord,
+    ProfileSnapshotRecord,
     TrackedProfileRecord,
     TrackingEventRecord,
     TrackingRunRecord,
@@ -123,6 +125,52 @@ def test_postgres_fixture_starts_without_previous_notification_state(postgres_ur
                 == 0
             )
             assert connection.execute(text("SELECT count(*) FROM tracking_events")).scalar() == 0
+    finally:
+        database.close()
+
+
+def test_postgres_seller_reputation_uses_snapshot_aggregates(postgres_url):
+    database = Database(postgres_url)
+    now = datetime.now(UTC)
+    try:
+        with database.transaction() as session:
+            profile = ProfileRecord(
+                wallapop_user_id="reputation-postgres",
+                first_seen_at=now,
+                last_seen_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(profile)
+            session.flush()
+            run = TrackingRunRecord(
+                profile_id=profile.id,
+                started_at=now,
+                finished_at=now,
+                status="valid",
+                profile_ok=True,
+                stats_ok=True,
+                reviews_ok=True,
+                items_ok=True,
+            )
+            session.add(run)
+            session.flush()
+            session.add(
+                ProfileSnapshotRecord(
+                    profile_id=profile.id,
+                    tracking_run_id=run.id,
+                    observed_at=now,
+                    rating=4.8,
+                    review_count=100,
+                    sales_count=50,
+                    reports_received=4,
+                )
+            )
+            profile_id = profile.id
+        with database.session() as session:
+            insight = build_seller_reputation(session, profile_id, now=now)
+        assert insight.reports_per_100_sales == 8
+        assert insight.peer_percentile is None
     finally:
         database.close()
 
