@@ -26,6 +26,7 @@ TrackingRunRepository = _implementation.TrackingRunRepository
 TrackedProfileRepository = _implementation.TrackedProfileRepository
 TrackedListingRepository = _implementation.TrackedListingRepository
 TrackedSearchRepository = _implementation.TrackedSearchRepository
+TelegramOwnershipRepository = _implementation.TelegramOwnershipRepository
 SearchMatchRepository = _implementation.SearchMatchRepository
 TrackingEventRepository = _implementation.TrackingEventRepository
 NotificationDeliveryRepository = _implementation.NotificationDeliveryRepository
@@ -42,6 +43,7 @@ __all__ = [
     "TrackedProfileRepository",
     "TrackedListingRepository",
     "TrackedSearchRepository",
+    "TelegramOwnershipRepository",
     "SearchMatchRepository",
     "TrackingEventRepository",
     "NotificationDeliveryRepository",
