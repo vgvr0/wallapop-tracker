@@ -11,3 +11,8 @@ Confidence is bounded to 0–1 and combines sample size (45%), average similarit
 Use `wallapop-track market-value LISTING_ID [--window-days 30] [--json]` or `GET /api/v1/listings/{listing_id}/market-value?window_days=30`.
 
 These are asking prices, not completed sale prices. Historical observations can be biased; condition and exact model identity may be missing, and relistings can still affect results when entity resolution is uncertain. The result is an estimate, not an official appraisal.
+# Ranking integration
+
+Market value contributes a market-attractiveness signal to the overall ranking
+only when its confidence is sufficient. The market median itself is not an
+overall score; discount, percentile, and confidence are combined deterministically.

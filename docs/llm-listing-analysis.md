@@ -31,3 +31,8 @@ The integration records aggregate Prometheus counters and duration/token metrics
 ## Limitations and future integration
 
 The core has no database, event bus, worker, scheduler, notification, API, CLI, or persistence integration. A future worker can call the async analyzer in response to `listing.ai_analysis.requested` and publish a completed event without changing this contract.
+# Ranking integration
+
+Persisted `SemanticScore` and `RiskScore` may be consumed by DealRankingService.
+The LLM never generates `overall_score`, and ranking does not trigger a new LLM
+request. Stale assessments are excluded.

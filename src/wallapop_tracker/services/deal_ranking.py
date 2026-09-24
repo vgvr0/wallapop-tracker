@@ -15,6 +15,7 @@ from wallapop_tracker.domain.deal_ranking import (
     RankingComponent,
     RankingConfidence,
 )
+from wallapop_tracker.observability import Metrics, get_metrics
 from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.services.market_value import (
     MarketConfidence,
@@ -48,11 +49,29 @@ def _clamp(value: float) -> float:
 
 
 class DealRankingService:
-    def __init__(self, session: Session, config: RankingConfig | None = None) -> None:
+    def __init__(
+        self, session: Session, config: RankingConfig | None = None, metrics: Metrics | None = None
+    ) -> None:
         self.session = session
         self.config = config or RankingConfig()
+        self.metrics = metrics or get_metrics()
 
     def rank_listing(self, listing_id: int, search_id: int | None = None) -> DealRankResult:
+        import time
+
+        started = time.perf_counter()
+        self.metrics.wallapop_deal_ranking_requests_total.inc()
+        try:
+            return self._rank_listing(listing_id, search_id)
+        except Exception:
+            self.metrics.wallapop_deal_ranking_failures_total.inc()
+            raise
+        finally:
+            self.metrics.wallapop_deal_ranking_duration_seconds.observe(
+                time.perf_counter() - started
+            )
+
+    def _rank_listing(self, listing_id: int, search_id: int | None) -> DealRankResult:
         if self.session.get(ListingRecord, listing_id) is None:
             raise ValueError(f"Unknown listing: {listing_id}")
         warnings: list[str] = []

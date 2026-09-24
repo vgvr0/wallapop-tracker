@@ -103,3 +103,9 @@ curl "http://localhost:8000/api/v1/scores/listing/123?search_id=7"
 
 Operational endpoints are documented separately in
 [`observability.md`](observability.md): `/health`, `/ready` and `/metrics`.
+# Deal ranking
+
+`GET /api/v1/listings/{listing_id}/ranking` returns the read-only aggregate
+`overall_score`, confidence, explainable components, risk penalty, and warnings.
+It performs no writes, Wallapop requests, or LLM invocation. `search_id` is an
+optional query parameter for contextual DealScore calculation.

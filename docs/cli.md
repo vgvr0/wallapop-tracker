@@ -148,3 +148,8 @@ sold. Scores are contextual market analysis, not purchase advice. See
 `remove` and `search delete` ask for confirmation unless `--yes` is supplied. Commands exit non-zero
 when the referenced record does not exist or when the stored configuration is invalid; Wallapop
 transport errors surface as tracker errors instead of partial historical state.
+# Deal ranking
+
+Use `wallapop-track rank <listing_id>` for a human-readable explainable ranking,
+or add `--json` for machine-readable output. AI is optional; missing signals are
+reported and remaining weights are renormalized.
