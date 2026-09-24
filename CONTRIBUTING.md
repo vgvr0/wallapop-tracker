@@ -43,6 +43,5 @@ reformat unrelated files in the same change, but keep your own additions formatt
 
 ## License
 
-The repository has no `LICENSE` file yet, so it grants no usage rights and external contributions
-cannot be redistributed. A license decision by the owner is a prerequisite before external
-contributions are accepted.
+This repository is distributed under the MIT License; see [`LICENSE`](LICENSE). Contributions are
+accepted under the same project license.

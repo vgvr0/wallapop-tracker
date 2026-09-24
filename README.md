@@ -352,7 +352,7 @@ Background reading: [`docs/architecture.md`](docs/architecture.md),
 │   ├── reporting/       # Historical queries, market analytics, metrics
 │   ├── storage/         # SQLAlchemy models, database, repositories
 │   └── domain/          # Filters, alerts, scoring, marketplace, relisting rules
-├── alembic/             # Versioned schema migrations (0001–0021)
+├── alembic/             # Versioned schema migrations (0001–0022)
 ├── tests/               # Unit, contract, integration-style and opt-in live tests
 ├── scripts/             # Manual E2E and fixture validation utilities
 ├── docs/                # Design and operational documentation
@@ -363,7 +363,7 @@ Background reading: [`docs/architecture.md`](docs/architecture.md),
 ## Testing and CI
 
 ```bash
-pytest          # 347 tests; the default marker excludes live tests
+pytest          # offline suite; the default marker excludes live tests
 ruff check .
 ruff format --check .
 mypy src
@@ -419,5 +419,5 @@ RAW fixtures in `tests/fixtures/raw/`. Live tests are opt-in (`pytest -m live` w
 - **License:** MIT; see [`LICENSE`](LICENSE).
 - **Screenshots:** none. There is no UI, so the recommended captures are manual: the CLI,
   `search explain`, FastAPI `/docs` and `/metrics`.
-- **Out of scope for this release:** Git tag, GitHub release, dashboard, MCP server, PostgreSQL
-  backend, authentication, new filters, new alerts and additional scraping.
+- **Out of scope for this release:** Git tag, GitHub release, dashboard, MCP server, authentication,
+  new filters, new alerts and additional scraping.

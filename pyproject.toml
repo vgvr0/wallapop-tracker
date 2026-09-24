@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 keywords = ["wallapop", "monitoring", "analytics", "alerts", "fastapi"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Framework :: FastAPI",
   "Intended Audience :: Developers",

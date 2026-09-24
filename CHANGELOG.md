@@ -41,15 +41,13 @@ honestly documented.
 
 ### Release notes
 
-- Verified in the release environment: `pytest` (347 passed, 1 live test deselected), `ruff check .`,
-  `mypy src` and `git diff --check`. `ruff format --check .` keeps failing on pre-existing legacy
-  formatting debt; this release adds none.
-- Verified locally: `alembic upgrade head` on an empty database, the CLI on a migrated database, and
-  the API serving `/health`, `/ready` and `/metrics` with `200` from that database.
-- Not verified: `docker build` and `docker compose up` could not be executed in the release
-  environment (no Docker runtime available). The Docker flow is documented from inspection only.
-- Known limitations kept as-is: no authentication (local/private API only), no license file (owner
-  decision pending), and third-party public profile data present in authorized RAW fixtures, which
-  should be reviewed before the repository is made public.
+- Verified in the release environment: the offline `pytest` suite, `ruff check .`, `mypy src` and
+  `git diff --check`. `ruff format --check .` still reports pre-existing formatting debt in five
+  files; this release does not reformat unrelated legacy code.
+- Verified locally: clean SQLite and PostgreSQL Alembic upgrades, the installed wheel CLI, Docker
+  build/Compose startup, and the API serving `/health` and `/ready` successfully.
+- Known limitations kept as-is: no authentication (local/private API only), and third-party public
+  profile data present in authorized RAW fixtures, which should be reviewed before the repository
+  is made public.
 
 [1.0.0]: https://github.com/vgvr0/wallapop-tracker/releases/tag/v1.0.0
