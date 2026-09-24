@@ -47,6 +47,7 @@ from wallapop_tracker.reporting.queries import get_price_history, get_profile_me
 from wallapop_tracker.services.deal_scoring import DealScoringService
 from wallapop_tracker.services.event_bus import deserialize_event
 from wallapop_tracker.services.filter_explanation import explain_search_listing
+from wallapop_tracker.services.market_value import MarketValueService
 from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import (
     AlertRuleRecord,
@@ -561,6 +562,23 @@ def create_app(
     @api.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @api.get("/api/v1/listings/{listing_id}/market-value", tags=["listings"])
+    def listing_market_value(
+        listing_id: int,
+        window_days: int = Query(30, ge=1, le=3650),
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        if session.get(ListingRecord, listing_id) is None:
+            raise _not_found("Listing", listing_id)
+        try:
+            return (
+                MarketValueService(session)
+                .estimate(listing_id, window=timedelta(days=window_days))
+                .to_dict()
+            )
+        except ValueError as exc:
+            raise _not_found("Listing", listing_id) from exc
 
     @api.get("/ready", tags=["health"])
     def ready() -> dict[str, str]:
