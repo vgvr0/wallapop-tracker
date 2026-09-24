@@ -1396,6 +1396,28 @@ def search_import_config(
                 typer.echo(f"VALID: {len(document.searches)}")
                 typer.echo(f"CREATE: {creates}")
                 typer.echo(f"UPDATE: {updates}")
+                existing_by_name = {
+                    record.name: record
+                    for record in TrackedSearchRepository(session).list_all()
+                    if record.name
+                }
+                for item in document.searches:
+                    current = existing_by_name.get(item.name)
+                    if current is None or item.location is None:
+                        continue
+                    old_location = (
+                        current.latitude,
+                        current.longitude,
+                        current.max_distance_km,
+                    )
+                    new_location = (
+                        item.location.latitude,
+                        item.location.longitude,
+                        item.location.max_distance_km,
+                    )
+                    if old_location != new_location:
+                        typer.echo(f"UPDATE: {item.name}")
+                        typer.echo(f"  location: {old_location} -> {new_location}")
                 typer.echo("ERRORS: 0")
                 return
             created, updated = import_document(session, document, update_existing=update_existing)

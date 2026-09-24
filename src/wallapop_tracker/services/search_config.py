@@ -12,6 +12,7 @@ import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
 
+from ..domain.search_location import location_from_filters, validate_search_location
 from ..storage.models import TrackedSearchRecord
 from ..storage.repositories import TrackedSearchRepository
 
@@ -76,10 +77,7 @@ class LocationConfig(BaseModel):
 
     @model_validator(mode="after")
     def valid_coordinates(self) -> LocationConfig:
-        if not -90 <= self.latitude <= 90:
-            raise ValueError("latitude must be between -90 and 90")
-        if not -180 <= self.longitude <= 180:
-            raise ValueError("longitude must be between -180 and 180")
+        validate_search_location(self.latitude, self.longitude, self.max_distance_km)
         return self
 
 
@@ -179,9 +177,16 @@ def _config_dict(record: TrackedSearchRecord) -> dict[str, Any]:
     if record.max_price is not None:
         canonical_filters["max_price"] = record.max_price
 
+    location_values = validate_search_location(
+        record.latitude, record.longitude, record.max_distance_km
+    )
+    if location_values == (None, None, None):
+        location_values = location_from_filters(filters)
     location = None
-    if all(key in filters for key in ("latitude", "longitude", "max_distance_km")):
-        location = {key: filters[key] for key in ("latitude", "longitude", "max_distance_km")}
+    if all(value is not None for value in location_values):
+        location = dict(
+            zip(("latitude", "longitude", "max_distance_km"), location_values, strict=True)
+        )
     for key in ("latitude", "longitude", "max_distance_km"):
         filters.pop(key, None)
     alerts: dict[str, Any] = {}
@@ -273,6 +278,15 @@ def record_values(item: SearchConfig) -> dict[str, Any]:
         "name": item.name,
         "min_price": (item.filters.min_price if item.filters else None),
         "max_price": (item.filters.max_price if item.filters else None),
+        **(
+            {
+                "latitude": item.location.latitude,
+                "longitude": item.location.longitude,
+                "max_distance_km": item.location.max_distance_km,
+            }
+            if item.location is not None
+            else {}
+        ),
         "filters": filters,
         "interval_seconds": item.interval_seconds,
         "notify_on_first_run": alerts.notify_on_first_run,

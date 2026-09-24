@@ -56,9 +56,30 @@ def test_yaml_and_json_import_export_round_trip(database, tmp_path):
     json_output = serialize_document(exported, "json")
     assert "version: 1" in yaml_output
     assert json.loads(json_output)["searches"][0]["name"] == "iphone-pro"
+    exported_json = json.loads(json_output)["searches"][0]
+    assert exported_json["location"] == {
+        "latitude": 40.4168,
+        "longitude": -3.7038,
+        "max_distance_km": 20,
+    }
     assert "created_at" not in yaml_output
     assert "chat_id" not in yaml_output
     assert "secret" not in yaml_output
+    for suffix, content in ((".yaml", yaml_output), (".json", json_output)):
+        round_trip_db = Database("sqlite+pysqlite:///:memory:")
+        round_trip_db.create_all()
+        imported_path = tmp_path / f"round-trip{suffix}"
+        imported_path.write_text(content, encoding="utf-8")
+        with round_trip_db.transaction() as session:
+            import_document(session, load_document(imported_path))
+        with round_trip_db.session() as session:
+            round_trip_record = TrackedSearchRepository(session).list_all()[0]
+            assert (
+                round_trip_record.latitude,
+                round_trip_record.longitude,
+                round_trip_record.max_distance_km,
+            ) == (40.4168, -3.7038, 20)
+        round_trip_db.close()
 
 
 def test_cli_dry_run_does_not_write(database, tmp_path, monkeypatch):
@@ -98,6 +119,37 @@ def test_invalid_coordinates_are_rejected(tmp_path):
         load_document(path)
 
 
+@pytest.mark.parametrize(
+    "location",
+    [
+        "{latitude: 40, max_distance_km: 1}",
+        "{longitude: 2, max_distance_km: 1}",
+        "{latitude: 40, longitude: 2, max_distance_km: 0}",
+        "{latitude: 100, longitude: 2, max_distance_km: 1}",
+        "{latitude: 40, longitude: 200, max_distance_km: 1}",
+    ],
+)
+def test_invalid_location_shapes_are_rejected(tmp_path, location):
+    path = tmp_path / "invalid-location.yaml"
+    path.write_text(
+        f"version: 1\nsearches:\n  - name: bad\n    query: item\n    location: {location}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SearchConfigError):
+        load_document(path)
+
+
+def test_v1_without_location_is_backward_compatible(database):
+    document = load_document_from_text(
+        "version: 1\nsearches:\n  - name: no-location\n    query: item\n"
+    )
+    with database.transaction() as session:
+        import_document(session, document)
+    with database.session() as session:
+        record = TrackedSearchRepository(session).list_all()[0]
+        assert (record.latitude, record.longitude, record.max_distance_km) == (None, None, None)
+
+
 def test_update_existing_is_idempotent(database):
     document = load_document_from_text(config_text())
     with database.transaction() as session:
@@ -108,6 +160,60 @@ def test_update_existing_is_idempotent(database):
         record = TrackedSearchRepository(session).list_all()[0]
         assert record.query == "iphone 15 pro"
         assert record.max_price == Decimal("600")
+        assert (record.latitude, record.longitude, record.max_distance_km) == (
+            40.4168,
+            -3.7038,
+            20,
+        )
+
+
+def test_update_location_and_absent_location_preserves_existing(database):
+    madrid = load_document_from_text(config_text())
+    barcelona = load_document_from_text(
+        config_text()
+        .replace("40.4168", "41.3874")
+        .replace("-3.7038", "2.1686")
+        .replace("max_distance_km: 20", "max_distance_km: 15")
+    )
+    without_location = load_document_from_text(
+        "version: 1\nsearches:\n  - name: iphone-pro\n    query: iphone 15 pro\n"
+    )
+    with database.transaction() as session:
+        import_document(session, madrid)
+    with database.transaction() as session:
+        import_document(session, barcelona, update_existing=True)
+    with database.session() as session:
+        record = TrackedSearchRepository(session).list_all()[0]
+        assert (record.latitude, record.longitude, record.max_distance_km) == (41.3874, 2.1686, 15)
+    with database.transaction() as session:
+        import_document(session, without_location, update_existing=True)
+    with database.session() as session:
+        record = TrackedSearchRepository(session).list_all()[0]
+        assert (record.latitude, record.longitude, record.max_distance_km) == (41.3874, 2.1686, 15)
+
+
+def test_dry_run_reports_location_change(tmp_path, monkeypatch):
+    db_url = "sqlite:///" + str(tmp_path / "dry-location.db")
+    monkeypatch.setenv("WALLAPOP_TRACKER_DB_URL", db_url)
+    database = Database(db_url)
+    database.create_all()
+    with database.transaction() as session:
+        import_document(session, load_document_from_text(config_text()))
+    database.close()
+    config = tmp_path / "barcelona.yaml"
+    config.write_text(
+        config_text()
+        .replace("40.4168", "41.3874")
+        .replace("-3.7038", "2.1686")
+        .replace("max_distance_km: 20", "max_distance_km: 15"),
+        encoding="utf-8",
+    )
+    result = runner.invoke(
+        cli.app,
+        ["search", "import-config", str(config), "--dry-run", "--update-existing"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "location:" in result.output and "41.3874" in result.output
 
 
 def test_atomic_import_rolls_back_on_write_error(database, monkeypatch):

@@ -13,6 +13,11 @@ dentro de `location` y las alertas dentro de `alerts`. Los campos desconocidos,
 versiones no soportadas, coordenadas inválidas y filtros mal formados fallan
 antes de tocar la base de datos.
 
+`location` es opcional. Cuando aparece debe contener `latitude` (-90 a 90),
+`longitude` (-180 a 180) y `max_distance_km` (> 0). Se valida mediante la
+misma regla de dominio que usa el resto de la aplicación. Los archivos v1 sin
+`location` siguen siendo válidos.
+
 El ejemplo completo está en [`examples/searches.example.yaml`](../examples/searches.example.yaml).
 
 ## Exportar e importar
@@ -30,7 +35,9 @@ El formato se infiere de `.yaml`, `.yml` o `.json`; también se puede indicar
 internos, timestamps, leases, eventos, estados de notificación y secretos.
 
 Por defecto, una colisión de `name` es un error. `--update-existing` actualiza
-por nombre y es idempotente. `--dry-run` valida todo y muestra el plan sin
+por nombre y es idempotente. Si una actualización incluye `location`, reemplaza
+la localización existente; si la omite, conserva la localización actual.
+`--dry-run` valida todo y muestra el plan sin
 escribir. El import real valida primero el documento completo y escribe todas
 las búsquedas en una única transacción; un fallo hace rollback completo.
 `--replace-existing` no se ejecuta porque sería destructivo; usa

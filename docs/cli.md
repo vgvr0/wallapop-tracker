@@ -77,6 +77,11 @@ every stored value you do not pass. Filter semantics are documented in
 scale), `--notify-30d-low`, `--notify-90d-low`, `--notify-all-time-low` and the matching
 `--clear-percentage-drop` / `--clear-deal-score-threshold` options.
 
+La configuración declarativa admite `location.latitude`, `location.longitude` y
+`location.max_distance_km` opcionales; se exportan solo cuando existen y se
+validan con los rangos del dominio. Consulta [`search-config.md`](search-config.md)
+para la semántica de actualización y compatibilidad v1.
+
 ## Tracked listings
 
 | Command | Description |
