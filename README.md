@@ -21,6 +21,8 @@ writes to Wallapop: no purchases, no messages, no listing edits.
   reports received). `reports_received` is an observed public Wallapop metric; `0` is distinct
   from unknown and the value does not indicate fraud, trustworthiness or seller quality.
 - Tracks saved searches with query, price bounds, structured filters and a per-search interval.
+- Exports and imports versioned YAML/JSON search configuration for backups, GitOps and migrations;
+  the database remains the source of truth.
 - Deduplicates new-listing and price-change alerts globally across overlapping searches, including
   across process restarts.
 - Tracks individual listings with their own interval, target price, percentage-drop and deal-score

@@ -1,0 +1,26 @@
+version: 1
+
+searches:
+  - name: iphone-pro
+    query: "iphone 15 pro"
+    enabled: true
+    interval_seconds: 600
+    filters:
+      min_price: 300
+      max_price: 600
+      include:
+        - "256gb"
+      exclude:
+        - "roto"
+      title_include:
+        - "iphone"
+      brand: "Apple"
+      condition:
+        - "as_good_as_new"
+    location:
+      latitude: 40.4168
+      longitude: -3.7038
+      max_distance_km: 20
+    alerts:
+      percentage_drop: 10
+      notify_30d_low: true

@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from urllib.parse import urlparse
 
 import typer
@@ -45,6 +46,13 @@ from .services.runner import (
     SearchTrackingRunner,
 )
 from .services.scheduler import TrackingScheduler
+from .services.search_config import (
+    SearchConfigError,
+    export_document,
+    import_document,
+    load_document,
+    serialize_document,
+)
 from .services.search_tracker import SearchTracker
 from .services.seller_reputation import build_seller_reputation
 from .services.tracker import ProfileTracker
@@ -1313,6 +1321,90 @@ def search_import(
         typer.echo("Ignored unsupported parameters:")
         for parameter in sorted(imported.unknown_params):
             typer.echo(f"- {parameter}")
+
+
+def _config_format(path: Path, requested: str | None) -> str:
+    format_name = requested or ("json" if path.suffix.lower() == ".json" else "yaml")
+    if format_name not in {"yaml", "json"}:
+        raise typer.BadParameter("format must be yaml or json")
+    if requested is None and path.suffix.lower() not in {".yaml", ".yml", ".json"}:
+        raise typer.BadParameter("configuration format cannot be inferred; use --format")
+    return format_name
+
+
+@search_app.command("export-config")
+def search_export_config(
+    output: Path,
+    format_name: str | None = typer.Option(None, "--format"),
+    search_id: int | None = typer.Option(None, "--search-id", min=1),
+    enabled_only: bool = typer.Option(False, "--enabled-only"),
+) -> None:
+    """Export stable search configuration without runtime state or secrets."""
+    format_name = _config_format(output, format_name)
+    database = _db()
+    try:
+        with database.session() as session:
+            records = TrackedSearchRepository(session).list_all()
+            if search_id is not None:
+                records = [record for record in records if record.id == search_id]
+                if not records:
+                    raise typer.BadParameter(f"Unknown search: {search_id}")
+            if enabled_only:
+                records = [record for record in records if record.enabled]
+            document = export_document(records)
+    except SearchConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    try:
+        output.write_text(serialize_document(document, format_name), encoding="utf-8", newline="\n")
+    except OSError as exc:
+        raise typer.BadParameter(f"cannot write {output}: {exc}") from exc
+    typer.echo(f"Exported {len(document.searches)} search(es) to {output}")
+
+
+@search_app.command("import-config")
+def search_import_config(
+    input_path: Path,
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    replace_existing: bool = typer.Option(False, "--replace-existing"),
+    update_existing: bool = typer.Option(False, "--update-existing"),
+) -> None:
+    """Validate and atomically import declarative search configuration."""
+    if replace_existing:
+        raise typer.BadParameter(
+            "--replace-existing is not implemented because it is destructive; use --update-existing"
+        )
+    try:
+        document = load_document(input_path)
+    except SearchConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    database = _db()
+    try:
+        with database.session() as session:
+            existing_names = {
+                record.name for record in TrackedSearchRepository(session).list_all() if record.name
+            }
+            conflicts = [item.name for item in document.searches if item.name in existing_names]
+            if conflicts and not update_existing:
+                raise typer.BadParameter(
+                    "search name already exists: " + ", ".join(sorted(conflicts))
+                )
+            creates = sum(item.name not in existing_names for item in document.searches)
+            updates = len(document.searches) - creates
+            if dry_run:
+                typer.echo(f"VALID: {len(document.searches)}")
+                typer.echo(f"CREATE: {creates}")
+                typer.echo(f"UPDATE: {updates}")
+                typer.echo("ERRORS: 0")
+                return
+            created, updated = import_document(session, document, update_existing=update_existing)
+            session.commit()
+    except SearchConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+    typer.echo(f"Imported {created} search(es); updated {updated}")
 
 
 def _quoted(values: Iterable[str]) -> str:
