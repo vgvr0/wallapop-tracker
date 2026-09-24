@@ -98,6 +98,23 @@ class TrackedSearchRecord(Base):
             "min_price IS NULL OR max_price IS NULL OR min_price <= max_price",
             name="ck_tracked_search_price_range",
         ),
+        CheckConstraint(
+            "latitude IS NULL OR latitude BETWEEN -90 AND 90", name="ck_tracked_search_latitude"
+        ),
+        CheckConstraint(
+            "longitude IS NULL OR longitude BETWEEN -180 AND 180",
+            name="ck_tracked_search_longitude",
+        ),
+        CheckConstraint(
+            "max_distance_km IS NULL OR max_distance_km > 0", name="ck_tracked_search_distance"
+        ),
+        CheckConstraint(
+            "(latitude IS NULL) = (longitude IS NULL)", name="ck_tracked_search_coordinates_pair"
+        ),
+        CheckConstraint(
+            "max_distance_km IS NULL OR (latitude IS NOT NULL AND longitude IS NOT NULL)",
+            name="ck_tracked_search_distance_coordinates",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -111,6 +128,9 @@ class TrackedSearchRecord(Base):
     query: Mapped[str] = mapped_column(String(255), nullable=False)
     min_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     max_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    latitude: Mapped[float | None] = mapped_column()
+    longitude: Mapped[float | None] = mapped_column()
+    max_distance_km: Mapped[float | None] = mapped_column()
     filters_json: Mapped[str | None] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
     notify_on_first_run: Mapped[bool] = mapped_column(

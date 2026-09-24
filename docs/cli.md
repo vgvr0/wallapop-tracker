@@ -60,6 +60,11 @@ Los comandos `events` y `dlq` están documentados en [event_bus.md](event_bus.md
 `--regex-target`, `--category-id`, `--brand`, `--model`, `--condition`, `--latitude`, `--longitude`,
 `--max-distance-km` and `--notify-on-first-run`.
 
+`--latitude` and `--longitude` define the persisted center of the search and must be
+provided together. `--max-distance-km` is optional when coordinates are provided,
+but cannot be used without them. For example, Madrid can be configured with
+`--latitude 40.4168 --longitude -3.7038 --max-distance-km 20`.
+
 `search update` accepts `--name`, the text filters (`--title-include`, `--description-include`,
 `--title-exclude`, `--description-exclude`, `--title-first-word-include`,
 `--title-first-word-exclude`, plus the two `*-mode` options) and `--clear-text-filters`. It keeps

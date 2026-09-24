@@ -84,6 +84,17 @@ class SearchTracker:
             if not search.enabled:
                 return SearchTrackingResult(search_id, None, None, 0)
             config = self._config(search)
+            if (
+                search.latitude is not None
+                or search.longitude is not None
+                or search.max_distance_km is not None
+            ):
+                config = {
+                    **config,
+                    "latitude": search.latitude,
+                    "longitude": search.longitude,
+                    "max_distance_km": search.max_distance_km,
+                }
 
         try:
             request = SearchRequest(

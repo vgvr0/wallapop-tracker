@@ -109,6 +109,9 @@ class SearchCreate(APIModel):
     query: str = Field(min_length=1, max_length=255)
     min_price: Decimal | None = Field(default=None, ge=0)
     max_price: Decimal | None = Field(default=None, ge=0)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    max_distance_km: float | None = Field(default=None, gt=0)
     filters: dict[str, Any] | None = None
     enabled: bool = True
     notify_on_first_run: bool = False
@@ -127,6 +130,9 @@ class SearchPatch(APIModel):
     query: str | None = Field(default=None, min_length=1, max_length=255)
     min_price: Decimal | None = Field(default=None, ge=0)
     max_price: Decimal | None = Field(default=None, ge=0)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    max_distance_km: float | None = Field(default=None, gt=0)
     filters: dict[str, Any] | None = None
     enabled: bool | None = None
     notify_on_first_run: bool | None = None
@@ -177,6 +183,9 @@ class SearchResponse(APIModel):
     query: str
     min_price: Decimal | None
     max_price: Decimal | None
+    latitude: float | None = None
+    longitude: float | None = None
+    max_distance_km: float | None = None
     filters: dict[str, Any] | None
     enabled: bool
     notify_on_first_run: bool
@@ -383,6 +392,9 @@ def _search(record: TrackedSearchRecord) -> SearchResponse:
         query=record.query,
         min_price=record.min_price,
         max_price=record.max_price,
+        latitude=record.latitude,
+        longitude=record.longitude,
+        max_distance_km=record.max_distance_km,
         filters=_filters(record),
         enabled=record.enabled,
         notify_on_first_run=record.notify_on_first_run,
@@ -772,6 +784,9 @@ def create_app(
                 name=payload.name,
                 min_price=payload.min_price,
                 max_price=payload.max_price,
+                latitude=payload.latitude,
+                longitude=payload.longitude,
+                max_distance_km=payload.max_distance_km,
                 filters=payload.filters,
                 interval_seconds=payload.interval_seconds,
                 notify_on_first_run=payload.notify_on_first_run,
@@ -831,6 +846,9 @@ def create_app(
                 name=payload.name,
                 min_price=parsed.min_price,
                 max_price=parsed.max_price,
+                latitude=parsed.latitude,
+                longitude=parsed.longitude,
+                max_distance_km=parsed.distance,
                 filters=parsed.search_filters(),
                 interval_seconds=payload.interval_seconds,
             )

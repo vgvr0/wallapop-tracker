@@ -32,6 +32,11 @@ las entidades de evento/deduplicación que faltaban.
 * Cada búsqueda tendrá un `TrackedSearchRecord` persistente. Sus filtros se
   guardarán como JSON estructurado y validado, lo que permite extenderlos sin
   concatenar una DSL frágil.
+* La localización explícita de una búsqueda se persiste en `latitude`,
+  `longitude` y `max_distance_km`. Los tres son opcionales, pero las
+  coordenadas deben aparecer juntas y la distancia requiere coordenadas.
+  El formato histórico en `filters_json` se mantiene como fallback para no
+  romper búsquedas existentes.
 * Las búsquedas reutilizarán `TrackingRun`, `listings`, `listing_snapshots` y
   `tracking_run_listings` siempre que exista un perfil vendedor resoluble. Para
   anuncios observados sólo desde una búsqueda se usará un perfil técnico

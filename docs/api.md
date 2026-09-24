@@ -57,6 +57,11 @@ writes, including the advanced text filters `title_include`,
 See [`search_tracking_design.md`](search_tracking_design.md#filtros-avanzados-de-texto) for the exact
 semantics, and the README filter table for the summary.
 
+Search create, update and read payloads also expose the optional persisted
+`latitude`, `longitude` and `max_distance_km` fields. Coordinates must be
+provided together; a distance requires coordinates. Example: Madrid is
+`latitude=40.4168`, `longitude=-3.7038`, `max_distance_km=20`.
+
 `GET /api/v1/searches/{id}/listings/{listing_id}/explain` evaluates a stored
 listing against a stored search and returns `matched`, the per-filter `traces`
 and any `warnings`. It is read-only and runtime only: nothing is persisted, no

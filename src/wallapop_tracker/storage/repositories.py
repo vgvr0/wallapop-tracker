@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
+from wallapop_tracker.domain.search_location import location_from_filters, validate_search_location
 from wallapop_tracker.exceptions import WallapopError
 from wallapop_tracker.models import Listing, Profile, ProfileStats, ReviewSummary
 from wallapop_tracker.observability import get_metrics
@@ -94,6 +95,9 @@ class _TrackedSearchCreateRepository:
         name: str | None = None,
         min_price: Decimal | None = None,
         max_price: Decimal | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        max_distance_km: float | None = None,
         filters: dict[str, Any] | None = None,
         interval_seconds: int = 600,
         notify_on_first_run: bool = False,
@@ -112,6 +116,9 @@ class _TrackedSearchCreateRepository:
             raise ValueError("interval_seconds must be positive")
         if min_price is not None and max_price is not None and min_price > max_price:
             raise ValueError("min_price must not exceed max_price")
+        latitude, longitude, max_distance_km = _resolve_search_location(
+            filters, latitude, longitude, max_distance_km
+        )
         _validate_search_filters(filters)
         _validate_alert_thresholds(target_price, percentage_drop_threshold, deal_score_threshold)
         now = datetime.now(UTC)
@@ -121,6 +128,9 @@ class _TrackedSearchCreateRepository:
             query=query,
             min_price=min_price,
             max_price=max_price,
+            latitude=latitude,
+            longitude=longitude,
+            max_distance_km=max_distance_km,
             filters_json=_json_text(filters),
             interval_seconds=interval_seconds,
             notify_on_first_run=notify_on_first_run,
@@ -335,6 +345,9 @@ class TrackedSearchRepository(_TrackedSearchCreateRepository):
         query: str | None = None,
         min_price: Decimal | None = None,
         max_price: Decimal | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        max_distance_km: float | None = None,
         filters: dict[str, Any] | None = None,
         enabled: bool | None = None,
         notify_on_first_run: bool | None = None,
@@ -371,8 +384,21 @@ class TrackedSearchRepository(_TrackedSearchCreateRepository):
         if max_price is not None:
             record.max_price = max_price
         if filters is not None:
+            latitude, longitude, max_distance_km = _resolve_search_location(
+                filters, latitude, longitude, max_distance_km
+            )
             _validate_search_filters(filters)
             record.filters_json = _json_text(filters)
+        elif any(value is not None for value in (latitude, longitude, max_distance_km)):
+            latitude, longitude, max_distance_km = validate_search_location(
+                latitude, longitude, max_distance_km
+            )
+        if any(value is not None for value in (latitude, longitude, max_distance_km)):
+            record.latitude, record.longitude, record.max_distance_km = (
+                latitude,
+                longitude,
+                max_distance_km,
+            )
         if enabled is not None:
             record.enabled = enabled
         if notify_on_first_run is not None:
@@ -941,15 +967,7 @@ def _utc_now() -> datetime:
 def _validate_search_filters(filters: dict[str, Any] | None) -> None:
     if filters is None:
         return
-    for key, low, high in (("latitude", -90, 90), ("longitude", -180, 180)):
-        if key in filters and filters[key] is not None and not low <= float(filters[key]) <= high:
-            raise ValueError(f"{key} must be between {low} and {high}")
-    if (
-        "max_distance_km" in filters
-        and filters["max_distance_km"] is not None
-        and float(filters["max_distance_km"]) <= 0
-    ):
-        raise ValueError("max_distance_km must be positive")
+    location_from_filters(filters)
     for key in ("brands", "brand_ids", "models", "model_ids", "conditions", "condition"):
         value = filters.get(key)
         if isinstance(value, list) and len(value) != len(set(value)):
@@ -982,6 +1000,20 @@ _TEXT_FILTER_KEYS = (
 
 def _json_text(value: Any) -> str | None:
     return json.dumps(value, ensure_ascii=False, sort_keys=True) if value is not None else None
+
+
+def _resolve_search_location(
+    filters: dict[str, Any] | None,
+    latitude: float | None,
+    longitude: float | None,
+    max_distance_km: float | None,
+) -> tuple[float | None, float | None, float | None]:
+    legacy = location_from_filters(filters)
+    return validate_search_location(
+        latitude if latitude is not None else legacy[0],
+        longitude if longitude is not None else legacy[1],
+        max_distance_km if max_distance_km is not None else legacy[2],
+    )
 
 
 def _run_is_valid(session: Session, run_id: int) -> bool:
