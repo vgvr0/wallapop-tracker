@@ -7,6 +7,7 @@ validated application service without gaining direct database access.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shlex
 from dataclasses import dataclass
@@ -96,6 +97,56 @@ def parse_command(text: str) -> TelegramIntent:
             filters[key] = value
             i += 2
         return TelegramIntent("search_add", query=" ".join(query), filters=filters)
+    if command == "/search_update":
+        if len(parts) < 2 or not parts[1].isdigit():
+            raise TelegramCommandError("Usage: /search_update SEARCH_ID --max-price AMOUNT")
+        options = {
+            "--min-price": "min_price",
+            "--max-price": "max_price",
+            "--include": "include",
+            "--exclude": "exclude",
+            "--title-include": "title_include",
+            "--title-exclude": "title_exclude",
+            "--description-include": "description_include",
+            "--description-exclude": "description_exclude",
+            "--brand": "brand",
+            "--condition": "condition",
+            "--category-id": "category_id",
+            "--interval-seconds": "interval_seconds",
+        }
+        update_filters: dict[str, Any] = {}
+        i = 2
+        while i < len(parts):
+            key = options.get(parts[i])
+            if key is None:
+                raise TelegramCommandError(f"Unknown option: {parts[i]}")
+            if i + 1 >= len(parts):
+                raise TelegramCommandError(f"Missing value for {parts[i]}")
+            update_value: Any = parts[i + 1]
+            if key in {"min_price", "max_price"}:
+                try:
+                    update_value = Decimal(update_value)
+                except InvalidOperation as exc:
+                    raise TelegramCommandError(f"Invalid price: {update_value}") from exc
+            elif key == "interval_seconds":
+                try:
+                    update_value = int(update_value)
+                except ValueError as exc:
+                    raise TelegramCommandError("interval-seconds must be an integer") from exc
+            elif key in {
+                "include",
+                "exclude",
+                "title_include",
+                "title_exclude",
+                "description_include",
+                "description_exclude",
+            }:
+                update_value = [item for item in update_value.split(",") if item]
+            update_filters[key] = update_value
+            i += 2
+        if not update_filters:
+            raise TelegramCommandError("Provide at least one option to update")
+        return TelegramIntent("update_search", search_id=int(parts[1]), filters=update_filters)
     if command in {
         "/search_show",
         "/search_enable",
@@ -133,7 +184,8 @@ class TelegramControlService:
             if intent.action == "help":
                 return (
                     "Commands: /searches, /search_add QUERY [--max-price AMOUNT], "
-                    "/search_show ID, /search_enable ID, /search_disable ID, "
+                    "/search_update ID --max-price AMOUNT, /search_show ID, "
+                    "/search_enable ID, /search_disable ID, "
                     "/search_delete ID confirm, /search_run ID"
                 )
             if intent.action == "searches":
@@ -170,6 +222,29 @@ class TelegramControlService:
                 return f"Created search #{row.id}: {row.name or row.query}"
             row = owners.resolve_owned(chat_id, intent.search_id)
             assert row is not None
+            if intent.action == "update_search":
+                values = dict(intent.filters or {})
+                min_price = values.pop("min_price", None)
+                max_price = values.pop("max_price", None)
+                interval = values.pop("interval_seconds", None)
+                try:
+                    stored_filters = json.loads(row.filters_json) if row.filters_json else {}
+                except (TypeError, ValueError) as exc:
+                    raise TelegramCommandError("Stored search filters are invalid") from exc
+                if not isinstance(stored_filters, dict):
+                    raise TelegramCommandError("Stored search filters are invalid")
+                stored_filters.update(values)
+                try:
+                    TrackedSearchRepository(session).update(
+                        row.id,
+                        min_price=min_price,
+                        max_price=max_price,
+                        interval_seconds=interval,
+                        filters=stored_filters,
+                    )
+                except ValueError as exc:
+                    raise TelegramCommandError(str(exc)) from exc
+                return f"Updated search #{row.id}"
             if intent.action == "search_show":
                 return (
                     f"#{row.id} {row.name or row.query}\nowner=current chat\n"

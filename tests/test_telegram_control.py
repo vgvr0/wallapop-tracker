@@ -53,3 +53,48 @@ def test_delete_requires_confirmation(database):
     assert "Confirm delete" in service.execute(101, parse_command("/search_delete 1"))
     assert "Deleted" in service.execute(101, parse_command("/search_delete 1 confirm"))
     assert service.execute(101, parse_command("/searches")) == "No searches owned by this chat."
+
+
+def test_search_update_is_partial_and_preserves_existing_filters(database):
+    service = TelegramControlService(database)
+    service.register_chat(101)
+    service.execute(101, parse_command("/search_add iphone --max-price 600 --brand Apple"))
+    assert (
+        service.execute(101, parse_command("/search_update 1 --max-price 550"))
+        == "Updated search #1"
+    )
+    shown = service.execute(101, parse_command("/search_show 1"))
+    assert "max_price=550.00" in shown
+    assert '"brand": "Apple"' in shown
+
+
+def test_search_update_multiple_fields_and_validation(database):
+    service = TelegramControlService(database)
+    service.register_chat(101)
+    service.execute(101, parse_command("/search_add iphone --max-price 600"))
+    service.execute(
+        101,
+        parse_command(
+            "/search_update 1 --min-price 100 --interval-seconds 300 "
+            "--title-include iphone --category-id 123"
+        ),
+    )
+    shown = service.execute(101, parse_command("/search_show 1"))
+    assert "min_price=100.00" in shown
+    assert "interval=300s" in shown
+    assert "title_include" in shown
+    with pytest.raises(TelegramCommandError, match="min_price must not exceed max_price"):
+        service.execute(101, parse_command("/search_update 1 --min-price 700"))
+    with pytest.raises(TelegramCommandError, match="Unknown option"):
+        parse_command("/search_update 1 --unknown value")
+    with pytest.raises(TelegramCommandError, match="at least one option"):
+        parse_command("/search_update 1")
+
+
+def test_search_update_cross_chat_is_not_found(database):
+    service = TelegramControlService(database)
+    service.register_chat(101)
+    service.register_chat(202)
+    service.execute(101, parse_command("/search_add iphone --max-price 600"))
+    with pytest.raises(TelegramCommandError, match="Search not found"):
+        service.execute(202, parse_command("/search_update 1 --max-price 1"))

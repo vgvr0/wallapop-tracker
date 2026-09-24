@@ -19,11 +19,13 @@ bot ownership. That variable remains supported for global/manual alerts.
 ## Commands
 
 `/start`, `/help`, `/searches`, `/search_add QUERY [--min-price N] [--max-price N]`
-and `/search_show ID` are supported, together with `/search_enable ID`,
+and `/search_show ID` are supported, together with `/search_update ID --max-price N`,
+`/search_enable ID`,
 `/search_disable ID`, `/search_delete ID confirm`, and `/search_run ID`.
 
 The first iteration supports price, include/exclude, title and description
 include/exclude, brand, condition, category ID, and interval seconds filters.
+Updates are partial: omitted fields and stored filters are preserved.
 Telegram chat ownership is stored in `telegram_chats` and
 `telegram_search_owners`; the canonical identity is the numeric `chat_id`, not a
 username. Every read and write resolves the search through that association.
