@@ -508,6 +508,28 @@ class TrackingEventRepository:
                 raise
             return existing, False
         get_metrics().tracking_events_created_total.labels(event_type).inc()
+        # The legacy tracking event and the durable domain event are written in
+        # the same caller-owned transaction: this is the project's outbox.
+        from wallapop_tracker.services.event_bus import EventBus
+
+        payload = {
+            "tracking_event_id": record.id,
+            "listing_id": listing_id,
+            "tracking_run_id": tracking_run_id,
+            "tracked_search_id": tracked_search_id,
+            "old_price": str(old_price) if old_price is not None else None,
+            "new_price": str(new_price) if new_price is not None else None,
+        }
+        EventBus.publish(
+            self.session,
+            event_type=event_type,
+            aggregate_type="listing",
+            aggregate_id=listing_id,
+            payload=payload,
+            metadata=json.loads(metadata_json) if metadata_json else {},
+            occurred_at=created_at,
+            idempotency_key=f"tracking-event:{idempotency_key}",
+        )
         return record, True
 
 

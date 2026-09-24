@@ -15,7 +15,12 @@ wallapop-track [COMMAND]
 ├── relistings    list show
 ├── analytics     market prices activity sellers brands
 └── score         listing search
+    events        list show consume replay
+    dlq           list show retry
+    worker        events tracking notifications
 ```
+
+Los comandos `events` y `dlq` están documentados en [event_bus.md](event_bus.md).
 
 ## Tracked profiles
 

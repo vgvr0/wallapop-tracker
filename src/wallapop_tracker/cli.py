@@ -9,6 +9,7 @@ from decimal import Decimal
 from urllib.parse import urlparse
 
 import typer
+from sqlalchemy import select
 
 from .client import WallapopClient
 from .domain.filters import FilterTrace
@@ -26,6 +27,7 @@ from .reporting import (
     get_seller_market_stats,
 )
 from .services.deal_scoring import DealScoringService
+from .services.event_bus import EventBus, deserialize_event
 from .services.filter_explanation import SearchListingExplanation, explain_search_listing
 from .services.notifications import NotificationService
 from .services.runner import (
@@ -37,7 +39,12 @@ from .services.scheduler import TrackingScheduler
 from .services.search_tracker import SearchTracker
 from .services.tracker import ProfileTracker
 from .storage.database import Database
-from .storage.models import ListingRecord, TrackingRunStatus
+from .storage.models import (
+    DeadLetterRecord,
+    DomainEventRecord,
+    ListingRecord,
+    TrackingRunStatus,
+)
 from .storage.repositories import (
     ListingRepository,
     PossibleRelistingRepository,
@@ -67,6 +74,10 @@ app.add_typer(analytics_app, name="analytics")
 app.add_typer(score_app, name="score")
 worker_app = typer.Typer(no_args_is_help=True)
 app.add_typer(worker_app, name="worker")
+events_app = typer.Typer(no_args_is_help=True)
+dlq_app = typer.Typer(no_args_is_help=True)
+app.add_typer(events_app, name="events")
+app.add_typer(dlq_app, name="dlq")
 
 
 def _db() -> Database:
@@ -502,6 +513,175 @@ def tracking_worker(
             asyncio.run(scheduler.run_forever())
     finally:
         database.close()
+
+
+@events_app.command("list")
+def events_list(
+    event_type: str | None = typer.Option(None, "--event-type"),
+    consumer: str | None = typer.Option(None, "--consumer"),
+    status: str | None = typer.Option(None, "--status"),
+    limit: int = typer.Option(100, "--limit", min=1, max=1000),
+    since: datetime | None = typer.Option(None, "--since"),  # noqa: B008
+) -> None:
+    """List durable domain events in stable append order."""
+    database = _db()
+    try:
+        with database.session() as session:
+            for row in EventBus(database).list_events(
+                session,
+                event_type=event_type,
+                consumer=consumer,
+                status=status,
+                limit=limit,
+                since=since,
+            ):
+                typer.echo(
+                    f"{row.id}\t{row.event_type}\t{row.aggregate_type}:{row.aggregate_id}\t{row.created_at.isoformat()}"
+                )
+    finally:
+        database.close()
+
+
+@events_app.command("show")
+def events_show(event_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            row = session.get(DomainEventRecord, event_id)
+            if row is None:
+                raise typer.BadParameter(f"Unknown event: {event_id}")
+            typer.echo(json.dumps(deserialize_event(row), default=_json_default, sort_keys=True))
+    finally:
+        database.close()
+
+
+@events_app.command("consume")
+def events_consume(
+    consumer: str = typer.Option(..., "--consumer"),
+    once: bool = typer.Option(False, "--once"),
+    poll_seconds: float = typer.Option(1.0, "--poll-seconds", min=0),
+    max_attempts: int = typer.Option(5, "--max-attempts", min=1),
+    lease_seconds: int = typer.Option(300, "--lease-seconds", min=1),
+) -> None:
+    """Consume durable events; notifications remain idempotent via delivery constraints."""
+    database = _db()
+    bus = EventBus(database)
+
+    def handle(event: DomainEventRecord) -> None:
+        payload = json.loads(event.payload_json)
+        if consumer == "notifications":
+            tracking_event_id = payload.get("tracking_event_id")
+            if tracking_event_id is not None:
+                NotificationService(database).enqueue_event(int(tracking_event_id))
+        # analytics and future consumers intentionally remain read-only hooks.
+
+    async def loop() -> None:
+        while True:
+            worked = bus.consume_once(
+                consumer, handle, lease_seconds=lease_seconds, max_attempts=max_attempts
+            )
+            if once or not worked:
+                return
+            await asyncio.sleep(poll_seconds)
+
+    try:
+        asyncio.run(loop())
+    finally:
+        database.close()
+
+
+@events_app.command("replay")
+def events_replay(
+    consumer: str = typer.Option(..., "--consumer"),
+    from_id: int = typer.Option(..., "--from-id", min=1),
+    to_id: int = typer.Option(..., "--to-id", min=1),
+    allow_side_effects: bool = typer.Option(False, "--allow-side-effects"),
+) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            count = EventBus(database).replay(
+                session,
+                consumer=consumer,
+                from_id=from_id,
+                to_id=to_id,
+                allow_side_effects=allow_side_effects,
+            )
+            typer.echo(f"replayed: {count}")
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+
+
+@dlq_app.command("list")
+def dlq_list(
+    consumer: str | None = typer.Option(None, "--consumer"),
+    limit: int = typer.Option(100, "--limit", min=1, max=1000),
+) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            statement = select(DeadLetterRecord).order_by(DeadLetterRecord.id).limit(limit)
+            if consumer:
+                statement = statement.where(DeadLetterRecord.consumer_name == consumer)
+            for row in session.scalars(statement):
+                typer.echo(
+                    f"{row.id}\t{row.consumer_name}\tevent={row.event_id}\tattempts={row.attempts}\t{row.last_error}"
+                )
+    finally:
+        database.close()
+
+
+@dlq_app.command("show")
+def dlq_show(dead_letter_id: int) -> None:
+    database = _db()
+    try:
+        with database.session() as session:
+            row = session.get(DeadLetterRecord, dead_letter_id)
+            if row is None:
+                raise typer.BadParameter(f"Unknown dead letter: {dead_letter_id}")
+            event = session.get(DomainEventRecord, row.event_id)
+            typer.echo(
+                json.dumps(
+                    {
+                        "id": row.id,
+                        "consumer": row.consumer_name,
+                        "event": deserialize_event(event) if event else None,
+                        "attempts": row.attempts,
+                        "last_error": row.last_error,
+                        "failed_at": row.failed_at.isoformat(),
+                        "requeued_at": row.requeued_at.isoformat() if row.requeued_at else None,
+                    },
+                    default=_json_default,
+                    sort_keys=True,
+                )
+            )
+    finally:
+        database.close()
+
+
+@dlq_app.command("retry")
+def dlq_retry(dead_letter_id: int) -> None:
+    database = _db()
+    try:
+        with database.transaction() as session:
+            EventBus(database).requeue(session, dead_letter_id)
+            typer.echo(f"requeued: {dead_letter_id}")
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        database.close()
+
+
+@worker_app.command("events")
+def events_worker(
+    consumer: str = typer.Option(..., "--consumer"),
+    once: bool = typer.Option(False, "--once"),
+    poll_seconds: float = typer.Option(1.0, "--poll-seconds", min=0),
+) -> None:
+    """Run a persistent event consumer worker with graceful Ctrl-C shutdown."""
+    events_consume(consumer=consumer, once=once, poll_seconds=poll_seconds)
 
 
 @worker_app.command("notifications")

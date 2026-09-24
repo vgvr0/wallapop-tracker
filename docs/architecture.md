@@ -2,6 +2,9 @@
 
 Estado: diseño cerrado para seguimiento semanal, pendiente de implementación.
 
+La implementación actual añade el bus persistente descrito en [event_bus.md](event_bus.md): el
+estado de tracking sigue siendo la fuente de verdad y `domain_events` actúa como outbox transaccional.
+
 ## Objetivo y frecuencia
 
 El sistema está optimizado para aproximadamente una captura completa por perfil y semana. Se priorizan simplicidad, trazabilidad, histórico consultable y comportamiento conservador ante fallos. No se diseñará una cola de eventos de alta frecuencia ni una estrategia de optimización para millones de registros.

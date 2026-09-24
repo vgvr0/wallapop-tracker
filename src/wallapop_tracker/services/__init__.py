@@ -1,4 +1,5 @@
 from .diff import DiffService
+from .event_bus import EVENT_TYPES, EventBus, deserialize_event
 from .listing_tracker import ListingTrackingResult, TrackedListingTracker
 from .relisting import RelistingDetectionService, RelistingPolicy
 from .runner import (
@@ -27,4 +28,7 @@ __all__ = [
     "SearchTrackingResult",
     "RelistingDetectionService",
     "RelistingPolicy",
+    "EVENT_TYPES",
+    "EventBus",
+    "deserialize_event",
 ]

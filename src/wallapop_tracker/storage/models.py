@@ -225,6 +225,96 @@ class TrackingEventRecord(Base):
     deliveries: Mapped[list["NotificationDeliveryRecord"]] = relationship(back_populates="event")
 
 
+class DomainEventRecord(Base):
+    """Append-only domain event outbox shared by all asynchronous consumers."""
+
+    __tablename__ = "domain_events"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_domain_events_idempotency"),
+        Index("ix_domain_events_order", "created_at", "id"),
+        Index("ix_domain_events_type_created", "event_type", "created_at"),
+        Index("ix_domain_events_correlation", "correlation_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    aggregate_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    marketplace: Mapped[str | None] = mapped_column(String(32))
+    payload_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}", server_default="{}"
+    )
+    metadata_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}", server_default="{}"
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(128))
+    causation_id: Mapped[str | None] = mapped_column(String(128))
+    idempotency_key: Mapped[str] = mapped_column(String(512), nullable=False)
+
+
+class EventConsumptionStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    RETRY = "retry"
+    DLQ = "dlq"
+
+
+class EventConsumptionRecord(Base):
+    """Independent delivery state for one event/consumer pair."""
+
+    __tablename__ = "event_consumptions"
+    __table_args__ = (
+        UniqueConstraint("event_id", "consumer_name", name="uq_event_consumption_target"),
+        Index("ix_event_consumptions_due", "consumer_name", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("domain_events.id", ondelete="RESTRICT"), nullable=False
+    )
+    consumer_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[EventConsumptionStatus] = mapped_column(
+        String(20), nullable=False, default=EventConsumptionStatus.PENDING, server_default="pending"
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    replay_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    event: Mapped[DomainEventRecord] = relationship()
+
+
+class DeadLetterRecord(Base):
+    """Immutable record of a terminal consumer failure."""
+
+    __tablename__ = "dead_letters"
+    __table_args__ = (Index("ix_dead_letters_consumer_failed", "consumer_name", "failed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("domain_events.id", ondelete="RESTRICT"), nullable=False
+    )
+    consumer_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_error: Mapped[str] = mapped_column(Text, nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(128))
+    failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    requeued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    requeue_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    event: Mapped[DomainEventRecord] = relationship()
+
+
 class DealScoreSnapshotRecord(Base):
     """A score observation scoped to one listing/search context."""
 
