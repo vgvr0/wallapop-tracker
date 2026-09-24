@@ -72,6 +72,22 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
+  telegram-bot:
+    profiles: ["telegram"]
+    build:
+      context: .
+    command: ["wallapop-track", "telegram-bot"]
+    environment:
+      WALLAPOP_TRACKER_DB_URL: ${WALLAPOP_TRACKER_DB_URL:-postgresql+psycopg://wallapop:wallapop-local-only@postgres:5432/wallapop}
+      WALLAPOP_TELEGRAM_BOT_TOKEN: ${WALLAPOP_TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
 
 volumes:
   postgres-data:
