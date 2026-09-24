@@ -21,6 +21,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from wallapop_tracker.ai.config import AIConfigurationError, AISettings
+from wallapop_tracker.ai.factory import build_listing_analyzer
+from wallapop_tracker.ai.service import AIDisabledError, ListingAIAnalysisService
+from wallapop_tracker.ai.storage import (
+    ListingAIRepository,
+    ListingNotFoundError,
+    assessment_payload,
+)
 from wallapop_tracker.domain.deal_scoring import DealScore
 from wallapop_tracker.domain.filters import FilterTrace
 from wallapop_tracker.domain.marketplace import Marketplace, require_supported_marketplace
@@ -45,6 +53,7 @@ from wallapop_tracker.storage.models import (
     DeadLetterRecord,
     DomainEventRecord,
     EventConsumptionRecord,
+    ListingAIAssessmentRecord,
     ListingRecord,
     ListingSnapshotRecord,
     NotificationDeliveryRecord,
@@ -471,6 +480,12 @@ def _not_found(entity: str, entity_id: int) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{entity} {entity_id} not found")
 
 
+def _ai_assessment(record: ListingAIAssessmentRecord, cache_hit: bool) -> dict[str, Any]:
+    payload = assessment_payload(record, cache_hit)
+    payload["created_at"] = _utc(record.created_at)
+    return payload
+
+
 def _page(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> tuple[int, int]:
     return limit, offset
 
@@ -502,6 +517,7 @@ def create_app(
     database: Database | None = None,
     *,
     metrics: Metrics | None = None,
+    ai_service: ListingAIAnalysisService | None = None,
 ) -> FastAPI:
     configure_logging()
     owned_database = database is None
@@ -525,6 +541,14 @@ def create_app(
         pass
     api = FastAPI(title="Wallapop Tracker API", version="1.0", description="Local/private API")
     api.state.metrics = app_metrics
+    if ai_service is None:
+        try:
+            ai_service = ListingAIAnalysisService(
+                database, build_listing_analyzer(AISettings.from_env()), app_metrics
+            )
+        except AIConfigurationError:
+            ai_service = ListingAIAnalysisService(database, None, app_metrics)
+    api.state.ai_service = ai_service
 
     def get_session() -> Iterator[Session]:
         with database.session() as session:
@@ -779,6 +803,40 @@ def create_app(
         if session.get(ListingRecord, listing_id) is None:
             raise _not_found("Listing", listing_id)
         return [_json_value(point.__dict__) for point in get_price_history(session, listing_id)]
+
+    @api.post("/api/v1/listings/{listing_id}/ai-assessment", tags=["ai"])
+    async def create_ai_assessment(
+        listing_id: int,
+        force: bool = Query(False),
+    ) -> dict[str, Any]:
+        try:
+            execution = await api.state.ai_service.assess(listing_id, force=force)
+        except ListingNotFoundError as exc:
+            raise _not_found("Listing", listing_id) from exc
+        except AIDisabledError as exc:
+            raise HTTPException(status_code=409, detail="AI analysis is disabled") from exc
+        except AIConfigurationError as exc:
+            raise HTTPException(status_code=409, detail="AI analysis is not configured") from exc
+        except Exception as exc:
+            from wallapop_tracker.ai.providers.base import ListingAnalysisError
+
+            if isinstance(exc, ListingAnalysisError):
+                raise HTTPException(status_code=502, detail="AI provider request failed") from exc
+            raise
+        return _ai_assessment(execution.assessment, execution.cache_hit)
+
+    @api.get("/api/v1/listings/{listing_id}/ai-assessment", tags=["ai"])
+    def get_ai_assessment(
+        listing_id: int, session: Session = Depends(get_session)
+    ) -> dict[str, Any]:
+        if session.get(ListingRecord, listing_id) is None:
+            raise _not_found("Listing", listing_id)
+        record = ListingAIRepository(session).get_latest_assessment(listing_id)
+        if record is None:
+            raise HTTPException(
+                status_code=404, detail=f"AI assessment for listing {listing_id} not found"
+            )
+        return _ai_assessment(record, False)
 
     @api.get("/api/v1/tracked-listings", tags=["tracked-listings"])
     def tracked_listings(

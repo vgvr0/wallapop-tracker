@@ -20,6 +20,14 @@ Prompts are versioned as `listing-analysis-v1` and keep system instructions sepa
 
 `build_analysis_input_hash` uses canonical JSON and SHA-256 over normalized context, provider, model, and prompt version. It is not persisted in this feature. API keys are constructor-only secrets: they are excluded from `repr`, logs, and exception messages. Full prompts, descriptions, and raw responses are not logged.
 
+## Integration: persistence, cache, CLI, and API
+
+The optional integration persists validated results in `listing_ai_assessments`. Its canonical cache identity is `(listing_id, provider, model, prompt_version, input_hash)`, protected by a database unique constraint. A cache hit never calls the provider. `force=true` calls the provider, but an identical identity remains a single canonical row; a changed input/model/prompt creates a separate historical row. A provider failure happens before persistence, so an earlier valid assessment remains available.
+
+Configuration is disabled by default with `WALLAPOP_AI_ENABLED=false`. The provider is built lazily from `WALLAPOP_AI_*` variables when an explicit CLI/API assessment is requested. `wallapop-track ai assess <listing_id> [--force] [--json]` performs an explicit assessment; `wallapop-track ai show <listing_id>` is read-only. The REST endpoints are `POST /api/v1/listings/{listing_id}/ai-assessment?force=false` and read-only `GET /api/v1/listings/{listing_id}/ai-assessment`.
+
+The integration records aggregate Prometheus counters and duration/token metrics without listing IDs, prompts, descriptions, raw responses, or secrets. Event bus integration is intentionally absent: tracking remains non-blocking and no mass or automatic analysis is scheduled.
+
 ## Limitations and future integration
 
 The core has no database, event bus, worker, scheduler, notification, API, CLI, or persistence integration. A future worker can call the async analyzer in response to `listing.ai_analysis.requested` and publish a completed event without changing this contract.

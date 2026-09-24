@@ -30,6 +30,8 @@ Implemented endpoint groups:
 * contextual deal scores;
 * possible relistings;
 * notification delivery state.
+* explicit, cached AI listing assessments (`POST` and read-only `GET` under
+  `/api/v1/listings/{id}/ai-assessment`); AI is disabled by default.
 
 Collection endpoints accept `limit` and `offset`, defaulting to 50 and capped
 at 200. Score search uses `limit` capped at 100. Money is serialized as a

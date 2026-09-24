@@ -725,6 +725,43 @@ class ListingSnapshotRecord(Base):
     tracking_run: Mapped[TrackingRunRecord] = relationship(back_populates="listing_snapshots")
 
 
+class ListingAIAssessmentRecord(Base):
+    """Canonical validated semantic assessment for one input/model version."""
+
+    __tablename__ = "listing_ai_assessments"
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id",
+            "provider",
+            "model",
+            "prompt_version",
+            "input_hash",
+            name="uq_listing_ai_assessment_identity",
+        ),
+        Index("ix_listing_ai_assessments_listing_created", "listing_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    semantic_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    risk_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    condition_assessment: Mapped[str] = mapped_column(String(32), nullable=False)
+    condition_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
+    deal_quality: Mapped[str] = mapped_column(String(32), nullable=False)
+    deal_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
+    analysis_json: Mapped[str] = mapped_column(Text, nullable=False)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    listing: Mapped[ListingRecord] = relationship()
+
+
 class TrackingRunListingRecord(Base):
     __tablename__ = "tracking_run_listings"
     __table_args__ = (
