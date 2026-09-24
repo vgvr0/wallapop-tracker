@@ -114,6 +114,19 @@ def test_postgres_alembic_upgrade_and_tracking_claim(postgres_url):
         database.close()
 
 
+def test_postgres_fixture_starts_without_previous_notification_state(postgres_url):
+    database = Database(postgres_url)
+    try:
+        with database.engine.connect() as connection:
+            assert (
+                connection.execute(text("SELECT count(*) FROM notification_deliveries")).scalar()
+                == 0
+            )
+            assert connection.execute(text("SELECT count(*) FROM tracking_events")).scalar() == 0
+    finally:
+        database.close()
+
+
 def _seed_tracking_profile(database: Database, suffix: str) -> str:
     alias = f"postgres-{suffix}"
     with database.transaction() as session:
