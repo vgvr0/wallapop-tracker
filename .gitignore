@@ -14,3 +14,4 @@ data/*.sqlite3
 data/e2e_validation.db
 .mypy_cache/
 .ruff_cache/
+data/
