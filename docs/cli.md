@@ -8,6 +8,7 @@ The package installs one entry point, `wallapop-track` (module
 ```text
 wallapop-track [COMMAND]
 ├── add / list / enable / disable / remove / run / run-all / schedule / notify
+├── telegram-bot [--poll-timeout N] [--log-level LEVEL]
 ├── search        add update list import export-config import-config show explain enable disable delete run run-all alerts
 ├── listing       add list show enable disable remove run run-all alerts
 ├── notifications list retry
@@ -15,11 +16,12 @@ wallapop-track [COMMAND]
 ├── relistings    list show
 ├── analytics     market prices activity sellers brands
 ├── score         listing search
+├── rank          LISTING_ID [--search-id ID] [--json]
 ├── market-value  LISTING_ID [--window-days N] [--json]
 ├── ai            assess show
-    events        list show consume replay
-    dlq           list show retry
-    worker        events tracking notifications
+├── events        list show consume replay
+├── dlq           list show retry
+└── worker        events tracking notifications
 ```
 
 Los comandos `events` y `dlq` están documentados en [event_bus.md](event_bus.md).

@@ -1,9 +1,15 @@
-# Arquitectura de persistencia — Fase 3
+# Arquitectura de persistencia y tracking
 
-Estado: diseño cerrado para seguimiento semanal, pendiente de implementación.
+Estado: arquitectura actual del sistema de tracking, persistencia y procesamiento asíncrono.
 
-La implementación actual añade el bus persistente descrito en [event_bus.md](event_bus.md): el
+La implementación actual incluye el bus persistente descrito en [event_bus.md](event_bus.md): el
 estado de tracking sigue siendo la fuente de verdad y `domain_events` actúa como outbox transaccional.
+
+El sistema soporta seguimiento de perfiles, búsquedas y anuncios, con SQLite para instalaciones
+locales y PostgreSQL para despliegues con workers. Alembic mantiene el esquema hasta el head actual;
+los consumidores PostgreSQL usan leases para coordinar ejecución distribuida. El CLI, la API local y
+el bot de Telegram son transportes de servicios de aplicación, no implementaciones paralelas del
+dominio.
 
 ## Objetivo y frecuencia
 
@@ -66,7 +72,8 @@ Ejemplo conceptual:
 | Semana 3 | A | `REMOVED` | 120 |
 | Semana 5 | A | `ACTIVE` | 110 |
 
-La reaparición se representa como un nuevo snapshot `ACTIVE` posterior a `REMOVED`. Más adelante el diff engine podrá derivar `REAPPEARED`; no se persistirá todavía una entidad `Event`.
+La reaparición se representa como un nuevo snapshot `ACTIVE` posterior a `REMOVED`. El diff engine
+puede derivar `REAPPEARED` y publicar el evento correspondiente en el bus persistente.
 
 `REMOVED` no significa `SOLD`. La desaparición se registra únicamente como ausencia confirmada en una captura completa y válida. Aunque aumente `sold_count`, no se atribuirá una venta a un `item_id` concreto sin una señal explícita de Wallapop.
 
@@ -184,9 +191,9 @@ Dos capturas válidas con el mismo contenido no generan snapshots duplicados. Un
 
 La aplicación de una captura válida debe ser idempotente frente a un reintento de proceso: las restricciones únicas, la selección de la última captura válida y una transacción única deben impedir duplicar la identidad de perfiles o anuncios.
 
-## Consultas que debe soportar el esquema
+## Consultas que soporta el esquema
 
-Sin introducir una tabla de eventos todavía, el esquema debe permitir derivar:
+El esquema y el ledger de eventos permiten derivar:
 
 - anuncios nuevos por semana: primer `ACTIVE` de cada `listing`;
 - desaparecidos por semana: snapshots `REMOVED` agrupados por `observed_at`;
@@ -195,15 +202,17 @@ Sin introducir una tabla de eventos todavía, el esquema debe permitir derivar:
 - inventario activo: último estado de presencia conocido por anuncio, condicionado a capturas válidas;
 - duración aproximada publicado: `last_seen_at - first_seen_at`, con precisión semanal.
 
-## Alcance excluido de esta implementación
+## Componentes actualmente integrados
 
-La siguiente fase podrá implementar modelos SQLAlchemy 2, SQLite, esquema/migraciones, repositorios y tests de persistencia aislada. Quedan explícitamente fuera:
+La persistencia, los repositorios, el diff engine, el scheduler, los workers y la integración de
+tracking con `WallapopClient` forman parte del flujo actual. La configuración declarativa de
+búsquedas admite importación y exportación YAML/JSON, `dry-run`, `update-existing` y localización
+explícita anidada. El bot de Telegram administra búsquedas asociadas a `chat_id`.
 
-- diff engine;
-- `Event` y eventos históricos materializados;
-- scheduler;
-- CLI de tracking;
-- integración automática con `WallapopClient`.
+El pipeline de eventos usa `NotificationDelivery` y una DLQ persistente con reintentos. La capa de
+analytics es read-only e incluye deal scoring, reputación descriptiva de vendedores y assessment/
+ranking AI opcional. Las evaluaciones AI no sustituyen las señales deterministas ni son necesarias
+para ejecutar el tracking.
 Las búsquedas pasan por un provider normalizado y llevan identidad explícita
 de marketplace (actualmente solo `wallapop`):
 
@@ -251,7 +260,7 @@ Una ausencia observada se denomina `removed`; no se interpreta como venta.
 
 `WallapopClient` expone APIs read-only para categorías, filtros, marcas y
 modelos. Cada respuesta pasa por un parser puro y produce modelos pequeños de
-`domain/metadata.py`; esta rama no conecta discovery con `SearchTracker`.
+`domain/metadata.py`; discovery sigue siendo una capacidad read-only separada del tracking.
 
 ### Scheduler concurrente
 
@@ -312,9 +321,10 @@ middleware. It does not alter business analytics or tracking semantics.
                     │       │        │
              notifications analytics scoring
                     │
-                 scheduler
+                  scheduler / workers
 
-FastAPI and CLI are local/private operator transports.
+FastAPI, CLI and Telegram are operator transports. SQLite is the local backend; PostgreSQL supports
+worker leases and distributed-safe event consumption.
 ```
 
 The active alert path is `TrackingEvent -> NotificationDelivery`. The old

@@ -3,8 +3,9 @@
 **Read-only marketplace monitoring and deal intelligence for authorized public Wallapop data.**
 
 Wallapop Tracker watches public Wallapop profiles, saved searches and individual listings; stores
-their history in SQLite; derives changes; explains why a listing matched or failed a search; scores
-deals in context; and delivers deduplicated alerts through webhook, Discord and Telegram. It never
+their history in SQLite or PostgreSQL; derives changes; explains why a listing matched or failed a
+search; scores deals in context; and delivers deduplicated alerts through webhook, Discord and
+Telegram. It never
 writes to Wallapop: no purchases, no messages, no listing edits.
 
 | | |
@@ -12,8 +13,8 @@ writes to Wallapop: no purchases, no messages, no listing edits.
 | Version | `1.0.0` |
 | Python | `>=3.12` |
 | Interfaces | `wallapop-track` CLI, local/private FastAPI service, Prometheus-compatible `/metrics` |
-| Storage | SQLite local or PostgreSQL via SQLAlchemy 2, Alembic migrations `0001`–`0022` |
-| Status | Private repository, MIT licensed — see [Release status](#release-status) |
+| Storage | SQLite local or PostgreSQL via SQLAlchemy 2; Alembic migrations up to the current head |
+| Status | Public repository, MIT licensed — see [Release status](#release-status) |
 
 ## What it does
 
@@ -22,7 +23,8 @@ writes to Wallapop: no purchases, no messages, no listing edits.
   from unknown and the value does not indicate fraud, trustworthiness or seller quality.
 - Tracks saved searches with query, price bounds, structured filters and a per-search interval.
 - Exports and imports versioned YAML/JSON search configuration for backups, GitOps and migrations;
-  the database remains the source of truth, including optional search location.
+  import supports `dry-run` and `update-existing`, with nested optional search location; the
+  database remains the source of truth.
 - Deduplicates new-listing and price-change alerts globally across overlapping searches, including
   across process restarts.
 - Tracks individual listings with their own interval, target price, percentage-drop and deal-score
@@ -33,9 +35,14 @@ writes to Wallapop: no purchases, no messages, no listing edits.
 - Detects explicitly sold listings, and heuristic possible relistings without merging identities.
 - Reports read-only market analytics (summary, prices, activity, sellers, brands) and contextual deal
   scores.
+- Provides explainable deal ranking, descriptive seller reputation context and optional AI listing
+  assessment/ranking; the AI backend is disabled by default.
 - Persists and retries notification deliveries per channel, with secrets redacted from logs.
 - Exposes a FastAPI transport layer plus `/health`, `/ready` and Prometheus `/metrics`.
-- Runs one-shot, scheduled or manual tracking through a bounded-concurrency scheduler.
+- Runs one-shot, scheduled or manual tracking through a bounded-concurrency scheduler and
+  distributed-safe worker leases where supported by the database.
+- Includes the optional `wallapop-track telegram-bot` for managing searches by `chat_id`; see
+  [`docs/telegram-control-bot.md`](docs/telegram-control-bot.md).
 
 ## Contents
 
@@ -300,17 +307,18 @@ persisted snapshots) are documented in
 
 ```mermaid
 flowchart LR
-    CLI[wallapop-track CLI] --> Scheduler[TrackingScheduler]
-    CLI --> Runners[Profile / search / listing runners]
-    Scheduler --> Runners
-    Runners --> Client[WallapopClient, read-only]
-    Runners --> Filters[FilterEngine]
-    Runners --> DB[(SQLite + Alembic)]
-    DB --> Diff[DiffService]
-    DB --> Ledger[TrackingEvent ledger]
-    Ledger --> Notifications[NotificationDelivery]
+    CLI --> Services[Application services]
+    API --> Services
+    Telegram[Telegram control bot] --> Services
+    Services --> Trackers[Trackers]
+    Services --> Scheduler[Scheduler / workers]
+    Trackers --> Client[WallapopClient, read-only]
+    Trackers --> Filters[FilterEngine]
+    Trackers --> DB[(SQLite or PostgreSQL + Alembic)]
+    Scheduler --> DB
+    DB --> Ledger[Event bus / outbox]
+    Ledger --> Notifications[NotificationDelivery / DLQ]
     DB --> Reporting[Analytics, scoring, metrics]
-    DB --> API[FastAPI, local/private]
 ```
 
 Profiles, searches and tracked listings share one listing identity, one event ledger and one
@@ -369,7 +377,7 @@ Background reading: [`docs/architecture.md`](docs/architecture.md),
 │   ├── reporting/       # Historical queries, market analytics, metrics
 │   ├── storage/         # SQLAlchemy models, database, repositories
 │   └── domain/          # Filters, alerts, scoring, marketplace, relisting rules
-├── alembic/             # Versioned schema migrations (0001–0022)
+├── alembic/             # Versioned schema migrations up to the current head
 ├── tests/               # Unit, contract, integration-style and opt-in live tests
 ├── scripts/             # Manual E2E and fixture validation utilities
 ├── docs/                # Design and operational documentation
@@ -403,8 +411,8 @@ RAW fixtures in `tests/fixtures/raw/`. Live tests are opt-in (`pytest -m live` w
 - Intended for authorized, moderate-volume monitoring, not for mass scraping.
 - Search results are limited to a configurable recent-page window (`max_pages`, default five) instead
   of an exhaustive historical search.
-- Notification delivery is sequential and has no distributed queue or concurrent worker pool.
-- Multiple scheduler processes are not coordinated; SQLite file databases use WAL plus a busy timeout.
+- PostgreSQL event consumers use leases for distributed-safe processing; SQLite remains a local
+  single-file fallback with more limited coordination guarantees.
 - Listing detail depends on the observed `/api/v3/items/{id}` endpoint and is covered by offline
   fixtures only.
 - No authentication: keep the API private, as described in
