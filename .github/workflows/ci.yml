@@ -15,12 +15,12 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: wallapop
+          POSTGRES_DB: wallapop_test
           POSTGRES_USER: wallapop
           POSTGRES_PASSWORD: wallapop
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U wallapop -d wallapop"
+          --health-cmd "pg_isready -U wallapop -d wallapop_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Check out repository
@@ -49,8 +49,8 @@ jobs:
 
       - name: Test
         env:
-          WALLAPOP_TRACKER_DB_URL: postgresql+psycopg://wallapop:wallapop@localhost:5432/wallapop
-          WALLAPOP_TRACKER_TEST_POSTGRES_URL: postgresql+psycopg://wallapop:wallapop@localhost:5432/wallapop
+          WALLAPOP_TRACKER_DB_URL: postgresql+psycopg://wallapop:wallapop@localhost:5432/wallapop_test
+          WALLAPOP_TRACKER_TEST_POSTGRES_URL: postgresql+psycopg://wallapop:wallapop@localhost:5432/wallapop_test
         run: alembic upgrade head && pytest -m 'not postgres' && pytest -m postgres
 
       - name: Docker build
