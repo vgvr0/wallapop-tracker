@@ -166,7 +166,11 @@ class EventBus:
             .limit(1)
         )
         if session.bind is not None and session.bind.dialect.name == "postgresql":
-            statement = statement.with_for_update(skip_locked=True)
+            # The consumption side is nullable because a new consumer has no
+            # row yet. PostgreSQL rejects FOR UPDATE on that nullable side;
+            # lock only the durable event row while creating/updating the
+            # consumer state inside the same transaction.
+            statement = statement.with_for_update(of=DomainEventRecord, skip_locked=True)
         row = session.execute(statement).first()
         if row is None:
             return None

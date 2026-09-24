@@ -829,7 +829,7 @@ def create_app(
                 raise _not_found("Tracked listing", tracked_listing_id) from exc
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @api.get("/api/v1/tracking-events", response_model=list[EventResponse], tags=["events"])
+    @api.get("/api/v1/events", response_model=list[EventResponse], tags=["events"])
     def events(
         event_type: str | None = None,
         listing_id: int | None = None,
@@ -862,7 +862,19 @@ def create_app(
             raise _not_found("Event", event_id)
         return _event(row)
 
-    @api.get("/api/v1/events", response_model=list[DomainEventResponse], tags=["events"])
+    @api.get("/api/v1/tracking-events", response_model=list[EventResponse], tags=["events"])
+    def tracking_events_alias(
+        event_type: str | None = None,
+        listing_id: int | None = None,
+        search_id: int | None = None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        session: Session = Depends(get_session),
+        page: tuple[int, int] = Depends(_page),
+    ) -> list[EventResponse]:
+        return events(event_type, listing_id, search_id, start_at, end_at, session, page)
+
+    @api.get("/api/v1/domain-events", response_model=list[DomainEventResponse], tags=["events"])
     def domain_events(
         event_type: str | None = None,
         consumer: str | None = None,
@@ -892,7 +904,9 @@ def create_app(
             for row in session.scalars(statement.offset(offset).limit(limit)).all()
         ]
 
-    @api.get("/api/v1/events/{event_id}", response_model=DomainEventResponse, tags=["events"])
+    @api.get(
+        "/api/v1/domain-events/{event_id}", response_model=DomainEventResponse, tags=["events"]
+    )
     def domain_event(event_id: int, session: Session = Depends(get_session)) -> DomainEventResponse:
         row = session.get(DomainEventRecord, event_id)
         if row is None:

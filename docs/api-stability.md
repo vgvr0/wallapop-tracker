@@ -2,6 +2,10 @@
 
 Los endpoints observados de Wallapop son endpoints internos/no documentados usados por el frontend público. Pueden cambiar sin mantener compatibilidad, por lo que el proyecto conserva respuestas RAW fechadas y separa su interpretación en parsers.
 
+La API pública v1 conserva `/api/v1/events` para los tracking events históricos. Los eventos del
+bus persistente están separados en `/api/v1/domain-events`; no se reutiliza un recurso v1 existente
+para cambiar su semántica.
+
 ```text
 Wallapop API response
         ↓

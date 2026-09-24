@@ -1,8 +1,17 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
 from wallapop_tracker.api import create_app
+from wallapop_tracker.services.event_bus import EventBus
 from wallapop_tracker.storage.database import Database
+from wallapop_tracker.storage.models import (
+    ListingRecord,
+    ProfileRecord,
+    TrackingEventRecord,
+    TrackingRunRecord,
+)
 
 
 @pytest.fixture
@@ -31,6 +40,63 @@ def test_health_and_search_crud(api_client):
     )
     assert patched.status_code == 200
     assert patched.json()["enabled"] is False
+
+
+def test_v1_events_keeps_legacy_tracking_event_semantics(api_client):
+    now = datetime.now(UTC)
+    with api_client._health_database.transaction() as session:
+        profile = ProfileRecord(
+            wallapop_user_id="api-events-profile",
+            first_seen_at=now,
+            last_seen_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(profile)
+        session.flush()
+        run = TrackingRunRecord(profile_id=profile.id, started_at=now)
+        session.add(run)
+        session.flush()
+        listing = ListingRecord(
+            external_id="api-events-listing",
+            first_seen_at=now,
+            last_seen_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(listing)
+        session.flush()
+        tracking_event = TrackingEventRecord(
+            event_type="NEW_LISTING",
+            idempotency_key="api-events-legacy",
+            listing_id=listing.id,
+            tracking_run_id=run.id,
+            created_at=now,
+        )
+        session.add(tracking_event)
+        session.flush()
+        domain_event, _ = EventBus.publish(
+            session,
+            event_type="ListingCreated",
+            aggregate_type="listing",
+            aggregate_id=listing.id,
+            payload={"tracking_event_id": tracking_event.id},
+            idempotency_key="api-events-domain",
+        )
+    legacy = api_client.get("/api/v1/events")
+    assert legacy.status_code == 200
+    assert legacy.json()[0]["event_type"] == "NEW_LISTING"
+    assert "listing_id" in legacy.json()[0]
+    assert (
+        api_client.get(f"/api/v1/events/{tracking_event.id}").json()["event_type"] == "NEW_LISTING"
+    )
+    domain = api_client.get("/api/v1/domain-events")
+    assert domain.status_code == 200
+    assert domain.json()[0]["id"] == domain_event.id
+    assert (
+        api_client.get(f"/api/v1/domain-events/{domain_event.id}").json()["event_type"]
+        == "ListingCreated"
+    )
 
 
 def test_health_api_endpoints_work_without_data(api_client):

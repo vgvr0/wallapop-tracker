@@ -4,9 +4,9 @@ The project exposes a local/private HTTP API at `/api/v1`. It is a transport
 layer over the existing repositories, reporting functions and services; it
 does not call Wallapop while serving requests.
 
-Read-only event endpoints are `/api/v1/events`, `/api/v1/events/{id}`, `/api/v1/dlq` and
-`/api/v1/dlq/{id}`. Legacy tracking-event records remain available under
-`/api/v1/tracking-events`.
+`/api/v1/events` and `/api/v1/events/{id}` retain the v1 tracking-event resource. New domain
+events use `/api/v1/domain-events` and `/api/v1/domain-events/{id}`. The DLQ is read-only at
+`/api/v1/dlq` and `/api/v1/dlq/{id}`. `/api/v1/tracking-events` remains as an explicit alias.
 
 Run it with:
 
