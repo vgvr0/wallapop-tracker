@@ -33,10 +33,20 @@ class TelegramIntent:
     query: str | None = None
     filters: dict[str, Any] | None = None
     confirmation: bool = False
+    search_reference: str | None = None
+    confidence: float | None = None
+    raw_text: str | None = None
 
 
 class TelegramCommandError(ValueError):
     pass
+
+
+class TelegramAmbiguousSearch(TelegramCommandError):
+    def __init__(self, candidates: list[tuple[int, str]]) -> None:
+        self.candidates = candidates
+        self.intent: TelegramIntent | None = None
+        super().__init__("Multiple searches match that reference")
 
 
 def parse_command(text: str) -> TelegramIntent:
@@ -174,6 +184,36 @@ class TelegramControlService:
         with self.database.transaction() as session:
             TelegramOwnershipRepository(session).upsert_chat(chat_id, **metadata)
 
+    def resolve_search_id(self, chat_id: int, intent: TelegramIntent) -> int:
+        """Resolve an ID or owned textual reference without exposing repositories."""
+        if intent.search_id is not None:
+            with self.database.session() as session:
+                if (
+                    TelegramOwnershipRepository(session).resolve_owned(chat_id, intent.search_id)
+                    is None
+                ):
+                    raise TelegramCommandError("Search not found")
+            return intent.search_id
+        if not intent.search_reference:
+            raise TelegramCommandError("Search not found")
+        reference = intent.search_reference.casefold()
+        with self.database.session() as session:
+            matches = [
+                row
+                for row in TelegramOwnershipRepository(session).list_owned(chat_id)
+                if reference in (row.name or row.query).casefold()
+            ]
+        if not matches:
+            raise TelegramCommandError("No encuentro esa búsqueda.")
+        if len(matches) > 1:
+            raise TelegramAmbiguousSearch([(row.id, row.name or row.query) for row in matches])
+        return int(matches[0].id)
+
+    async def execute_async(self, chat_id: int, intent: TelegramIntent) -> str:
+        if intent.action == "search_run":
+            return await self.run(chat_id, self.resolve_search_id(chat_id, intent))
+        return self.execute(chat_id, intent)
+
     def execute(self, chat_id: int, intent: TelegramIntent) -> str:
         metrics = get_metrics()
         with self.database.transaction() as session:
@@ -199,10 +239,25 @@ class TelegramControlService:
                         for row in rows
                     )
                 )
-            if intent.search_id is None:
+            search_id = intent.search_id
+            if search_id is None and intent.search_reference:
+                reference = intent.search_reference.casefold()
+                matches = [
+                    row
+                    for row in owners.list_owned(chat_id)
+                    if reference in (row.name or row.query).casefold()
+                ]
+                if not matches:
+                    raise TelegramCommandError("No encuentro esa búsqueda.")
+                if len(matches) > 1:
+                    raise TelegramAmbiguousSearch(
+                        [(row.id, row.name or row.query) for row in matches]
+                    )
+                search_id = matches[0].id
+            if search_id is None:
                 if intent.action != "search_add":
                     raise TelegramCommandError("Search not found")
-            elif owners.resolve_owned(chat_id, intent.search_id) is None:
+            elif owners.resolve_owned(chat_id, search_id) is None:
                 raise TelegramCommandError("Search not found")
             if intent.action == "search_add":
                 if not intent.query:
@@ -220,7 +275,7 @@ class TelegramControlService:
                 )
                 owners.associate(chat_id, row.id)
                 return f"Created search #{row.id}: {row.name or row.query}"
-            row = owners.resolve_owned(chat_id, intent.search_id)
+            row = owners.resolve_owned(chat_id, search_id)
             assert row is not None
             if intent.action == "update_search":
                 values = dict(intent.filters or {})
@@ -266,8 +321,8 @@ class TelegramControlService:
                 TrackedSearchRepository(session).remove(row.id)
                 return f"Deleted search #{row.id}"
         if intent.action == "search_run":
-            return asyncio.run(self.run(chat_id, intent.search_id))
-        metrics.telegram_command_failures_total.labels(intent.action).inc()
+            return asyncio.run(self.run(chat_id, search_id))
+            metrics.telegram_command_failures_total.labels(intent.action).inc()
         raise TelegramCommandError("Unsupported command")
 
     async def run(self, chat_id: int, search_id: int | None) -> str:

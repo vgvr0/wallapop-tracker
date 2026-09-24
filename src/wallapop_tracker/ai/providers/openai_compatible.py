@@ -66,7 +66,7 @@ class OpenAICompatibleListingAnalyzer:
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }
-        response = await self._request(request)
+        response = await self.complete(request)
         analysis, usage = self._parse_response(response)
         latency_ms = (time.perf_counter() - started) * 1000
         logger.info(
@@ -94,7 +94,13 @@ class OpenAICompatibleListingAnalyzer:
             ),
         )
 
-    async def _request(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def complete(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Complete one structured chat request using the configured provider.
+
+        This is intentionally a provider-only boundary. Callers still own the
+        system prompt and schema validation, so the provider cannot execute
+        application actions.
+        """
         owns_client = self._http_client is None
         client = self._http_client or httpx.AsyncClient(timeout=self.timeout)
         try:
@@ -134,6 +140,8 @@ class OpenAICompatibleListingAnalyzer:
             if owns_client:
                 await client.aclose()
         raise ListingAnalysisProviderError("LLM request failed")
+
+    _request = complete
 
     async def _backoff(self, attempt: int) -> None:
         await self._sleep(min(2.0, 0.25 * (2**attempt)))

@@ -41,3 +41,22 @@ Delivery idempotency and retry records remain unchanged.
 The command parser produces `TelegramIntent`. A future LLM parser may translate
 natural language into the same intent, but must still call `TelegramControlService`
 and must never access SQL or repositories directly.
+
+## Natural language control (optional)
+
+Set `WALLAPOP_TELEGRAM_NL_ENABLED=true` together with the existing
+`WALLAPOP_AI_*` provider settings. The LLM only returns a validated structured
+intent: it cannot access repositories, execute SQL, or call tracking services.
+Messages beginning with `/`, help, `sí`/`no` confirmations, and ambiguity
+numbers never call the LLM.
+
+Examples include `avísame de iPhone 15 Pro por menos de 600 euros`, `qué
+búsquedas tengo`, `desactiva la búsqueda del MacBook`, and `ejecuta ahora la
+búsqueda de cámaras`. Search names are resolved only among searches owned by
+the current numeric Telegram `chat_id`. Multiple matches produce a numbered
+question; deletions always ask for confirmation. Pending questions are kept in
+memory for five minutes and isolated per chat.
+
+If the provider is unavailable, times out, or returns invalid JSON, the bot
+stays alive and suggests `/help` and explicit commands. Natural language is
+optional and never required by the deterministic control bot.

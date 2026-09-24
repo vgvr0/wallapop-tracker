@@ -226,6 +226,37 @@ class Metrics:
             "Telegram command duration",
             registry=self.registry,
         )
+        self.wallapop_telegram_nl_requests_total = Counter(
+            "wallapop_telegram_nl_requests_total",
+            "Telegram natural language requests",
+            registry=self.registry,
+        )
+        self.wallapop_telegram_nl_parse_failures_total = Counter(
+            "wallapop_telegram_nl_parse_failures_total",
+            "Telegram natural language parse failures",
+            registry=self.registry,
+        )
+        self.wallapop_telegram_nl_intents_total = Counter(
+            "wallapop_telegram_nl_intents_total",
+            "Telegram natural language intents",
+            ["action"],
+            registry=self.registry,
+        )
+        self.wallapop_telegram_nl_ambiguities_total = Counter(
+            "wallapop_telegram_nl_ambiguities_total",
+            "Telegram natural language ambiguities",
+            registry=self.registry,
+        )
+        self.wallapop_telegram_nl_confirmations_total = Counter(
+            "wallapop_telegram_nl_confirmations_total",
+            "Telegram natural language confirmations",
+            registry=self.registry,
+        )
+        self.wallapop_telegram_nl_duration_seconds = Histogram(
+            "wallapop_telegram_nl_duration_seconds",
+            "Telegram natural language parse duration",
+            registry=self.registry,
+        )
         self.http_requests_total = Counter(
             "http_requests_total",
             "API HTTP requests",
