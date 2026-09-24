@@ -14,7 +14,8 @@ wallapop-track [COMMAND]
 ├── metadata      categories filters brands models
 ├── relistings    list show
 ├── analytics     market prices activity sellers brands
-└── score         listing search
+├── score         listing search
+├── ai            assess show
     events        list show consume replay
     dlq           list show retry
     worker        events tracking notifications
@@ -117,6 +118,10 @@ All metadata commands are read-only and limited to endpoints validated by RAW fi
 | `analytics sellers SEARCH_ID` / `analytics brands SEARCH_ID` | Seller and brand aggregations. |
 | `score listing LISTING_ID --search-id SEARCH_ID` | Deterministic score of one listing inside one search context. |
 | `score search SEARCH_ID [--limit 20]` | Rank active listings of a search by their derived score. |
+
+## AI listing analysis
+
+`ai assess LISTING_ID [--force] [--json]` explicitly runs or reuses a cached semantic assessment. `ai show LISTING_ID [--json]` only reads the latest persisted assessment. AI is disabled by default and is configured through `WALLAPOP_AI_*` variables.
 
 Analytics are read-only queries over the persisted history: removed listings are never treated as
 sold. Scores are contextual market analysis, not purchase advice. See

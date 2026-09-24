@@ -9,15 +9,20 @@ from decimal import Decimal
 from urllib.parse import urlparse
 
 import typer
+from click import ClickException
 from sqlalchemy import select
 
+from .ai.config import AIConfigurationError, AISettings
+from .ai.factory import build_listing_analyzer
+from .ai.service import AIDisabledError, ListingAIAnalysisService
+from .ai.storage import ListingAIRepository, assessment_payload
 from .client import WallapopClient
 from .domain.filters import FilterTrace
 from .domain.listing_urls import parse_listing_reference
 from .domain.metadata import AvailableFilter, Brand, Category, ProductModel
 from .exceptions import WallapopError
 from .models import Listing
-from .observability import configure_logging
+from .observability import configure_logging, get_metrics
 from .parsers.search_url import SearchURLParseError, parse_search_url
 from .reporting import (
     get_activity_time_series,
@@ -74,6 +79,8 @@ app.add_typer(metadata_app, name="metadata")
 app.add_typer(relistings_app, name="relistings")
 app.add_typer(analytics_app, name="analytics")
 app.add_typer(score_app, name="score")
+ai_app = typer.Typer(no_args_is_help=True)
+app.add_typer(ai_app, name="ai")
 profile_app = typer.Typer(no_args_is_help=True)
 app.add_typer(profile_app, name="profile")
 worker_app = typer.Typer(no_args_is_help=True)
@@ -90,6 +97,79 @@ def _db() -> Database:
     if database.engine.dialect.name == "sqlite":
         database.create_all()
     return database
+
+
+def _ai_service(database: Database) -> ListingAIAnalysisService:
+    try:
+        analyzer = build_listing_analyzer(AISettings.from_env())
+    except AIConfigurationError as exc:
+        raise ClickException("AI analysis is not configured") from exc
+    return ListingAIAnalysisService(database, analyzer, get_metrics())
+
+
+@ai_app.command("assess")
+def ai_assess(
+    listing_id: int,
+    force: bool = typer.Option(False, "--force"),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Assess one stored listing, reusing the persistent cache by default."""
+    database = _db()
+    try:
+        service = _ai_service(database)
+        try:
+            execution = asyncio.run(service.assess(listing_id, force=force))
+        except AIDisabledError as exc:
+            raise ClickException("AI analysis is disabled") from exc
+        payload = assessment_payload(execution.assessment, execution.cache_hit)
+        if as_json:
+            typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+            return
+        _print_ai_assessment(payload)
+    finally:
+        database.close()
+
+
+@ai_app.command("show")
+def ai_show(listing_id: int, as_json: bool = typer.Option(False, "--json")) -> None:
+    """Show the latest stored assessment without calling an LLM."""
+    database = _db()
+    try:
+        with database.session() as session:
+            record = ListingAIRepository(session).get_latest_assessment(listing_id)
+            if record is None:
+                raise ClickException(f"No AI assessment for listing {listing_id}")
+            payload = assessment_payload(record)
+        if as_json:
+            typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        else:
+            _print_ai_assessment(payload)
+    finally:
+        database.close()
+
+
+def _print_ai_assessment(payload: Mapping[str, object]) -> None:
+    analysis = payload["analysis"]
+    details = analysis if isinstance(analysis, dict) else {}
+    typer.echo(f"Listing #{payload['listing_id']}\n\nAI assessment\n{'─' * 24}")
+    typer.echo(f"Semantic score       {payload['semantic_score']}/100")
+    typer.echo(f"Risk score           {payload['risk_score']}/100")
+    typer.echo(f"Condition            {payload['condition_assessment']}")
+    typer.echo(f"Confidence           {payload['condition_confidence']}")
+    for label in ("defects", "risk_flags", "positive_signals", "missing_information"):
+        values = details.get(label, [])
+        typer.echo(f"\n{label.replace('_', ' ').title()}")
+        for item in values if isinstance(values, list) else []:
+            if isinstance(item, dict):
+                typer.echo(f"- {item.get('type', 'signal')}")
+                typer.echo(f"  evidence: {item.get('evidence', '')}")
+            else:
+                typer.echo(f"- {item}")
+    typer.echo(f"\nSummary\n{details.get('summary', '')}")
+    typer.echo(f"\nProvider             {payload['provider']}")
+    typer.echo(f"Model                {payload['model']}")
+    typer.echo(f"Prompt               {payload['prompt_version']}")
+    typer.echo(f"Source               {'CACHE' if payload.get('cache_hit') else 'LLM'}")
 
 
 def _url(value: str) -> str:

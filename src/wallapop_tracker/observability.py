@@ -218,6 +218,35 @@ class Metrics:
             ["method", "route"],
             registry=self.registry,
         )
+        self.wallapop_ai_analysis_requests_total = Counter(
+            "wallapop_ai_analysis_requests_total", "AI analysis requests", registry=self.registry
+        )
+        self.wallapop_ai_analysis_success_total = Counter(
+            "wallapop_ai_analysis_success_total", "Successful AI analyses", registry=self.registry
+        )
+        self.wallapop_ai_analysis_failures_total = Counter(
+            "wallapop_ai_analysis_failures_total",
+            "Failed AI analyses",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.wallapop_ai_analysis_cache_hits_total = Counter(
+            "wallapop_ai_analysis_cache_hits_total",
+            "AI analysis cache hits",
+            registry=self.registry,
+        )
+        self.wallapop_ai_input_tokens_total = Counter(
+            "wallapop_ai_input_tokens_total", "AI input tokens", registry=self.registry
+        )
+        self.wallapop_ai_output_tokens_total = Counter(
+            "wallapop_ai_output_tokens_total", "AI output tokens", registry=self.registry
+        )
+        self.wallapop_ai_analysis_duration_seconds = Histogram(
+            "wallapop_ai_analysis_duration_seconds",
+            "AI analysis duration",
+            ["provider", "model"],
+            registry=self.registry,
+        )
 
 
 _default_metrics = Metrics()
