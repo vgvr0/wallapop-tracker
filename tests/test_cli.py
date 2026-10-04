@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from typer.testing import CliRunner
@@ -9,9 +10,12 @@ from wallapop_tracker.storage.database import Database
 from wallapop_tracker.storage.models import TrackingRunStatus
 from wallapop_tracker.storage.repositories import (
     ListingRepository,
+    ProfileRepository,
+    SnapshotRepository,
     TrackedListingRepository,
     TrackedProfileRepository,
     TrackedSearchRepository,
+    TrackingRunRepository,
 )
 
 runner = CliRunner()
@@ -217,3 +221,76 @@ def test_cli_notifications_list_and_retry(tmp_path, monkeypatch):
     retried = runner.invoke(cli.app, ["notifications", "retry"])
     assert listed.exit_code == 0
     assert retried.exit_code == 0 and "delivered: 0" in retried.output
+
+
+def test_profile_stats_cli_human_and_json_output(tmp_path, monkeypatch):
+    _database(tmp_path, monkeypatch)
+    database = Database(f"sqlite:///{tmp_path / 'cli.db'}")
+    with database.transaction() as session:
+        tracked = TrackedProfileRepository(session).create(
+            "https://es.wallapop.com/user/seller", "seller-user", "seller"
+        )
+        profile = ProfileRepository(session).get_or_create_profile(Profile(user_id="seller-user"))
+        TrackedProfileRepository(session).attach_profile(tracked.alias, profile.id)
+        run = TrackingRunRepository(session).start_tracking_run(profile.id)
+        TrackingRunRepository(session).mark_valid(run.id, items_ok=True)
+        listing_repo = ListingRepository(session)
+        snapshots = SnapshotRepository(session)
+        for item_id, price, status in (
+            ("active", Decimal("10.00"), "active"),
+            ("reserved", Decimal("20.00"), "reserved"),
+            ("sold", Decimal("99.00"), "sold"),
+        ):
+            record = listing_repo.get_or_create_listing(
+                Listing(
+                    item_id=item_id,
+                    user_id="seller-user",
+                    price=price,
+                    currency="EUR",
+                ),
+                profile.id,
+            )
+            snapshots.save_listing_snapshot(
+                record.id,
+                run.id,
+                Listing(
+                    item_id=item_id,
+                    user_id="seller-user",
+                    price=price,
+                    currency="EUR",
+                    sale_status=status,
+                ),
+            )
+            snapshots.mark_listing_seen(run.id, record.id)
+    database.close()
+
+    human = runner.invoke(cli.app, ["profile", "stats", "seller"])
+    assert human.exit_code == 0
+    assert "Active:" in human.output and "1" in human.output
+    assert "Reserved:" in human.output and "Total:" in human.output
+    assert "30.00 €" in human.output
+    assert "Priced listings:" in human.output
+
+    structured = runner.invoke(cli.app, ["profile", "stats", "seller", "--json"])
+    assert structured.exit_code == 0
+    payload = json.loads(structured.output)
+    assert payload == {
+        "active": 1,
+        "average_price": "15.00",
+        "currency": "EUR",
+        "maximum_price": "20.00",
+        "median_price": "15.00",
+        "minimum_price": "10.00",
+        "priced_listings": 2,
+        "profile": "seller",
+        "reserved": 1,
+        "total": 2,
+        "total_value": "30.00",
+    }
+
+
+def test_profile_stats_cli_missing_alias_uses_normal_error(tmp_path, monkeypatch):
+    _database(tmp_path, monkeypatch)
+    result = runner.invoke(cli.app, ["profile", "stats", "nobody"])
+    assert result.exit_code != 0
+    assert "Unknown or untracked profile" in result.output

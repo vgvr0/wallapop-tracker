@@ -31,6 +31,7 @@ from .reporting import (
     get_brand_market_stats,
     get_market_summary,
     get_price_time_series,
+    get_profile_inventory_stats,
     get_profile_metrics_history,
     get_seller_market_stats,
 )
@@ -577,6 +578,71 @@ def profile_show(alias: str) -> None:
             typer.echo(f"Reports received: {reports if reports is not None else 'unknown'}")
     finally:
         database.close()
+
+
+@profile_app.command("stats")
+def profile_stats(alias: str, as_json: bool = typer.Option(False, "--json")) -> None:
+    """Show current advertised inventory and asking-price statistics."""
+    database = _db()
+    try:
+        with database.session() as session:
+            record = TrackedProfileRepository(session).get_by_alias(_alias(alias))
+            if record is None or record.profile_id is None:
+                raise typer.BadParameter(f"Unknown or untracked profile: {alias}")
+            try:
+                stats = get_profile_inventory_stats(session, record.profile_id, record.alias)
+            except ValueError as exc:
+                raise typer.BadParameter(str(exc)) from exc
+        if as_json:
+            payload = {
+                "profile": stats.profile_alias,
+                "active": stats.active_count,
+                "reserved": stats.reserved_count,
+                "total": stats.total_count,
+                "priced_listings": stats.priced_count,
+                "total_value": stats.total_value,
+                "average_price": stats.average_price,
+                "median_price": stats.median_price,
+                "minimum_price": stats.minimum_price,
+                "maximum_price": stats.maximum_price,
+                "currency": stats.currency,
+            }
+            typer.echo(
+                json.dumps(payload, default=_json_default, ensure_ascii=False, sort_keys=True)
+            )
+            return
+
+        typer.echo(f"Profile: {stats.profile_alias}")
+        typer.echo("\nListings")
+        typer.echo(f"  {'Active:':<14}{stats.active_count:>6}")
+        typer.echo(f"  {'Reserved:':<14}{stats.reserved_count:>6}")
+        typer.echo(f"  {'Total:':<14}{stats.total_count:>6}")
+        typer.echo("\nInventory")
+        typer.echo(
+            f"  {'Total value:':<14}{_format_inventory_money(stats.total_value, stats.currency)}"
+        )
+        typer.echo(
+            f"  {'Average:':<14}{_format_inventory_money(stats.average_price, stats.currency)}"
+        )
+        typer.echo(
+            f"  {'Median:':<14}{_format_inventory_money(stats.median_price, stats.currency)}"
+        )
+        typer.echo(
+            f"  {'Minimum:':<14}{_format_inventory_money(stats.minimum_price, stats.currency)}"
+        )
+        typer.echo(
+            f"  {'Maximum:':<14}{_format_inventory_money(stats.maximum_price, stats.currency)}"
+        )
+        typer.echo(f"  {'Priced listings:':<14}{stats.priced_count:>6}")
+    finally:
+        database.close()
+
+
+def _format_inventory_money(value: Decimal | None, currency: str | None) -> str:
+    if value is None:
+        return "unknown"
+    suffix = " €" if currency == "EUR" else f" {currency}" if currency else ""
+    return f"{value:,.2f}{suffix}"
 
 
 @profile_app.command("reputation")
