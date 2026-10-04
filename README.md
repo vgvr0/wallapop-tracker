@@ -240,6 +240,8 @@ wallapop-track listing list | show camera | run camera | enable camera | remove 
 wallapop-track listing alerts set camera --target-price 250 --deal-score-threshold 70
 
 # Read-only insight
+wallapop-track profile stats seller
+wallapop-track profile stats seller --json
 wallapop-track analytics market 1 [--json] | prices 1 | activity 1 --weekly | sellers 1 | brands 1
 wallapop-track score listing 42 --search-id 1 | score search 1 [--limit 20]
 wallapop-track relistings list --min-score 0.75 | relistings show 1
@@ -303,6 +305,11 @@ wallapop-track search explain 1 42 --json     # structured payload
 and the storage-artifact rules (such as `model` and distance traces being UNKNOWN when rebuilding from
 persisted snapshots) are documented in
 [`docs/search_tracking_design.md`](docs/search_tracking_design.md#explicación-de-matching-traces).
+
+`profile stats` reports the current active and reserved inventory from the latest complete profile
+tracking run. Its `total value` is the sum of current asking prices, not estimated sale proceeds or
+market value; listings without a known price are excluded from monetary totals and counted separately
+by `priced_count` in JSON output.
 
 ## Architecture
 

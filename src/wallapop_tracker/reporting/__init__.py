@@ -19,7 +19,13 @@ from .market import (
     get_price_time_series,
     get_seller_market_stats,
 )
-from .metrics import WeeklyProfileSummary, get_average_active_price, get_weekly_summary
+from .metrics import (
+    ProfileInventoryStats,
+    WeeklyProfileSummary,
+    get_average_active_price,
+    get_profile_inventory_stats,
+    get_weekly_summary,
+)
 from .queries import (
     ApproxActiveDuration,
     InventoryListing,
@@ -49,6 +55,7 @@ __all__ = [
     "PresencePoint",
     "ProfileMetricsPoint",
     "WeeklyProfileSummary",
+    "ProfileInventoryStats",
     "get_approx_active_duration",
     "SearchTrackingMetrics",
     "get_search_tracking_metrics",
@@ -73,6 +80,7 @@ __all__ = [
     "get_category_market_stats",
     "average_active_price",
     "get_average_active_price",
+    "get_profile_inventory_stats",
     "get_current_inventory",
     "get_inventory_history",
     "get_new_listings",
