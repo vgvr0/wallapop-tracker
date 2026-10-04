@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from statistics import median
 from typing import Any
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from wallapop_tracker.storage.models import ProfileRecord, ProfileSnapshotRecord
@@ -75,7 +75,10 @@ def _latest_snapshots(session: Session) -> list[tuple[ProfileSnapshotRecord, str
         func.row_number()
         .over(
             partition_by=ProfileSnapshotRecord.profile_id,
-            order_by=(desc(ProfileSnapshotRecord.observed_at), desc(ProfileSnapshotRecord.id)),
+            order_by=[
+                ProfileSnapshotRecord.observed_at.desc(),
+                ProfileSnapshotRecord.id.desc(),
+            ],
         )
         .label("row_number")
     )
