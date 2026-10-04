@@ -35,6 +35,9 @@ writes to Wallapop: no purchases, no messages, no listing edits.
 - Detects explicitly sold listings, and heuristic possible relistings without merging identities.
 - Reports read-only market analytics (summary, prices, activity, sellers, brands) and contextual deal
   scores.
+- Reports current tracked-profile inventory counts and asking-price statistics with
+  `wallapop-track profile stats ALIAS [--json]`; sold/removed listings and historical duplicates are
+  excluded, while listings without a price are exposed through `priced_listings`.
 - Provides explainable deal ranking, descriptive seller reputation context and optional AI listing
   assessment/ranking; the AI backend is disabled by default.
 - Persists and retries notification deliveries per channel, with secrets redacted from logs.
